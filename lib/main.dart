@@ -190,8 +190,8 @@ class _MainWrapperState extends State<MainWrapper> {
             return BottomNavigationBarItem(
               icon: Image.asset(
                 iconPath,
-                width: 50, // 아이콘 크기를 50x50으로 변경
-                height: 50,
+                width: 70, // 아이콘 크기를 50x50으로 변경
+                height: 70,
               ),
               label: _labels[index],
             );

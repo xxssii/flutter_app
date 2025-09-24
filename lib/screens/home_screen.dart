@@ -7,8 +7,11 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/app_state.dart';
 import '../state/settings_state.dart';
+import 'sleep_mode_screen.dart';
 
 class HomeScreen extends StatelessWidget {
+  const HomeScreen({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AppState>(
@@ -63,7 +66,7 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 수면 측정 시작/중지 버튼을 맨 위로 이동
+                // 수면 측정 시작/중지 버튼
                 Center(child: _buildMeasurementButton(context, appState)),
                 SizedBox(height: 24),
                 _buildInfoCard(
@@ -195,13 +198,17 @@ class HomeScreen extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: () {
+            // 버튼을 눌렀을 때, 먼저 상태를 토글합니다.
             appState.toggleMeasurement();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(isMeasuring ? '수면 측정 중지!' : '수면 측정 시작!'),
-                duration: Duration(seconds: 1),
-              ),
-            );
+
+            // 만약 측정이 시작되면, 전체 화면으로 전환합니다.
+            if (appState.isMeasuring) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const SMainMoonScreen(),
+                ),
+              );
+            }
           },
           child: Container(
             width: 120,

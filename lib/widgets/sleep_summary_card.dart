@@ -1,130 +1,57 @@
-// lib/widgets/data_chart.dart
+// lib/widgets/sleep_summary_card.dart
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter_app/utils/app_colors.dart';
+import './data_chart.dart'; // Corrected import path
+import '../utils/app_colors.dart';
+import '../utils/app_text_styles.dart';
 
-class DataChart extends StatelessWidget {
-  const DataChart({super.key});
+class SleepSummaryCard extends StatelessWidget {
+  final List<FlSpot> dummyData = [
+    const FlSpot(0, 0),
+    const FlSpot(1, 1),
+    const FlSpot(2, 2),
+    const FlSpot(3, 1),
+    const FlSpot(4, 0),
+    const FlSpot(5, 1),
+    const FlSpot(6, 2),
+    const FlSpot(7, 1),
+  ];
+
+  SleepSummaryCard({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final List<FlSpot> dummyData = [
-      const FlSpot(0, 0),
-      const FlSpot(1, 1),
-      const FlSpot(2, 2),
-      const FlSpot(3, 1),
-      const FlSpot(4, 0),
-      const FlSpot(5, 1),
-      const FlSpot(6, 2),
-      const FlSpot(7, 1),
-    ];
-
-    return LineChart(
-      LineChartData(
-        titlesData: FlTitlesData(
-          show: true,
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              getTitlesWidget: (value, meta) {
-                String text = '';
-                switch (value.toInt()) {
-                  case 0:
-                    text = '12AM';
-                    break;
-                  case 3:
-                    text = '3AM';
-                    break;
-                  case 6:
-                    text = '6AM';
-                    break;
-                  default:
-                    return const SizedBox.shrink();
-                }
-                // The const keyword is removed here
-                return SideTitleWidget(
-                  axisSide: meta.axisSide,
-                  space: 8.0,
-                  child: Text(
-                    text,
-                    style: const TextStyle(color: AppColors.secondaryText),
-                  ),
-                );
-              },
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // 카드 상단 내용
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('수면 요약', style: AppTextStyles.heading3),
+                const Icon(Icons.info_outline, color: AppColors.secondaryText),
+              ],
             ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 40,
-              getTitlesWidget: (value, meta) {
-                String text = '';
-                switch (value.toInt()) {
-                  case 0:
-                    text = '얕은';
-                    break;
-                  case 1:
-                    text = '렘';
-                    break;
-                  case 2:
-                    text = '깊은';
-                    break;
-                  default:
-                    return const SizedBox.shrink();
-                }
-                // The const keyword is removed here
-                return Text(
-                  text,
-                  style: const TextStyle(color: AppColors.secondaryText),
-                );
-              },
-            ),
-          ),
-          topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-        ),
-
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: true,
-          getDrawingHorizontalLine: (value) =>
-              const FlLine(color: AppColors.secondaryWhite, strokeWidth: 1),
-          getDrawingVerticalLine: (value) =>
-              const FlLine(color: AppColors.secondaryWhite, strokeWidth: 1),
-        ),
-
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(color: AppColors.secondaryWhite, width: 1),
-        ),
-
-        lineBarsData: [
-          LineChartBarData(
-            spots: dummyData,
-            isCurved: true,
-            color: AppColors.accentNavy,
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: [
-                  AppColors.accentNavy.withOpacity(0.5),
-                  AppColors.accentNavy.withOpacity(0.0),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+            const SizedBox(height: 16),
+            // DataChart 위젯 사용
+            SizedBox(
+              height: 200, // 그래프 높이
+              child: DataChart(
+                chartData: dummyData, // <-- This is where you pass the data
+                chartTitle: '수면 단계', // <-- This is where you pass the title
               ),
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            // 추가적인 요약 정보
+            Text(
+              '오늘은 평균보다 깊은 잠을 더 많이 잤습니다.',
+              style: AppTextStyles.secondaryBodyText,
+            ),
+          ],
+        ),
       ),
     );
   }
