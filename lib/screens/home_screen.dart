@@ -66,7 +66,6 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 수면 측정 시작/중지 버튼
                 Center(child: _buildMeasurementButton(context, appState)),
                 SizedBox(height: 24),
                 _buildInfoCard(
@@ -83,7 +82,7 @@ class HomeScreen extends StatelessWidget {
                           Text(
                             '8시간 38분',
                             style: AppTextStyles.heading1.copyWith(
-                              color: AppColors.primaryBlue,
+                              color: AppColors.primaryNavy,
                             ),
                           ),
                           SizedBox(width: 8),
@@ -97,7 +96,7 @@ class HomeScreen extends StatelessWidget {
                       LinearProgressIndicator(
                         value: 0.9,
                         backgroundColor: AppColors.progressBackground,
-                        color: AppColors.primaryBlue,
+                        color: AppColors.primaryNavy,
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -127,7 +126,7 @@ class HomeScreen extends StatelessWidget {
                           Text(
                             '12cm',
                             style: AppTextStyles.heading1.copyWith(
-                              color: AppColors.primaryBlue,
+                              color: AppColors.primaryNavy,
                             ),
                           ),
                           SizedBox(width: 8),
@@ -141,7 +140,7 @@ class HomeScreen extends StatelessWidget {
                       LinearProgressIndicator(
                         value: (12 - 8) / (16 - 8),
                         backgroundColor: AppColors.progressBackground,
-                        color: AppColors.primaryBlue,
+                        color: AppColors.primaryNavy,
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -192,20 +191,19 @@ class HomeScreen extends StatelessWidget {
         : '버튼을 눌러 수면 측정을 시작하세요.';
     final buttonColor = isMeasuring
         ? AppColors.errorRed
-        : AppColors.primaryBlue;
+        : AppColors.primaryNavy;
 
     return Column(
       children: [
         GestureDetector(
           onTap: () {
-            // 버튼을 눌렀을 때, 먼저 상태를 토글합니다.
-            appState.toggleMeasurement();
+            appState.toggleMeasurement(context);
 
-            // 만약 측정이 시작되면, 전체 화면으로 전환합니다.
             if (appState.isMeasuring) {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => const SMainMoonScreen(),
+                  builder: (context) =>
+                      const SMainMoonScreen(key: Key('sleepModeScreen')),
                 ),
               );
             }
@@ -245,7 +243,7 @@ class HomeScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(icon, color: AppColors.primaryBlue, size: 24),
+                Icon(icon, color: AppColors.primaryNavy, size: 24),
                 SizedBox(width: 8),
                 Text(title, style: AppTextStyles.heading3),
               ],

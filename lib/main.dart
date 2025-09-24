@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart';
 import 'screens/pillow_screen.dart';
@@ -10,8 +11,7 @@ import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
 import 'state/app_state.dart';
 import 'state/settings_state.dart';
-import 'package:flutter_app/state/sleep_data_state.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'state/sleep_data_state.dart';
 
 void main() {
   runApp(
@@ -21,100 +21,148 @@ void main() {
         ChangeNotifierProvider(create: (_) => SettingsState()),
         ChangeNotifierProvider(create: (_) => SleepDataState()),
       ],
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return MaterialApp(
-          title: '스마트 수면 케어',
+          title: 'Sleep Tracker App',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
-            primarySwatch: Colors.blue,
-            scaffoldBackgroundColor: AppColors.background,
-            cardColor: AppColors.cardBackground,
-            appBarTheme: AppBarTheme(
-              backgroundColor: AppColors.background,
-              elevation: 0,
-              titleTextStyle: AppTextStyles.appBarTitle,
-              iconTheme: IconThemeData(color: AppColors.primaryText),
+            primarySwatch:
+                MaterialColor(AppColors.primaryNavy.value, const <int, Color>{
+                  50: Color(0xFFE3E3E8),
+                  100: Color(0xFFB8B8C2),
+                  200: Color(0xFF8A8A9B),
+                  300: Color(0xFF5C5C73),
+                  400: Color(0xFF3B3B57),
+                  500: AppColors.primaryNavy,
+                  600: Color(0xFF171734),
+                  700: Color(0xFF13132D),
+                  800: Color(0xFF0F0F26),
+                  900: Color(0xFF08081A),
+                }),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.primaryNavy,
+              brightness: Brightness.light,
+              primary: AppColors.primaryNavy,
+              onPrimary: Colors.white,
+              surface: AppColors.background,
+              onSurface: AppColors.primaryText,
+              background: AppColors.background,
+              onBackground: AppColors.primaryText,
             ),
-            textTheme: TextTheme(
-              bodyLarge: AppTextStyles.bodyText,
-              bodyMedium: AppTextStyles.bodyText,
-              titleLarge: AppTextStyles.heading1,
-              titleMedium: AppTextStyles.heading2,
-              titleSmall: AppTextStyles.heading3,
+            scaffoldBackgroundColor: AppColors.background,
+            appBarTheme: AppBarTheme(
+              backgroundColor: AppColors.cardBackground,
+              foregroundColor: AppColors.primaryText,
+              elevation: 0,
+              centerTitle: false,
+              titleTextStyle: AppTextStyles.heading1.copyWith(
+                color: AppColors.primaryText,
+              ),
             ),
             cardTheme: CardThemeData(
               color: AppColors.cardBackground,
-              margin: EdgeInsets.zero,
-              elevation: 0,
+              elevation: 1,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppColors.borderColor, width: 1),
               ),
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: AppColors.cardBackground,
+              selectedItemColor: AppColors.primaryNavy,
+              unselectedItemColor: AppColors.secondaryText,
+            ),
+            progressIndicatorTheme: const ProgressIndicatorThemeData(
+              color: AppColors.primaryNavy,
+              linearTrackColor: AppColors.progressBackground,
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryBlue,
+                backgroundColor: AppColors.primaryNavy,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                textStyle: AppTextStyles.buttonText,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                textStyle: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
+            brightness: Brightness.light,
           ),
           darkTheme: ThemeData(
             brightness: Brightness.dark,
-            primarySwatch: Colors.blue,
-            scaffoldBackgroundColor: AppColors.darkBackground,
-            cardColor: AppColors.darkCardBackground,
-            appBarTheme: AppBarTheme(
-              backgroundColor: AppColors.darkBackground,
-              elevation: 0,
-              titleTextStyle: AppTextStyles.darkAppBarTitle,
-              iconTheme: IconThemeData(color: AppColors.darkPrimaryText),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: AppColors.darkPrimaryNavy,
+              brightness: Brightness.dark,
+              primary: AppColors.darkPrimaryNavy,
+              onPrimary: Colors.white,
+              surface: AppColors.darkBackground,
+              onSurface: AppColors.darkPrimaryText,
+              background: AppColors.darkBackground,
+              onBackground: AppColors.darkPrimaryText,
             ),
-            textTheme: TextTheme(
-              bodyLarge: AppTextStyles.darkBodyText,
-              bodyMedium: AppTextStyles.darkBodyText,
-              titleLarge: AppTextStyles.darkHeading1,
-              titleMedium: AppTextStyles.darkHeading2,
-              titleSmall: AppTextStyles.darkHeading3,
+            scaffoldBackgroundColor: AppColors.darkBackground,
+            appBarTheme: AppBarTheme(
+              backgroundColor: AppColors.darkCardBackground,
+              foregroundColor: AppColors.darkPrimaryText,
+              elevation: 0,
+              centerTitle: false,
+              titleTextStyle: AppTextStyles.darkHeading1.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
             ),
             cardTheme: CardThemeData(
               color: AppColors.darkCardBackground,
-              margin: EdgeInsets.zero,
-              elevation: 0,
+              elevation: 1,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: AppColors.darkBorderColor, width: 1),
               ),
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: AppColors.darkCardBackground,
+              selectedItemColor: AppColors.darkPrimaryNavy,
+              unselectedItemColor: AppColors.darkSecondaryText,
+            ),
+            progressIndicatorTheme: const ProgressIndicatorThemeData(
+              color: AppColors.darkPrimaryNavy,
+              linearTrackColor: AppColors.darkProgressBackground,
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.darkPrimaryBlue,
+                backgroundColor: AppColors.darkPrimaryNavy,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                textStyle: AppTextStyles.darkButtonText,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                textStyle: AppTextStyles.darkBodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
           themeMode: settingsState.isDarkMode
               ? ThemeMode.dark
               : ThemeMode.light,
-          home: MainWrapper(),
+          home: const MainWrapper(),
         );
       },
     );
@@ -122,90 +170,60 @@ class MyApp extends StatelessWidget {
 }
 
 class MainWrapper extends StatefulWidget {
+  const MainWrapper({Key? key}) : super(key: key);
+
   @override
-  _MainWrapperState createState() => _MainWrapperState();
+  State<MainWrapper> createState() => _MainWrapperState();
 }
 
 class _MainWrapperState extends State<MainWrapper> {
-  int _selectedIndex = 0;
+  int _currentIndex = 0;
 
-  static List<Widget> _widgetOptions = <Widget>[
-    HomeScreen(),
-    DataScreen(),
-    PillowScreen(),
-    SettingsScreen(),
+  final List<Widget> _screens = const [
+    HomeScreen(key: Key('homeScreen')),
+    DataScreen(key: Key('dataScreen')),
+    PillowScreen(key: Key('pillowScreen')),
+    SettingsScreen(key: Key('settingsScreen')),
   ];
-
-  // PNG 파일 경로 리스트
-  final List<String> _unselectedIcons = const [
-    'assets/main_moon.png', // Main (메인화면)
-    'assets/constellation.png', // Sleep Report (수면 데이터)
-    'assets/cloud.png', // Pillow Control (베개 케어)
-    'assets/setting_moon.png', // Settings (설정)
-  ];
-
-  final List<String> _selectedIcons = const [
-    'assets/main_moon.png', // Main
-    'assets/constellation.png', // Sleep Report
-    'assets/cloud.png', // Pillow Control
-    'assets/setting_moon.png', // Settings
-  ];
-
-  final List<String> _labels = const [
-    'Main',
-    'Sleep Report',
-    'Pillow Control',
-    'Settings',
-  ];
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _widgetOptions.elementAt(_selectedIndex),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: Offset(0, -1),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          items: List.generate(_labels.length, (index) {
-            final isSelected = _selectedIndex == index;
-            final iconPath = isSelected
-                ? _selectedIcons[index]
-                : _unselectedIcons[index];
-
-            return BottomNavigationBarItem(
-              icon: Image.asset(
-                iconPath,
-                width: 70, // 아이콘 크기를 50x50으로 변경
-                height: 70,
-              ),
-              label: _labels[index],
-            );
-          }),
-          currentIndex: _selectedIndex,
-          selectedItemColor: AppColors.primaryBlue,
-          unselectedItemColor: AppColors.secondaryText,
-          backgroundColor: Theme.of(context).cardColor,
-          onTap: _onItemTapped,
-          type: BottomNavigationBarType.fixed,
-          showUnselectedLabels: true,
-          selectedLabelStyle: AppTextStyles.bottomNavItemLabel,
-          unselectedLabelStyle: AppTextStyles.bottomNavItemLabel,
-        ),
+      body: _screens[_currentIndex],
+      bottomNavigationBar: BottomNavyBar(
+        selectedIndex: _currentIndex,
+        onItemSelected: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        backgroundColor: Theme.of(context).cardColor,
+        items: [
+          BottomNavyBarItem(
+            icon: const Icon(Icons.home),
+            title: const Text('홈'),
+            activeColor: Theme.of(context).colorScheme.primary,
+            inactiveColor: Theme.of(context).colorScheme.onSurface,
+          ),
+          BottomNavyBarItem(
+            icon: const Icon(Icons.analytics),
+            title: const Text('데이터'),
+            activeColor: Theme.of(context).colorScheme.primary,
+            inactiveColor: Theme.of(context).colorScheme.onSurface,
+          ),
+          BottomNavyBarItem(
+            icon: const Icon(Icons.bed),
+            title: const Text('베개'),
+            activeColor: Theme.of(context).colorScheme.primary,
+            inactiveColor: Theme.of(context).colorScheme.onSurface,
+          ),
+          BottomNavyBarItem(
+            icon: const Icon(Icons.settings),
+            title: const Text('설정'),
+            activeColor: Theme.of(context).colorScheme.primary,
+            inactiveColor: Theme.of(context).colorScheme.onSurface,
+          ),
+        ],
       ),
     );
   }

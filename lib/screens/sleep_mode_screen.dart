@@ -4,14 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../state/app_state.dart'; // 이 줄을 추가합니다.
+import '../state/app_state.dart';
 
 class SMainMoonScreen extends StatelessWidget {
   const SMainMoonScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // AppState에 접근하기 위해 Consumer를 사용합니다.
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
@@ -41,12 +40,12 @@ class SMainMoonScreen extends StatelessWidget {
                     const SizedBox(height: 40),
                     ElevatedButton(
                       onPressed: () {
-                        // '수면 기록 종료' 버튼을 누르면 appState의 toggleMeasurement를 호출합니다.
-                        appState.toggleMeasurement();
-                        Navigator.of(context).pop();
+                        // 버튼을 누르면 AppState의 toggleMeasurement만 호출하고,
+                        // 화면 전환은 AppState 내부 로직에 맡깁니다.
+                        appState.toggleMeasurement(context);
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryBlue,
+                        backgroundColor: AppColors.primaryNavy, // <-- 색상 변경
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 40,

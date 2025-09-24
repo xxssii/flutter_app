@@ -37,8 +37,8 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
       builder: (BuildContext context, Widget? child) {
         return Theme(
           data: ThemeData(
-            primaryColor: AppColors.primaryBlue,
-            colorScheme: ColorScheme.light(primary: AppColors.primaryBlue),
+            primaryColor: AppColors.primaryNavy,
+            colorScheme: ColorScheme.light(primary: AppColors.primaryNavy),
             buttonTheme: ButtonThemeData(textTheme: ButtonTextTheme.primary),
           ),
           child: child!,

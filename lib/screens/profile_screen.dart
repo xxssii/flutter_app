@@ -100,7 +100,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit, color: AppColors.primaryBlue),
+            icon: const Icon(Icons.edit, color: AppColors.primaryNavy),
             onPressed: () {
               // 프로필 수정 화면으로 이동
               Navigator.push(
@@ -145,7 +145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Icon(
                   Icons.person,
                   size: 40,
-                  color: AppColors.primaryBlue,
+                  color: AppColors.primaryNavy,
                 ),
                 const SizedBox(width: 16),
                 Text(_currentProfile.name, style: AppTextStyles.heading1),
@@ -202,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             title: Text(profile.name),
             subtitle: Text('${profile.age}세, 목표 ${profile.sleepGoal}'),
             trailing: isCurrent
-                ? const Icon(Icons.check_circle, color: AppColors.primaryBlue)
+                ? const Icon(Icons.check_circle, color: AppColors.primaryNavy)
                 : const Icon(Icons.circle_outlined),
             onTap: () => _selectProfile(profile),
           ),

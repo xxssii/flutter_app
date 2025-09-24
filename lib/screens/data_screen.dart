@@ -27,9 +27,9 @@ class DataScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: TabBar(
                 isScrollable: false,
-                labelColor: AppColors.primaryBlue,
+                labelColor: AppColors.primaryNavy,
                 unselectedLabelColor: AppColors.secondaryText,
-                indicatorColor: AppColors.primaryBlue,
+                indicatorColor: AppColors.primaryNavy,
                 indicatorSize: TabBarIndicatorSize.tab,
                 indicatorWeight: 2.0,
                 labelStyle: AppTextStyles.bodyText.copyWith(
@@ -140,7 +140,7 @@ class DataScreen extends StatelessWidget {
         children: [
           _buildMetricCard(
             icon: Icons.water_drop,
-            color: AppColors.primaryBlue,
+            color: AppColors.primaryNavy,
             title: '수면 효율',
             value: '93%',
           ),
@@ -206,7 +206,7 @@ class EfficiencyTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +233,7 @@ class EfficiencyTab extends StatelessWidget {
               label: '평균 수면 효율',
               value: 93,
               description: '85% 이상이 이상적입니다',
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
             ),
             const SizedBox(height: 10),
             _buildBarItem(
@@ -241,14 +241,14 @@ class EfficiencyTab extends StatelessWidget {
               label: 'REM 수면 비율',
               value: 20,
               description: '20~25%가 이상적입니다',
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
             ),
             const SizedBox(height: 10),
             _buildBarItem(
               context,
               label: '우수한 수면 효율',
               value: 100,
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
             ),
           ],
         ),
@@ -312,7 +312,7 @@ class EfficiencyTab extends StatelessWidget {
               value: value / 100,
               backgroundColor: AppColors.progressBackground,
               valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.primaryBlue,
+                AppColors.primaryNavy,
               ),
               minHeight: 12,
             ),
@@ -355,37 +355,51 @@ class SleepStagesTab extends StatelessWidget {
                       child: PieChart(
                         PieChartData(
                           sections: [
+                            // NREM1: 얕은 잠 (N1)
                             PieChartSectionData(
-                              color: AppColors.primaryBlue,
-                              value: 56,
-                              title: '얕은 잠56%',
+                              color: AppColors.primaryNavy.withOpacity(0.4),
+                              value: 10, // N1 5-10% -> 10%
+                              title: 'NREM1 10%',
                               radius: 50,
                               titleStyle: AppTextStyles.bodyText.copyWith(
                                 color: AppColors.cardBackground,
                               ),
                             ),
+                            // NREM2: 얕은 잠 (N2)
                             PieChartSectionData(
-                              color: AppColors.errorRed,
-                              value: 7,
-                              title: '깨어있음7%',
+                              color: AppColors.primaryNavy,
+                              value: 50, // N2 45-55% -> 50%
+                              title: 'NREM2 50%',
                               radius: 50,
                               titleStyle: AppTextStyles.smallText.copyWith(
                                 color: AppColors.cardBackground,
                               ),
                             ),
-                            PieChartSectionData(
-                              color: AppColors.secondaryText,
-                              value: 20,
-                              title: 'REM 수면20%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.smallText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
-                            ),
+                            // NREM3: 깊은 잠 (N3)
                             PieChartSectionData(
                               color: AppColors.successGreen,
-                              value: 24,
-                              title: '깊은 잠24%',
+                              value: 20, // N3 15-25% -> 20%
+                              title: 'NREM3 20%',
+                              radius: 50,
+                              titleStyle: AppTextStyles.smallText.copyWith(
+                                color: AppColors.cardBackground,
+                              ),
+                            ),
+                            // REM 수면
+                            PieChartSectionData(
+                              color: AppColors.secondaryText,
+                              value: 15, // REM 20-25% -> 15% (예시)
+                              title: 'REM 15%',
+                              radius: 50,
+                              titleStyle: AppTextStyles.smallText.copyWith(
+                                color: AppColors.cardBackground,
+                              ),
+                            ),
+                            // 깨어있음
+                            PieChartSectionData(
+                              color: AppColors.errorRed,
+                              value: 5, // 깨어있음 (남은 %로 설정)
+                              title: '깨어있음 5%',
                               radius: 50,
                               titleStyle: AppTextStyles.smallText.copyWith(
                                 color: AppColors.cardBackground,
@@ -419,10 +433,15 @@ class SleepStagesTab extends StatelessWidget {
           children: [
             Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
             const SizedBox(height: 10),
-            _buildDetailItem('얕은 잠', '4시간56분', AppColors.primaryBlue),
-            _buildDetailItem('깊은 잠', '2시간0분', AppColors.successGreen),
-            _buildDetailItem('REM 수면', '1시간40분', AppColors.secondaryText),
-            _buildDetailItem('깨어있음', '0시간37분', AppColors.errorRed),
+            _buildDetailItem(
+              'NREM1',
+              '0시간 20분',
+              AppColors.primaryNavy.withOpacity(0.4),
+            ),
+            _buildDetailItem('NREM2', '4시간 10분', AppColors.primaryNavy),
+            _buildDetailItem('NREM3', '1시간 40분', AppColors.successGreen),
+            _buildDetailItem('REM 수면', '1시간 15분', AppColors.secondaryText),
+            _buildDetailItem('깨어있음', '0시간 25분', AppColors.errorRed),
           ],
         ),
       ),
@@ -459,7 +478,6 @@ class TrendsTab extends StatefulWidget {
 }
 
 class _TrendsTabState extends State<TrendsTab> {
-  // 실제 데이터 연동 시에는 이 부분을 Provider 등으로 관리해야 합니다.
   final List<FlSpot> sleepEfficiencySpots = const [
     FlSpot(0, 93),
     FlSpot(1, 95),
@@ -571,7 +589,7 @@ class _TrendsTabState extends State<TrendsTab> {
                                     text: '\n$title: $value%',
                                     style: AppTextStyles.smallText.copyWith(
                                       color: isSleepEfficiency
-                                          ? AppColors.primaryBlue
+                                          ? AppColors.primaryNavy
                                           : AppColors.secondaryText,
                                     ),
                                   ),
@@ -590,7 +608,7 @@ class _TrendsTabState extends State<TrendsTab> {
                                 }
                                 return TouchedSpotIndicatorData(
                                   FlLine(
-                                    color: AppColors.primaryBlue,
+                                    color: AppColors.primaryNavy,
                                     strokeWidth: 2,
                                   ),
                                   FlDotData(
@@ -599,7 +617,7 @@ class _TrendsTabState extends State<TrendsTab> {
                                         (spot, percent, barData, index) =>
                                             FlDotCirclePainter(
                                               radius: 4,
-                                              color: AppColors.primaryBlue,
+                                              color: AppColors.primaryNavy,
                                               strokeWidth: 2,
                                               strokeColor:
                                                   AppColors.cardBackground,
@@ -614,7 +632,7 @@ class _TrendsTabState extends State<TrendsTab> {
                           spots: sleepEfficiencySpots,
                           isCurved: true,
                           barWidth: 2,
-                          color: AppColors.primaryBlue,
+                          color: AppColors.primaryNavy,
                           belowBarData: BarAreaData(show: false),
                           dotData: const FlDotData(show: false),
                         ),
@@ -638,7 +656,7 @@ class _TrendsTabState extends State<TrendsTab> {
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            interval: 5, // 5일 간격으로 표시
+                            interval: 5,
                             getTitlesWidget: (value, meta) {
                               final dates = [
                                 '7월 13일',

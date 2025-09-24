@@ -71,7 +71,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              const Icon(Icons.person, size: 40, color: AppColors.primaryBlue),
+              const Icon(Icons.person, size: 40, color: AppColors.primaryNavy),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -122,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (bool value) {
                     settingsState.toggleDarkMode(value);
                   },
-                  activeColor: AppColors.primaryBlue,
+                  activeColor: AppColors.primaryNavy,
                 ),
               ],
             ),
@@ -250,7 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildInfoCard(BuildContext context) {
     return Card(
-      color: AppColors.primaryBlue.withOpacity(0.05),
+      color: AppColors.primaryNavy.withOpacity(0.05),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
@@ -258,7 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             const Icon(
               Icons.info_outline,
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
               size: 24,
             ),
             const SizedBox(width: 12),
@@ -314,7 +314,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.primaryBlue,
+            activeColor: AppColors.primaryNavy,
           ),
         ],
       ),

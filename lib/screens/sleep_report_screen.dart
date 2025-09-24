@@ -3,9 +3,11 @@
 import 'package:flutter/material.dart';
 import '../widgets/data_chart.dart';
 import '../utils/app_colors.dart';
+import '../utils/app_text_styles.dart';
 
 class SleepReportScreen extends StatelessWidget {
-  const SleepReportScreen({super.key});
+  const SleepReportScreen({Key? key})
+    : super(key: key); // Make sure the constructor includes 'key'
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +30,11 @@ class SleepReportScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _buildSleepScoreCard(context),
             const SizedBox(height: 20),
-            _buildChartSection(context, '수면 주기 그래프', const DataChart()),
+            _buildChartSection(
+              context,
+              '수면 주기 그래프',
+              const DataChart(chartTitle: '수면 주기', chartData: []),
+            ),
             const SizedBox(height: 20),
             _buildFeedbackSection(context),
             const SizedBox(height: 20),
@@ -40,51 +46,43 @@ class SleepReportScreen extends StatelessWidget {
   }
 
   Widget _buildReportHeader(BuildContext context) {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('2023년 10월 27일', style: TextStyle(color: AppColors.secondaryText)),
-        SizedBox(height: 5),
-        Text(
-          '총 수면 시간: 7시간 30분',
-          style: TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('2023년 10월 27일', style: AppTextStyles.secondaryBodyText),
+        const SizedBox(height: 5),
+        Text('총 수면 시간: 7시간 30분', style: AppTextStyles.heading1),
       ],
     );
   }
 
   Widget _buildSleepScoreCard(BuildContext context) {
-    return const Card(
+    return Card(
       color: AppColors.secondaryWhite,
       child: Padding(
-        padding: EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
             Text(
               '총 수면 점수',
-              style: TextStyle(
+              style: AppTextStyles.heading2.copyWith(
                 color: AppColors.secondaryText,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               '85점',
-              style: TextStyle(
+              style: AppTextStyles.heading1.copyWith(
                 color: AppColors.successGreen,
-                fontWeight: FontWeight.bold,
                 fontSize: 60,
               ),
             ),
-            SizedBox(height: 10),
+            const SizedBox(height: 10),
             Text(
               '매우 좋은 수면을 취하셨습니다!',
-              style: TextStyle(color: AppColors.secondaryText, fontSize: 16),
+              style: AppTextStyles.bodyText.copyWith(
+                color: AppColors.secondaryText,
+              ),
             ),
           ],
         ),
@@ -100,14 +98,7 @@ class SleepReportScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text(title, style: AppTextStyles.heading2),
         const SizedBox(height: 15),
         chartWidget,
       ],
@@ -116,20 +107,11 @@ class SleepReportScreen extends StatelessWidget {
 
   Widget _buildFeedbackSection(BuildContext context) {
     return Column(
-      // Removed const
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '수면 분석 피드백',
-          style: TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('수면 분석 피드백', style: AppTextStyles.heading2),
         const SizedBox(height: 15),
         Card(
-          // Removed const
           color: AppColors.secondaryWhite,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -159,23 +141,16 @@ class SleepReportScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.accentNavy, size: 20),
+          Icon(icon, color: AppColors.primaryNavy, size: 20),
           const SizedBox(width: 10),
           Text(
             '$title: ',
-            style: const TextStyle(
-              color: AppColors.secondaryText,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+            style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.w500),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                color: AppColors.primaryText,
-                fontSize: 16,
-              ),
+              style: AppTextStyles.bodyText,
               textAlign: TextAlign.right,
             ),
           ),
@@ -186,20 +161,11 @@ class SleepReportScreen extends StatelessWidget {
 
   Widget _buildRecommendationSection(BuildContext context) {
     return Column(
-      // Removed const
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          '개선 가이드',
-          style: TextStyle(
-            color: AppColors.primaryText,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Text('개선 가이드', style: AppTextStyles.heading2),
         const SizedBox(height: 15),
         Card(
-          // Removed const
           color: AppColors.secondaryWhite,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -235,11 +201,7 @@ class SleepReportScreen extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 15,
-                height: 1.4,
-              ),
+              style: AppTextStyles.secondaryBodyText.copyWith(fontSize: 15),
             ),
           ),
         ],

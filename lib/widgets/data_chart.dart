@@ -108,7 +108,7 @@ class DataChart extends StatelessWidget {
                 LineChartBarData(
                   spots: chartData,
                   isCurved: true,
-                  color: AppColors.accentNavy,
+                  color: AppColors.primaryNavy,
                   barWidth: 3,
                   isStrokeCapRound: true,
                   dotData: const FlDotData(show: false),
@@ -116,8 +116,8 @@ class DataChart extends StatelessWidget {
                     show: true,
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.accentNavy.withOpacity(0.5),
-                        AppColors.accentNavy.withOpacity(0.0),
+                        AppColors.primaryNavy.withOpacity(0.5),
+                        AppColors.primaryNavy.withOpacity(0.0),
                       ],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,

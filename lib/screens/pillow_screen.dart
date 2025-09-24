@@ -71,7 +71,7 @@ class _PillowScreenState extends State<PillowScreen> {
           children: [
             const Icon(
               Icons.bed_outlined,
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
               size: 28,
             ),
             const SizedBox(width: 12),
@@ -126,7 +126,7 @@ class _PillowScreenState extends State<PillowScreen> {
         const SizedBox(height: 4),
         Text(
           '${value.toStringAsFixed(0)}cm',
-          style: AppTextStyles.heading1.copyWith(color: AppColors.primaryBlue),
+          style: AppTextStyles.heading1.copyWith(color: AppColors.primaryNavy),
         ),
       ],
     );
@@ -140,7 +140,7 @@ class _PillowScreenState extends State<PillowScreen> {
           min: 8.0,
           max: 16.0,
           divisions: 8,
-          activeColor: AppColors.primaryBlue,
+          activeColor: AppColors.primaryNavy,
           onChanged: (double newValue) {
             setState(() {
               _targetPillowHeight = newValue;
@@ -216,7 +216,7 @@ class _PillowScreenState extends State<PillowScreen> {
                   children: [
                     const Icon(
                       Icons.bolt,
-                      color: AppColors.primaryBlue,
+                      color: AppColors.primaryNavy,
                       size: 24,
                     ),
                     const SizedBox(width: 8),
@@ -247,7 +247,7 @@ class _PillowScreenState extends State<PillowScreen> {
                       onChanged: (bool value) {
                         settingsState.toggleAutoAdjust(value);
                       },
-                      activeColor: AppColors.primaryBlue,
+                      activeColor: AppColors.primaryNavy,
                     ),
                   ],
                 ),
@@ -311,7 +311,7 @@ class _PillowScreenState extends State<PillowScreen> {
                     min: 8.0,
                     max: 16.0,
                     divisions: 8,
-                    activeColor: AppColors.primaryBlue,
+                    activeColor: AppColors.primaryNavy,
                     onChanged: (double newValue) {
                       setState(() {
                         _remPillowHeight = newValue;
@@ -321,7 +321,7 @@ class _PillowScreenState extends State<PillowScreen> {
                   Text(
                     '목표 높이: ${_remPillowHeight.toStringAsFixed(0)}cm',
                     style: AppTextStyles.bodyText.copyWith(
-                      color: AppColors.primaryBlue,
+                      color: AppColors.primaryNavy,
                     ),
                   ),
                 ],
@@ -354,7 +354,7 @@ class _PillowScreenState extends State<PillowScreen> {
                     min: 8.0,
                     max: 16.0,
                     divisions: 8,
-                    activeColor: AppColors.primaryBlue,
+                    activeColor: AppColors.primaryNavy,
                     onChanged: (double newValue) {
                       setState(() {
                         _deepPillowHeight = newValue;
@@ -364,7 +364,7 @@ class _PillowScreenState extends State<PillowScreen> {
                   Text(
                     '목표 높이: ${_deepPillowHeight.toStringAsFixed(0)}cm',
                     style: AppTextStyles.bodyText.copyWith(
-                      color: AppColors.primaryBlue,
+                      color: AppColors.primaryNavy,
                     ),
                   ),
                 ],
@@ -378,7 +378,7 @@ class _PillowScreenState extends State<PillowScreen> {
 
   Widget _buildGuideCard(BuildContext context) {
     return Card(
-      color: AppColors.primaryBlue.withOpacity(0.05),
+      color: AppColors.primaryNavy.withOpacity(0.05),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
@@ -386,7 +386,7 @@ class _PillowScreenState extends State<PillowScreen> {
           children: [
             const Icon(
               Icons.info_outline,
-              color: AppColors.primaryBlue,
+              color: AppColors.primaryNavy,
               size: 24,
             ),
             const SizedBox(width: 12),
