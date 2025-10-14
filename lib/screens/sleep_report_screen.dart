@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../widgets/data_chart.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
+import 'package:provider/provider.dart'; // Provider 사용을 위해 추가
+import '../state/sleep_data_state.dart'; // SleepDataState 추가
 
 class SleepReportScreen extends StatelessWidget {
   const SleepReportScreen({Key? key})
@@ -46,17 +48,30 @@ class SleepReportScreen extends StatelessWidget {
   }
 
   Widget _buildReportHeader(BuildContext context) {
+    // Provider를 통해 SleepMetrics 데이터에 접근
+    final metrics = Provider.of<SleepDataState>(context).todayMetrics;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('2023년 10월 27일', style: AppTextStyles.secondaryBodyText),
+        Text(metrics.reportDate, style: AppTextStyles.secondaryBodyText),
         const SizedBox(height: 5),
-        Text('총 수면 시간: 7시간 30분', style: AppTextStyles.heading1),
+        Text(
+          '총 수면 시간: ${metrics.totalSleepDuration}시간',
+          style: AppTextStyles.heading1,
+        ),
       ],
     );
   }
 
   Widget _buildSleepScoreCard(BuildContext context) {
+    // Provider를 통해 SleepMetrics 데이터에 접근
+    final metrics = Provider.of<SleepDataState>(context).todayMetrics;
+
+    // Mock 데이터 기반 점수 계산 (SleepScoreAnalyzer 사용 필요)
+    // 임시 점수로 85점 유지
+    final score = 85;
+
     return Card(
       color: AppColors.secondaryWhite,
       child: Padding(
@@ -71,7 +86,7 @@ class SleepReportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              '85점',
+              '${score}점',
               style: AppTextStyles.heading1.copyWith(
                 color: AppColors.successGreen,
                 fontSize: 60,
@@ -79,7 +94,7 @@ class SleepReportScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              '매우 좋은 수면을 취하셨습니다!',
+              '수면 효율: ${metrics.sleepEfficiency}%', // Mock 데이터 사용
               style: AppTextStyles.bodyText.copyWith(
                 color: AppColors.secondaryText,
               ),
@@ -106,6 +121,8 @@ class SleepReportScreen extends StatelessWidget {
   }
 
   Widget _buildFeedbackSection(BuildContext context) {
+    final metrics = Provider.of<SleepDataState>(context).todayMetrics;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -118,16 +135,41 @@ class SleepReportScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildFeedbackItem(Icons.bedtime, '깊은 수면 시간', '2시간 30분'),
-                _buildFeedbackItem(Icons.snooze, '얕은 수면 시간', '4시간 00분'),
+                // 깊은 수면 시간: 총 수면 시간 * N3 비율
+                _buildFeedbackItem(
+                  Icons.bedtime,
+                  '깊은 수면 시간',
+                  '${(metrics.totalSleepDuration * (metrics.deepSleepRatio / 100)).toStringAsFixed(1)}시간',
+                ),
+                // REM 수면 시간: 총 수면 시간 * REM 비율
                 _buildFeedbackItem(
                   Icons.airline_seat_legroom_extra,
                   '렘 수면 시간',
-                  '1시간 00분',
+                  '${(metrics.totalSleepDuration * (metrics.remRatio / 100)).toStringAsFixed(1)}시간',
                 ),
-                _buildFeedbackItem(Icons.swap_horiz, '뒤척임', '12회'),
-                _buildFeedbackItem(Icons.mic_off, '코골이 감지', '없음'),
-                _buildFeedbackItem(Icons.favorite_border, '수면 무호흡', '감지되지 않음'),
+                // 얕은 수면 시간: 총 수면 시간 - N3 - REM - 깨어있음
+                _buildFeedbackItem(
+                  Icons.snooze,
+                  '얕은 수면 시간',
+                  '${(metrics.totalSleepDuration * ((100 - metrics.remRatio - metrics.deepSleepRatio) / 100)).toStringAsFixed(1)}시간',
+                ),
+                _buildFeedbackItem(
+                  Icons.swap_horiz,
+                  '뒤척임',
+                  '${metrics.tossingAndTurning}회',
+                ),
+                _buildFeedbackItem(
+                  Icons.mic_off,
+                  '코골이',
+                  metrics.avgSnoringDuration > 10
+                      ? '감지됨 (${metrics.avgSnoringDuration}분)'
+                      : '없음',
+                ),
+                _buildFeedbackItem(
+                  Icons.favorite_border,
+                  'HRV',
+                  '${metrics.avgHrv}ms',
+                ),
               ],
             ),
           ),

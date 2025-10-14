@@ -75,65 +75,44 @@ class AppTextStyles {
 
   static const TextStyle darkAppBarTitle = TextStyle(
     fontSize: 20,
-
     fontWeight: FontWeight.bold,
-
-    color: Colors.white,
+    color: AppColors.darkPrimaryText,
   );
-
   static const TextStyle darkHeading1 = TextStyle(
     fontSize: 24,
-
     fontWeight: FontWeight.bold,
-
-    color: Colors.white,
+    color: AppColors.darkPrimaryText,
   );
-
   static const TextStyle darkHeading2 = TextStyle(
     fontSize: 20,
-
     fontWeight: FontWeight.bold,
-
-    color: Colors.white,
+    color: AppColors.darkPrimaryText,
   );
-
   static const TextStyle darkHeading3 = TextStyle(
     fontSize: 18,
-
     fontWeight: FontWeight.bold,
-
-    color: Colors.white,
+    color: AppColors.darkPrimaryText,
   );
-
   static const TextStyle darkBodyText = TextStyle(
     fontSize: 16,
-
-    color: Colors.white,
+    color: AppColors.darkPrimaryText,
   );
-
   static const TextStyle darkSecondaryBodyText = TextStyle(
     fontSize: 14,
-
-    color: Colors.white,
+    color: AppColors.darkSecondaryText,
   );
-
   static const TextStyle darkSmallText = TextStyle(
     fontSize: 12,
-
-    color: Colors.white,
+    color: AppColors.darkSecondaryText,
   );
-
   static const TextStyle darkButtonText = TextStyle(
     fontSize: 16,
-
     fontWeight: FontWeight.bold,
-
     color: Colors.white,
   );
-
   static const TextStyle darkBottomNavItemLabel = TextStyle(
     fontSize: 12,
-
     fontWeight: FontWeight.w600,
   );
+  static const TextStyle darkTabLabelText = TextStyle(fontSize: 14);
 }

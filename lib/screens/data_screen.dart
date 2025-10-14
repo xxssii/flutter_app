@@ -7,58 +7,79 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/sleep_data_state.dart';
 
-class DataScreen extends StatelessWidget {
+class DataScreen extends StatefulWidget {
   const DataScreen({Key? key}) : super(key: key);
 
   @override
+  _DataScreenState createState() => _DataScreenState();
+}
+
+class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // 모든 탭 위젯 리스트를 하나의 변수로 관리
+  final List<Widget> _tabViews = const [
+    EfficiencyTab(),
+    SleepStagesTab(),
+    TrendsTab(),
+    ImprovementGuideTab(),
+  ];
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 20),
-            _buildMetricCards(),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: TabBar(
-                isScrollable: false,
-                labelColor: AppColors.primaryNavy,
-                unselectedLabelColor: AppColors.secondaryText,
-                indicatorColor: AppColors.primaryNavy,
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicatorWeight: 2.0,
-                labelStyle: AppTextStyles.bodyText.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                unselectedLabelStyle: AppTextStyles.bodyText,
-                indicatorPadding: EdgeInsets.zero,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 0),
-                tabs: const [
-                  Tab(text: '효율성'),
-                  Tab(text: '수면 단계'),
-                  Tab(text: '트렌드'),
-                  Tab(text: '개선 가이드'),
-                ],
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: 20),
+          _buildMetricCards(),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: TabBar(
+              controller: _tabController, // TabController 연결
+              isScrollable: false,
+              labelColor: AppColors.primaryNavy,
+              unselectedLabelColor: AppColors.secondaryText,
+              indicatorColor: AppColors.primaryNavy,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorWeight: 2.0,
+              labelStyle: AppTextStyles.bodyText.copyWith(
+                fontWeight: FontWeight.bold,
               ),
+              unselectedLabelStyle: AppTextStyles.bodyText,
+              indicatorPadding: EdgeInsets.zero,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 0),
+              tabs: const [
+                Tab(text: '효율성'),
+                Tab(text: '수면 단계'),
+                Tab(text: '트렌드'),
+                Tab(text: '개선 가이드'),
+              ],
             ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: TabBarView(
-                children: const [
-                  EfficiencyTab(),
-                  SleepStagesTab(),
-                  TrendsTab(),
-                  ImprovementGuideTab(),
-                ],
-              ),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController, // TabController 연결
+              children: _tabViews,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -200,6 +221,9 @@ class DataScreen extends StatelessWidget {
     );
   }
 }
+// ------------------------------------------------------------------
+// 아래는 TabBarView에 들어갈 개별 탭 위젯들입니다.
+// ------------------------------------------------------------------
 
 class EfficiencyTab extends StatelessWidget {
   const EfficiencyTab({Key? key}) : super(key: key);
@@ -357,7 +381,7 @@ class SleepStagesTab extends StatelessWidget {
                           sections: [
                             // NREM1: 얕은 잠 (N1)
                             PieChartSectionData(
-                              color: AppColors.primaryNavy.withOpacity(0.4),
+                              color: AppColors.nrem1Color,
                               value: 10, // N1 5-10% -> 10%
                               title: 'NREM1 10%',
                               radius: 50,
@@ -367,7 +391,7 @@ class SleepStagesTab extends StatelessWidget {
                             ),
                             // NREM2: 얕은 잠 (N2)
                             PieChartSectionData(
-                              color: AppColors.primaryNavy,
+                              color: AppColors.nrem2Color,
                               value: 50, // N2 45-55% -> 50%
                               title: 'NREM2 50%',
                               radius: 50,
@@ -377,7 +401,7 @@ class SleepStagesTab extends StatelessWidget {
                             ),
                             // NREM3: 깊은 잠 (N3)
                             PieChartSectionData(
-                              color: AppColors.successGreen,
+                              color: AppColors.nrem3Color,
                               value: 20, // N3 15-25% -> 20%
                               title: 'NREM3 20%',
                               radius: 50,
@@ -387,7 +411,7 @@ class SleepStagesTab extends StatelessWidget {
                             ),
                             // REM 수면
                             PieChartSectionData(
-                              color: AppColors.secondaryText,
+                              color: AppColors.remColor,
                               value: 15, // REM 20-25% -> 15% (예시)
                               title: 'REM 15%',
                               radius: 50,
@@ -397,7 +421,7 @@ class SleepStagesTab extends StatelessWidget {
                             ),
                             // 깨어있음
                             PieChartSectionData(
-                              color: AppColors.errorRed,
+                              color: AppColors.awakeColor,
                               value: 5, // 깨어있음 (남은 %로 설정)
                               title: '깨어있음 5%',
                               radius: 50,
@@ -433,15 +457,11 @@ class SleepStagesTab extends StatelessWidget {
           children: [
             Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
             const SizedBox(height: 10),
-            _buildDetailItem(
-              'NREM1',
-              '0시간 20분',
-              AppColors.primaryNavy.withOpacity(0.4),
-            ),
-            _buildDetailItem('NREM2', '4시간 10분', AppColors.primaryNavy),
-            _buildDetailItem('NREM3', '1시간 40분', AppColors.successGreen),
-            _buildDetailItem('REM 수면', '1시간 15분', AppColors.secondaryText),
-            _buildDetailItem('깨어있음', '0시간 25분', AppColors.errorRed),
+            _buildDetailItem('NREM1', '0시간 20분', AppColors.nrem1Color),
+            _buildDetailItem('NREM2', '4시간 10분', AppColors.nrem2Color),
+            _buildDetailItem('NREM3', '1시간 40분', AppColors.nrem3Color),
+            _buildDetailItem('REM 수면', '1시간 15분', AppColors.remColor),
+            _buildDetailItem('깨어있음', '0시간 25분', AppColors.awakeColor),
           ],
         ),
       ),

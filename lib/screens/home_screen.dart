@@ -68,6 +68,9 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
                 SizedBox(height: 24),
+                // Mock 데이터 기반 실시간 지표 카드
+                _buildRealTimeMetricsCard(context, appState),
+                SizedBox(height: 16),
                 _buildInfoCard(
                   context,
                   title: '오늘의 총 수면시간',
@@ -180,6 +183,65 @@ class HomeScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
+    // 측정 중일 때만 실시간 데이터를 표시
+    if (!appState.isMeasuring) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildMetricItem(
+              icon: Icons.favorite,
+              label: '심박수',
+              value: '${appState.currentHeartRate.toStringAsFixed(0)}',
+              unit: 'BPM',
+              color: AppColors.errorRed,
+            ),
+            _buildMetricItem(
+              icon: Icons.opacity,
+              label: '산소포화도',
+              value: '${appState.currentSpo2.toStringAsFixed(0)}',
+              unit: '%',
+              color: AppColors.primaryNavy,
+            ),
+            _buildMetricItem(
+              icon: Icons.motion_photos_on,
+              label: '움직임',
+              value: '${appState.currentMovementScore.toStringAsFixed(1)}',
+              unit: '스코어',
+              color: AppColors.warningOrange,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: AppTextStyles.heading2.copyWith(color: color)),
+        Text(unit, style: AppTextStyles.smallText),
+        const SizedBox(height: 4),
+        Text(label, style: AppTextStyles.secondaryBodyText),
+      ],
     );
   }
 

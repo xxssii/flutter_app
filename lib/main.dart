@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return MaterialApp(
-          title: 'Sleep Tracker App',
+          title: '스마트 수면 케어',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             primarySwatch:
@@ -70,7 +70,16 @@ class MyApp extends StatelessWidget {
                 color: AppColors.primaryText,
               ),
             ),
+            // Light Theme Text Theme
+            textTheme: TextTheme(
+              bodyLarge: AppTextStyles.bodyText,
+              bodyMedium: AppTextStyles.bodyText,
+              titleLarge: AppTextStyles.heading1,
+              titleMedium: AppTextStyles.heading2,
+              titleSmall: AppTextStyles.heading3,
+            ),
             cardTheme: CardThemeData(
+              // ✨ CardTheme으로 수정합니다. ✨
               color: AppColors.cardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -126,7 +135,26 @@ class MyApp extends StatelessWidget {
                 color: AppColors.darkPrimaryText,
               ),
             ),
+            // Dark Theme Text Theme (텍스트 색상 강제 적용)
+            textTheme: TextTheme(
+              bodyLarge: AppTextStyles.darkBodyText.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
+              bodyMedium: AppTextStyles.darkBodyText.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
+              titleLarge: AppTextStyles.darkHeading1.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
+              titleMedium: AppTextStyles.darkHeading2.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
+              titleSmall: AppTextStyles.darkHeading3.copyWith(
+                color: AppColors.darkPrimaryText,
+              ),
+            ),
             cardTheme: CardThemeData(
+              // ✨ CardTheme으로 수정합니다. ✨
               color: AppColors.darkCardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -188,6 +216,19 @@ class _MainWrapperState extends State<MainWrapper> {
 
   @override
   Widget build(BuildContext context) {
+    // 현재 테마의 밝기를 확인합니다.
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    // 다크 모드일 때 Inactive 텍스트를 흰색으로 강제합니다.
+    final Color inactiveTextColor = isDarkMode
+        ? Colors.white
+        : Theme.of(context).colorScheme.onSurface;
+
+    // 선택된 아이템의 텍스트 색상을 결정합니다.
+    final Color activeTitleColor = isDarkMode
+        ? Colors.white
+        : Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavyBar(
@@ -201,27 +242,55 @@ class _MainWrapperState extends State<MainWrapper> {
         items: [
           BottomNavyBarItem(
             icon: const Icon(Icons.home),
-            title: const Text('홈'),
+            title: Text(
+              'Main',
+              style: TextStyle(
+                color: _currentIndex == 0
+                    ? activeTitleColor
+                    : inactiveTextColor,
+              ),
+            ),
             activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Theme.of(context).colorScheme.onSurface,
+            inactiveColor: inactiveTextColor,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.analytics),
-            title: const Text('데이터'),
+            title: Text(
+              'Sleep Report',
+              style: TextStyle(
+                color: _currentIndex == 1
+                    ? activeTitleColor
+                    : inactiveTextColor,
+              ),
+            ),
             activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Theme.of(context).colorScheme.onSurface,
+            inactiveColor: inactiveTextColor,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.bed),
-            title: const Text('베개'),
+            title: Text(
+              'Pillow Control',
+              style: TextStyle(
+                color: _currentIndex == 2
+                    ? activeTitleColor
+                    : inactiveTextColor,
+              ),
+            ),
             activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Theme.of(context).colorScheme.onSurface,
+            inactiveColor: inactiveTextColor,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.settings),
-            title: const Text('설정'),
+            title: Text(
+              'Settings',
+              style: TextStyle(
+                color: _currentIndex == 3
+                    ? activeTitleColor
+                    : inactiveTextColor,
+              ),
+            ),
             activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: Theme.of(context).colorScheme.onSurface,
+            inactiveColor: inactiveTextColor,
           ),
         ],
       ),
