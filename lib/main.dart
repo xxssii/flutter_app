@@ -1,5 +1,5 @@
 // lib/main.dart
-
+// 기존에 있던 import 구문들
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
@@ -13,7 +13,17 @@ import 'state/app_state.dart';
 import 'state/settings_state.dart';
 import 'state/sleep_data_state.dart';
 
-void main() {
+// ⬇️ 1. Firebase 초기화에 필요한 import 2줄 추가
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+// ⬇️ 2. main 함수를 asyncC:\Program Files\nodejs\f로 변경
+void main() async {
+  // ⬇️ 3. runApp 전에 Firebase 초기화 코드 2줄 추가
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 기존에 사용하던 runApp 부분은 그대로 유지합니다.
   runApp(
     MultiProvider(
       providers: [
@@ -26,6 +36,7 @@ void main() {
   );
 }
 
+// ⬇️ MyApp 클래스와 MainWrapper 클래스는 기존 코드 그대로 둡니다.
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
