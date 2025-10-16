@@ -5,7 +5,8 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/settings_state.dart';
-import 'profile_screen.dart';
+import '../widgets/alarm_setting_widget.dart'; // 알람 시간 설정을 위한 위젯
+import 'profile_screen.dart'; // 프로필 관리 화면
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -15,7 +16,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // 임시 프로필 정보 (추후 상태관리로 대체)
+  // 임시 프로필 정보 (main.dart의 _buildCurrentProfileCard와 동일)
   final String _currentProfileName = "김코딩";
   final int _currentProfileAge = 28;
 
@@ -43,13 +44,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            _buildCurrentProfileCard(context),
+            _buildCurrentProfileCard(context), // 프로필 정보 상단 배치
             const SizedBox(height: 16),
             _buildThemeSettingsCard(context),
             const SizedBox(height: 16),
-            _buildNotificationSettingsCard(context),
+            _buildAlarmSettingsCard(context), // 알람 설정 카드
             const SizedBox(height: 16),
-            _buildAlarmSettingsCard(context),
+            _buildNotificationSettingsCard(context), // 알림 설정 카드
             const SizedBox(height: 16),
             _buildInfoCard(context),
           ],
@@ -59,12 +60,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildCurrentProfileCard(BuildContext context) {
+    // SettingsScreen의 상단에 프로필 정보를 표시합니다.
     return Card(
       child: InkWell(
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const ProfileScreen()),
+            MaterialPageRoute(
+              builder: (context) =>
+                  const ProfileScreen(key: Key('profileScreen')),
+            ),
           );
         },
         child: Padding(
@@ -132,6 +137,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildAlarmSettingsCard(BuildContext context) {
+    return Consumer<SettingsState>(
+      builder: (context, settingsState, child) {
+        return Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 알람 시간 설정 위젯
+                const AlarmSettingWidget(),
+                const Divider(),
+                // 알람 상태 토글들 (스누즈는 제거됨)
+                _buildToggleRow(
+                  '스마트 기상',
+                  '얕은 수면 단계에서 기상 알람을 울립니다.',
+                  settingsState.isSmartWakeUpOn,
+                  settingsState.toggleSmartWakeUp,
+                ),
+                _buildToggleRow(
+                  '진동',
+                  '알람 시 진동이 울립니다.',
+                  settingsState.isVibrationOn,
+                  settingsState.toggleVibration,
+                ),
+                _buildToggleRow(
+                  '소리',
+                  '알람 시 소리가 울립니다.',
+                  settingsState.isSoundOn,
+                  settingsState.toggleSound,
+                ),
+                _buildToggleRow(
+                  '베개 조절',
+                  '알람 시 베개 높이를 조절합니다.',
+                  settingsState.isPillowAdjustOn,
+                  settingsState.togglePillowAdjust,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildNotificationSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -187,67 +237,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAlarmSettingsCard(BuildContext context) {
-    return Consumer<SettingsState>(
-      builder: (context, settingsState, child) {
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('알람 설정', style: AppTextStyles.heading3),
-                const SizedBox(height: 16),
-                _buildToggleRow(
-                  '알람 켜기',
-                  '설정된 시간에 알람이 울립니다.',
-                  settingsState.isAlarmOn,
-                  settingsState.toggleAlarm,
-                ),
-                _buildToggleRow(
-                  '스마트 기상',
-                  '얕은 수면 단계에서 기상 알람을 울립니다.',
-                  settingsState.isSmartWakeUpOn,
-                  settingsState.toggleSmartWakeUp,
-                ),
-                _buildToggleRow(
-                  '진동',
-                  '알람 시 진동이 울립니다.',
-                  settingsState.isVibrationOn,
-                  settingsState.toggleVibration,
-                ),
-                _buildToggleRow(
-                  '소리',
-                  '알람 시 소리가 울립니다.',
-                  settingsState.isSoundOn,
-                  settingsState.toggleSound,
-                ),
-                _buildToggleRow(
-                  '베개 조절',
-                  '알람 시 베개 높이를 조절합니다.',
-                  settingsState.isPillowAdjustOn,
-                  settingsState.togglePillowAdjust,
-                ),
-                _buildToggleRow(
-                  '스누즈',
-                  '알람 스누즈를 활성화합니다.',
-                  settingsState.isSnoozeOn,
-                  settingsState.toggleSnooze,
-                ),
-                _buildDropdownRow(
-                  '스누즈 시간',
-                  settingsState.snoozeDuration,
-                  ['5분', '10분', '15분', '30분'],
-                  settingsState.setSnoozeDuration,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildInfoCard(BuildContext context) {
     return Card(
       color: AppColors.primaryNavy.withOpacity(0.05),
@@ -256,11 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.info_outline,
-              color: AppColors.primaryNavy,
-              size: 24,
-            ),
+            Icon(Icons.info_outline, color: AppColors.primaryNavy, size: 24),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -315,39 +300,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: value,
             onChanged: onChanged,
             activeColor: AppColors.primaryNavy,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDropdownRow(
-    String title,
-    String value,
-    List<String> items,
-    Function(String) onChanged,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
-          ),
-          DropdownButton<String>(
-            value: value,
-            icon: const Icon(Icons.arrow_drop_down),
-            underline: Container(),
-            onChanged: (String? newValue) {
-              if (newValue != null) {
-                onChanged(newValue);
-              }
-            },
-            items: items.map<DropdownMenuItem<String>>((String item) {
-              return DropdownMenuItem<String>(value: item, child: Text(item));
-            }).toList(),
           ),
         ],
       ),

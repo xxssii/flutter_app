@@ -1,7 +1,7 @@
 // lib/state/app_state.dart
 
 import 'package:flutter/material.dart';
-import 'dart:async'; // Timer 사용을 위해 추가
+import 'dart:async';
 import '../utils/sleep_apnea_detector.dart';
 import '../widgets/apnea_warning_dialog.dart';
 import '../widgets/apnea_report_dialog.dart';
@@ -9,10 +9,9 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
 class AppState extends ChangeNotifier {
-  // <-- ChangeNotifier를 상속받아 notifyListeners 사용 가능하게 함
   bool _isMeasuring = false;
 
-  final List<String> _apneaEvents = []; // <-- 클래스 멤버 변수로 올바르게 정의
+  final List<String> _apneaEvents = [];
   Timer? _sensorDataTimer;
 
   // Mock Data Variables (ESP32)
@@ -29,6 +28,10 @@ class AppState extends ChangeNotifier {
   double get currentSpo2 => _currentSpo2;
   double get currentMovementScore => _currentMovementScore;
 
+  // ----------------------------------------------------
+  // ✅ 알람 관련 상태 및 메서드는 SettingsState로 이동했으므로 삭제함
+  // ----------------------------------------------------
+
   void toggleMeasurement(BuildContext context) {
     _isMeasuring = !_isMeasuring;
     if (_isMeasuring) {
@@ -38,7 +41,6 @@ class AppState extends ChangeNotifier {
       // 측정 종료 시, 리포트 팝업을 띄우는 로직만 실행합니다.
       _stopMockDataStream();
       _generateApneaReport(context);
-      // **화면을 닫는 Navigator.pop()은 여기서 제거합니다.**
     }
     notifyListeners();
   }
@@ -131,8 +133,8 @@ class AppState extends ChangeNotifier {
           reportDetails: reportDetails,
           apneaEvents: _apneaEvents,
           onClose: () {
-            Navigator.of(dialogContext).pop(); // 1. 리포트 다이얼로그를 닫습니다.
-            Navigator.of(context).pop(); // 2. 그 후, 뒤에 있던 SMainMoonScreen을 닫습니다.
+            Navigator.of(dialogContext).pop();
+            Navigator.of(context).pop();
           },
         );
       },

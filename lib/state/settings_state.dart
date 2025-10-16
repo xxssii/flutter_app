@@ -1,4 +1,5 @@
 // lib/state/settings_state.dart
+
 import 'package:flutter/material.dart';
 
 class SettingsState extends ChangeNotifier {
@@ -21,24 +22,30 @@ class SettingsState extends ChangeNotifier {
   bool get isGuideOn => _isGuideOn;
   bool get isPopupOn => _isPopupOn;
 
+  // ----------------------------------------------------
+  // ✅ 알람 시간 설정 상태 추가
+  // ----------------------------------------------------
+  TimeOfDay? _alarmTime;
+  TimeOfDay? get alarmTime => _alarmTime;
+
   // 알람 상태
   bool _isAlarmOn = true;
   bool _isSmartWakeUpOn = true;
   bool _isVibrationOn = true;
   bool _isSoundOn = true;
   bool _isPillowAdjustOn = true;
-  bool _isSnoozeOn = true;
-  String _snoozeDuration = '10분';
+  // bool _isSnoozeOn = true; <-- 삭제됨
+  // String _snoozeDuration = '10분'; <-- 삭제됨
 
   bool get isAlarmOn => _isAlarmOn;
   bool get isSmartWakeUpOn => _isSmartWakeUpOn;
   bool get isVibrationOn => _isVibrationOn;
   bool get isSoundOn => _isSoundOn;
   bool get isPillowAdjustOn => _isPillowAdjustOn;
-  bool get isSnoozeOn => _isSnoozeOn;
-  String get snoozeDuration => _snoozeDuration;
+  // bool get isSnoozeOn => _isSnoozeOn; <-- 삭제됨
+  // String get snoozeDuration => _snoozeDuration; <-- 삭제됨
 
-  // 자동 조절 상태 (새로 추가)
+  // 자동 조절 상태 (유지)
   bool _isAutoAdjustOn = true;
   bool get isAutoAdjustOn => _isAutoAdjustOn;
 
@@ -78,9 +85,27 @@ class SettingsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ----------------------------------------------------
+  // ✅ 알람 시간 설정 메서드 추가/수정
+  // ----------------------------------------------------
+  void setAlarmTime(TimeOfDay newTime) {
+    _alarmTime = newTime;
+    // 시간을 설정하면 자동으로 알람을 켭니다.
+    if (!_isAlarmOn) {
+      _isAlarmOn = true;
+    }
+    notifyListeners();
+    // TODO: 알람 스케줄링 로직 호출
+  }
+
   void toggleAlarm(bool value) {
     _isAlarmOn = value;
+    // 알람을 켰는데 시간이 설정 안 되어 있으면, 현재 시간을 기본값으로 설정
+    if (value && _alarmTime == null) {
+      _alarmTime = TimeOfDay.now();
+    }
     notifyListeners();
+    // TODO: 알람 스케줄링/취소 로직 추가
   }
 
   void toggleSmartWakeUp(bool value) {
@@ -103,15 +128,8 @@ class SettingsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleSnooze(bool value) {
-    _isSnoozeOn = value;
-    notifyListeners();
-  }
-
-  void setSnoozeDuration(String duration) {
-    _snoozeDuration = duration;
-    notifyListeners();
-  }
+  // void toggleSnooze(bool value) { /* ... */ } <-- 삭제됨
+  // void setSnoozeDuration(String duration) { /* ... */ } <-- 삭제됨
 
   void toggleAutoAdjust(bool value) {
     _isAutoAdjustOn = value;

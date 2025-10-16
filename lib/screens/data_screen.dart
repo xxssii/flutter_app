@@ -6,80 +6,60 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/sleep_data_state.dart';
+import '../widgets/alarm_setting_widget.dart'; // import 유지
 
-class DataScreen extends StatefulWidget {
+class DataScreen extends StatelessWidget {
   const DataScreen({Key? key}) : super(key: key);
 
   @override
-  _DataScreenState createState() => _DataScreenState();
-}
-
-class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  // 모든 탭 위젯 리스트를 하나의 변수로 관리
-  final List<Widget> _tabViews = const [
-    EfficiencyTab(),
-    SleepStagesTab(),
-    TrendsTab(),
-    ImprovementGuideTab(),
-  ];
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: 20),
-          _buildMetricCards(),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: TabBar(
-              controller: _tabController, // TabController 연결
-              isScrollable: false,
-              labelColor: AppColors.primaryNavy,
-              unselectedLabelColor: AppColors.secondaryText,
-              indicatorColor: AppColors.primaryNavy,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicatorWeight: 2.0,
-              labelStyle: AppTextStyles.bodyText.copyWith(
-                fontWeight: FontWeight.bold,
+    return DefaultTabController(
+      length: 4,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context),
+            const SizedBox(height: 20),
+            _buildMetricCards(), // '일관성' 지표가 제거됩니다.
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: TabBar(
+                isScrollable: false,
+                labelColor: AppColors.primaryNavy,
+                unselectedLabelColor: AppColors.secondaryText,
+                indicatorColor: AppColors.primaryNavy,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicatorWeight: 2.0,
+                labelStyle: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelStyle: AppTextStyles.bodyText,
+                indicatorPadding: EdgeInsets.zero,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 0),
+                tabs: const [
+                  Tab(text: '효율성'),
+                  Tab(text: '수면 단계'),
+                  Tab(text: '트렌드'),
+                  Tab(text: '개선 가이드'),
+                ],
               ),
-              unselectedLabelStyle: AppTextStyles.bodyText,
-              indicatorPadding: EdgeInsets.zero,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 0),
-              tabs: const [
-                Tab(text: '효율성'),
-                Tab(text: '수면 단계'),
-                Tab(text: '트렌드'),
-                Tab(text: '개선 가이드'),
-              ],
             ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController, // TabController 연결
-              children: _tabViews,
+            const SizedBox(height: 10),
+            Expanded(
+              child: TabBarView(
+                children: const [
+                  EfficiencyTab(),
+                  SleepStagesTab(),
+                  TrendsTab(),
+                  ImprovementGuideTab(),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -159,6 +139,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
+          // Expanded로 감싸 각 카드가 동일한 공간을 차지하도록 합니다.
           _buildMetricCard(
             icon: Icons.water_drop,
             color: AppColors.primaryNavy,
@@ -171,12 +152,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             title: 'REM 비율',
             value: '20%',
           ),
-          _buildMetricCard(
-            icon: Icons.trending_up,
-            color: AppColors.warningOrange,
-            title: '일관성',
-            value: '99%',
-          ),
+          // ❌ '일관성' 지표를 제거하고, 남은 카드 수가 3개입니다.
           _buildMetricCard(
             icon: Icons.access_time,
             color: AppColors.errorRed,
@@ -194,6 +170,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     required String title,
     required String value,
   }) {
+    // 3개의 카드가 공간을 채우도록 Expanded를 유지합니다.
     return Expanded(
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -209,7 +186,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     child: Icon(icon, color: color, size: 20),
                   ),
                   const SizedBox(width: 8),
-                  Text(title, style: AppTextStyles.smallText),
+                  // 긴 제목 때문에 오버플로우가 날 수 있으므로, 제목을 Expanded로 감싸는 것이 좋습니다.
+                  Expanded(child: Text(title, style: AppTextStyles.smallText)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -221,6 +199,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 }
+
 // ------------------------------------------------------------------
 // 아래는 TabBarView에 들어갈 개별 탭 위젯들입니다.
 // ------------------------------------------------------------------
@@ -232,12 +211,14 @@ class EfficiencyTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
+      // ❌ 가독성을 높이기 위해 Row를 Column으로 변경합니다.
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: _buildEfficiencyAnalysis(context)),
-          const SizedBox(width: 16),
-          Expanded(child: _buildSleepTimeAnalysis(context)),
+          _buildEfficiencyAnalysis(context), // ⬅️ 첫 번째 카드
+          const SizedBox(height: 16),
+          _buildSleepTimeAnalysis(context), // ⬅️ 두 번째 카드
+          const SizedBox(height: 16), // 아래 여백
         ],
       ),
     );
@@ -360,89 +341,89 @@ class SleepStagesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
+      // ❌ 문법 오류를 수정하고, 세로로 배치합니다.
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('수면 단계 분포', style: AppTextStyles.heading3),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      height: 200,
-                      child: PieChart(
-                        PieChartData(
-                          sections: [
-                            // NREM1: 얕은 잠 (N1)
-                            PieChartSectionData(
-                              color: AppColors.nrem1Color,
-                              value: 10, // N1 5-10% -> 10%
-                              title: 'NREM1 10%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.bodyText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('수면 단계 분포', style: AppTextStyles.heading3),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 200,
+                    child: PieChart(
+                      PieChartData(
+                        sections: [
+                          // NREM1: 얕은 잠 (N1)
+                          PieChartSectionData(
+                            color: AppColors.nrem1Color,
+                            value: 10, // N1 5-10% -> 10%
+                            title: 'NREM1 10%',
+                            radius: 50,
+                            titleStyle: AppTextStyles.bodyText.copyWith(
+                              color: AppColors.cardBackground,
                             ),
-                            // NREM2: 얕은 잠 (N2)
-                            PieChartSectionData(
-                              color: AppColors.nrem2Color,
-                              value: 50, // N2 45-55% -> 50%
-                              title: 'NREM2 50%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.smallText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
+                          ),
+                          // NREM2: 얕은 잠 (N2)
+                          PieChartSectionData(
+                            color: AppColors.nrem2Color,
+                            value: 50, // N2 45-55% -> 50%
+                            title: 'NREM2 50%',
+                            radius: 50,
+                            titleStyle: AppTextStyles.smallText.copyWith(
+                              color: AppColors.cardBackground,
                             ),
-                            // NREM3: 깊은 잠 (N3)
-                            PieChartSectionData(
-                              color: AppColors.nrem3Color,
-                              value: 20, // N3 15-25% -> 20%
-                              title: 'NREM3 20%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.smallText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
+                          ),
+                          // NREM3: 깊은 잠 (N3)
+                          PieChartSectionData(
+                            color: AppColors.nrem3Color,
+                            value: 20, // N3 15-25% -> 20%
+                            title: 'NREM3 20%',
+                            radius: 50,
+                            titleStyle: AppTextStyles.smallText.copyWith(
+                              color: AppColors.cardBackground,
                             ),
-                            // REM 수면
-                            PieChartSectionData(
-                              color: AppColors.remColor,
-                              value: 15, // REM 20-25% -> 15% (예시)
-                              title: 'REM 15%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.smallText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
+                          ),
+                          // REM 수면
+                          PieChartSectionData(
+                            color: AppColors.remColor,
+                            value: 15, // REM 20-25% -> 15% (예시)
+                            title: 'REM 15%',
+                            radius: 50,
+                            titleStyle: AppTextStyles.smallText.copyWith(
+                              color: AppColors.cardBackground,
                             ),
-                            // 깨어있음
-                            PieChartSectionData(
-                              color: AppColors.awakeColor,
-                              value: 5, // 깨어있음 (남은 %로 설정)
-                              title: '깨어있음 5%',
-                              radius: 50,
-                              titleStyle: AppTextStyles.smallText.copyWith(
-                                color: AppColors.cardBackground,
-                              ),
+                          ),
+                          // 깨어있음
+                          PieChartSectionData(
+                            color: AppColors.awakeColor,
+                            value: 5, // 깨어있음 (남은 %로 설정)
+                            title: '깨어있음 5%',
+                            radius: 50,
+                            titleStyle: AppTextStyles.smallText.copyWith(
+                              color: AppColors.cardBackground,
                             ),
-                          ],
-                          borderData: FlBorderData(show: false),
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 40,
-                        ),
+                          ),
+                        ],
+                        borderData: FlBorderData(show: false),
+                        sectionsSpace: 2,
+                        centerSpaceRadius: 40,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(child: _buildSleepStageDetail(context)),
+          const SizedBox(height: 16),
+          _buildSleepStageDetail(context),
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -498,6 +479,7 @@ class TrendsTab extends StatefulWidget {
 }
 
 class _TrendsTabState extends State<TrendsTab> {
+  // ... (TrendsTab 코드는 그대로 유지)
   final List<FlSpot> sleepEfficiencySpots = const [
     FlSpot(0, 93),
     FlSpot(1, 95),
