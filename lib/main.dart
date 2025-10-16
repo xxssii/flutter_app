@@ -1,29 +1,29 @@
 // lib/main.dart
-// 기존에 있던 import 구문들
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart';
 import 'screens/pillow_screen.dart';
-import 'screens/settings_screen.dart';
+
+// ✨ SettingsScreen 위젯은 'screen'이라는 별칭으로 임포트하여 충돌을 피합니다.
+import 'screens/settings_screen.dart' as screen;
+
 import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
 import 'state/app_state.dart';
-import 'state/settings_state.dart';
+import 'state/settings_state.dart'; // SettingsState 상태 클래스
 import 'state/sleep_data_state.dart';
 
-// ⬇️ 1. Firebase 초기화에 필요한 import 2줄 추가
+// ⬇️ Firebase 초기화에 필요한 import 2줄 추가
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-// ⬇️ 2. main 함수를 asyncC:\Program Files\nodejs\f로 변경
-void main() async {
-  // ⬇️ 3. runApp 전에 Firebase 초기화 코드 2줄 추가
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 기존에 사용하던 runApp 부분은 그대로 유지합니다.
   runApp(
     MultiProvider(
       providers: [
@@ -36,7 +36,6 @@ void main() async {
   );
 }
 
-// ⬇️ MyApp 클래스와 MainWrapper 클래스는 기존 코드 그대로 둡니다.
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -82,7 +81,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
             // Light Theme Text Theme
-            textTheme: TextTheme(
+            textTheme: const TextTheme(
               bodyLarge: AppTextStyles.bodyText,
               bodyMedium: AppTextStyles.bodyText,
               titleLarge: AppTextStyles.heading1,
@@ -90,7 +89,6 @@ class MyApp extends StatelessWidget {
               titleSmall: AppTextStyles.heading3,
             ),
             cardTheme: CardThemeData(
-              // ✨ CardTheme으로 수정합니다. ✨
               color: AppColors.cardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -165,7 +163,6 @@ class MyApp extends StatelessWidget {
               ),
             ),
             cardTheme: CardThemeData(
-              // ✨ CardTheme으로 수정합니다. ✨
               color: AppColors.darkCardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -218,11 +215,11 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(key: Key('homeScreen')),
-    DataScreen(key: Key('dataScreen')),
-    PillowScreen(key: Key('pillowScreen')),
-    SettingsScreen(key: Key('settingsScreen')),
+  final List<Widget> _screens = [
+    const HomeScreen(key: Key('homeScreen')),
+    const DataScreen(key: Key('dataScreen')),
+    const PillowScreen(key: Key('pillowScreen')),
+    const screen.SettingsScreen(key: Key('settingsScreen')), // ✨ 별칭 사용
   ];
 
   @override
@@ -307,4 +304,8 @@ class _MainWrapperState extends State<MainWrapper> {
       ),
     );
   }
+}
+
+class SettingsScreen {
+  const SettingsScreen();
 }
