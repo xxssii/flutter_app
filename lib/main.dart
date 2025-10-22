@@ -7,6 +7,9 @@ import 'screens/home_screen.dart';
 import 'screens/data_screen.dart';
 import 'screens/pillow_screen.dart';
 
+// ✨ 이 줄을 추가합니다.
+import 'services/ble_service.dart';
+
 // ✨ SettingsScreen 위젯은 'screen'이라는 별칭으로 임포트하여 충돌을 피합니다.
 import 'screens/settings_screen.dart' as screen;
 
@@ -30,6 +33,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AppState()),
         ChangeNotifierProvider(create: (_) => SettingsState()),
         ChangeNotifierProvider(create: (_) => SleepDataState()),
+        ChangeNotifierProvider(create: (_) => BleService()),
       ],
       child: const MyApp(),
     ),
