@@ -1,3 +1,7 @@
+// lib/screens/home_screen.dart
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore 임포트
@@ -9,7 +13,148 @@ import '../state/settings_state.dart';
 import 'sleep_mode_screen.dart'; // s_main_moon.dart -> sleep_mode_screen.dart
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
+
+  // --- "진짜 뇌" 훈련을 위한 데이터 생성 함수 (v3: "진짜" 범위 적용) ---
+
+  static final _random = Random();
+  static double _randRange(double min, double max) {
+    return min + _random.nextDouble() * (max - min);
+  }
+
+  /// [label]에 해당하는 "진짜" 센서 범위의 프로필을 10초간 1Hz로 전송합니다.
+  Future<void> _pushBurstData(BuildContext context, String label) async {
+    final String userId = "train_user_v3"; // v3 훈련용 ID
+    final String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
+
+    for (int i = 0; i < 10; i++) {
+      // "진짜" 센서 범위(0-4095, 0-255) 기반 프로필 정의
+      // HR/SpO2는 표준 범위로 가정 (추후 수정 가능)
+      double hrMin = 60,
+          hrMax = 70,
+          spo2Min = 96,
+          spo2Max = 99,
+          micMin = 10,
+          micMax = 30,
+          pressureMin = 500,
+          pressureMax = 1000;
+
+      switch (label) {
+        case 'Awake': // 깨어있음 (움직임 많음)
+          hrMin = 70;
+          hrMax = 90;
+          spo2Min = 97;
+          spo2Max = 99;
+          micMin = 100;
+          micMax = 160; // 말소리/소음 (0-255)
+          pressureMin = 1500;
+          pressureMax = 2500; // 뒤척임 (0-4095)
+          break;
+        case 'Light': // 얕은 잠 (약간의 움직임)
+          hrMin = 60;
+          hrMax = 70;
+          spo2Min = 96;
+          spo2Max = 98;
+          micMin = 10;
+          micMax = 40;
+          pressureMin = 500;
+          pressureMax = 1500; // 약간의 뒤척임 (0-4095)
+          break;
+        case 'Deep': // 깊은 잠 (움직임 없음)
+          hrMin = 50;
+          hrMax = 60;
+          spo2Min = 96;
+          spo2Max = 98;
+          micMin = 5;
+          micMax = 20; // 조용함
+          pressureMin = 100;
+          pressureMax = 500; // 안정적 (0-4095)
+          break;
+        case 'REM': // 렘수면 (★REM vs Light 구분점★)
+          hrMin = 65;
+          hrMax = 75; // 심박수는 Light와 비슷하게 활발
+          spo2Min = 96;
+          spo2Max = 98;
+          micMin = 5;
+          micMax = 20; // 조용함
+          pressureMin = 100;
+          pressureMax = 500; // ★몸은 Deep처럼 안정적 (0-4095)
+          break;
+        case 'Snoring': // ★ 코골이
+          hrMin = 65;
+          hrMax = 80;
+          spo2Min = 94;
+          spo2Max = 97;
+          micMin = 180;
+          micMax = 250; // 마이크 레벨 (0-255)
+          pressureMin = 200;
+          pressureMax = 800; // 코골이 진동 (0-4095)
+          break;
+        case 'Tossing': // ★ 뒤척임
+          hrMin = 70;
+          hrMax = 85;
+          spo2Min = 97;
+          spo2Max = 99;
+          micMin = 20;
+          micMax = 70;
+          pressureMin = 3000;
+          pressureMax = 4095; // 압력 레벨 (0-4095)
+          break;
+        case 'Apnea': // ★ 무호흡
+          hrMin = 75;
+          hrMax = 90; // 심박수 상승 (보상 작용)
+          spo2Min = 80;
+          spo2Max = 90; // 산소포화도 (낮음)
+          micMin = 0;
+          micMax = 10; // 조용함
+          pressureMin = 100;
+          pressureMax = 500; // 안정적 (0-4095)
+          break;
+      }
+
+      final Map<String, dynamic> data = {
+        // 4대 핵심 센서 데이터
+        'hr': _randRange(hrMin, hrMax).toInt(),
+        'spo2': _randRange(spo2Min, spo2Max),
+        'mic_level': _randRange(micMin, micMax).toInt(),
+        'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
+        // 훈련 및 메타 데이터
+        'label': label,
+        'userId': userId,
+        'sessionId': sessionId,
+        'ts': FieldValue.serverTimestamp(),
+      };
+
+      try {
+        await FirebaseFirestore.instance.collection('raw_data').add(data);
+        if (i < 9) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      } catch (e) {
+        print("❌ 데이터 저장 실패: $e");
+        if (i == 0 && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ Firebase 저장 실패: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        break;
+      }
+    }
+
+    print("✅ $label 훈련 데이터 (10건) 전송 완료 (v3 스키마)");
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ $label 훈련 데이터 (10건) 전송 완료 (v3 스키마)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+  // --- 여기까지 ---
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +211,7 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
+<<<<<<< Updated upstream
                 const SizedBox(height: 24),
 
                 // ✅ 1. Firestore 실시간 수면 상태 위젯 (측정 중에만 보임)
@@ -73,6 +219,74 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // 2. 고정 정보 카드 (총 수면시간, 베개 높이 등)
+=======
+
+                // --- 훈련용 데이터 생성 버튼 (7개) ---
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "--- [1단계] 훈련 데이터 생성기 (v3: 진짜 범위) ---",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                      SizedBox(height: 12),
+
+                      // 7개 훈련용 버튼
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Awake'),
+                        child: Text('Awake 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Light'),
+                        child: Text('Light 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Deep'),
+                        child: Text('Deep 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'REM'),
+                        child: Text('REM 훈련 데이터 (10s)'),
+                      ),
+
+                      SizedBox(height: 12),
+
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Snoring'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
+                        child: Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Tossing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.brown,
+                        ),
+                        child: Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Apnea'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[700],
+                        ),
+                        child: Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
+                      ),
+
+                      SizedBox(height: 12),
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 24),
+                _buildRealTimeMetricsCard(context, appState),
+                SizedBox(height: 16),
+>>>>>>> Stashed changes
                 _buildInfoCard(
                   context,
                   title: '오늘의 총 수면시간',
@@ -192,6 +406,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+<<<<<<< Updated upstream
   // ✅ _buildRealTimeStatus 및 _getIconForStatus 함수 (이전과 동일)
   Widget _buildRealTimeStatus(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
@@ -210,9 +425,35 @@ class HomeScreen extends StatelessWidget {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(
             child: SpinKitFadingCircle(
+=======
+  Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
+    if (!appState.isMeasuring) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildMetricItem(
+              icon: Icons.favorite,
+              label: '심박수',
+              value: appState.currentHeartRate.toStringAsFixed(0),
+              unit: 'BPM',
+              color: AppColors.errorRed,
+            ),
+            _buildMetricItem(
+              icon: Icons.opacity,
+              label: '산소포화도',
+              value: appState.currentSpo2.toStringAsFixed(0),
+              unit: '%',
+>>>>>>> Stashed changes
               color: AppColors.primaryNavy,
               size: 30.0,
             ),
+<<<<<<< Updated upstream
           ); // 로딩 인디케이터 변경
         }
         if (snapshot.hasError) {
@@ -284,6 +525,14 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
+=======
+            _buildMetricItem(
+              icon: Icons.motion_photos_on,
+              label: '움직임',
+              value: appState.currentMovementScore.toStringAsFixed(1),
+              unit: '스코어',
+              color: AppColors.warningOrange,
+>>>>>>> Stashed changes
             ),
           ],
         );

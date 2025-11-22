@@ -8,19 +8,19 @@ class ApneaReportDialog extends StatelessWidget {
   final List<String> reportDetails;
   final List<String> apneaEvents;
   final VoidCallback? onClose;
-  final VoidCallback? onViewDetails; // ✅ 1. 상세 보기 콜백 추가
+  final VoidCallback? onViewDetails; // ✅ 상세 보기 콜백 추가
 
   const ApneaReportDialog({
-    Key? key,
+    super.key,
     required this.reportDetails,
     required this.apneaEvents,
     this.onClose,
-    this.onViewDetails, // ✅ 2. 생성자에 추가
-  }) : super(key: key);
+    this.onViewDetails, // ✅ 생성자에 추가
+  });
 
   @override
   Widget build(BuildContext context) {
-    // 리포트 내용 구성 (기존 코드)
+    // 리포트 내용 구성
     String reportContent = reportDetails.join('\n\n');
 
     return AlertDialog(
@@ -34,20 +34,21 @@ class ApneaReportDialog extends StatelessWidget {
         child: Text(reportContent, style: AppTextStyles.bodyText),
       ),
       actions: [
-        // ✅ 3. "상세 리포트 보기" 버튼 추가
-        TextButton(
-          onPressed: onViewDetails, // 상세 보기 콜백 호출
-          child: Text(
-            '상세 리포트 보기',
-            style: AppTextStyles.bodyText.copyWith(
-              color: AppColors.primaryNavy,
-              fontWeight: FontWeight.bold,
+        // ✅ "상세 리포트 보기" 버튼 추가
+        if (onViewDetails != null)
+          TextButton(
+            onPressed: onViewDetails, // 상세 보기 콜백 호출
+            child: Text(
+              '상세 리포트 보기',
+              style: AppTextStyles.bodyText.copyWith(
+                color: AppColors.primaryNavy,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-        ),
-        // ✅ 4. "확인" 버튼 (기존 닫기 기능)
+        // ✅ "확인" 버튼 (기존 닫기 기능)
         TextButton(
-          onPressed: onClose, // 닫기 콜백 호출
+          onPressed: onClose ?? () => Navigator.of(context).pop(), // 닫기 콜백 호출
           child: Text(
             '확인',
             style: AppTextStyles.bodyText.copyWith(

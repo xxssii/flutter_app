@@ -13,7 +13,7 @@ import 'dart:math'; // ✅ 최대값 계산을 위해 추가!
 // 해당 중복 코드를 제거해야 main.dart와의 임포트 충돌이 해결됩니다.
 
 class DataScreen extends StatelessWidget {
-  const DataScreen({Key? key}) : super(key: key);
+  const DataScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +181,7 @@ class DataScreen extends StatelessWidget {
 // ------------------------------------------------------------------
 
 class EfficiencyTab extends StatelessWidget {
-  const EfficiencyTab({Key? key}) : super(key: key);
+  const EfficiencyTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +487,7 @@ class EfficiencyTab extends StatelessWidget {
 // ------------------------------------------------------------------
 
 class SleepStagesTab extends StatelessWidget {
-  const SleepStagesTab({Key? key}) : super(key: key);
+  const SleepStagesTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -605,8 +605,13 @@ class SleepStagesTab extends StatelessWidget {
   }
 }
 
+<<<<<<< Updated upstream
 class TrendsTab extends StatelessWidget {
   const TrendsTab({Key? key}) : super(key: key);
+=======
+class TrendsTab extends StatefulWidget {
+  const TrendsTab({super.key});
+>>>>>>> Stashed changes
 
   @override
   Widget build(BuildContext context) {
@@ -741,7 +746,7 @@ class TrendsTab extends StatelessWidget {
                                   value.toInt() < dates.length) {
                                 String day = dates[value.toInt()].split(' ')[1];
                                 return SideTitleWidget(
-                                  axisSide: meta.axisSide,
+                                  meta: meta,
                                   space: 8,
                                   child: Text(
                                     day,
@@ -791,7 +796,7 @@ class TrendsTab extends StatelessWidget {
 }
 
 class ImprovementGuideTab extends StatelessWidget {
-  const ImprovementGuideTab({Key? key}) : super(key: key);
+  const ImprovementGuideTab({super.key});
 
   @override
   Widget build(BuildContext context) {

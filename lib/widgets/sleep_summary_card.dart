@@ -18,7 +18,7 @@ class SleepSummaryCard extends StatelessWidget {
     const FlSpot(7, 1),
   ];
 
-  SleepSummaryCard({Key? key}) : super(key: key);
+  SleepSummaryCard({super.key});
 
   @override
   Widget build(BuildContext context) {

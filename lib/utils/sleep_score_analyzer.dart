@@ -1,7 +1,5 @@
 // lib/utils/sleep_score_analyzer.dart
 
-import 'package:flutter/material.dart';
-
 class SleepScoreAnalyzer {
   // 1. 종합 점수 분석 (0~100점)
   int getSleepScore(

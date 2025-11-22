@@ -273,7 +273,7 @@ class _SleepReportScreenState extends State<SleepReportScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              '${score}점',
+              '$score점',
               style: AppTextStyles.heading1.copyWith(
                 color: AppColors.successGreen,
                 fontSize: 60,

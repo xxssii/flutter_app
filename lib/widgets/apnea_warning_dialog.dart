@@ -7,7 +7,7 @@ import '../utils/app_text_styles.dart';
 class ApneaWarningDialog extends StatelessWidget {
   final String message;
 
-  const ApneaWarningDialog({Key? key, required this.message}) : super(key: key);
+  const ApneaWarningDialog({super.key, required this.message});
 
   @override
   Widget build(BuildContext context) {

@@ -9,8 +9,7 @@ class DataChart extends StatelessWidget {
   final List<FlSpot> chartData;
   final String chartTitle;
 
-  const DataChart({Key? key, required this.chartData, required this.chartTitle})
-    : super(key: key);
+  const DataChart({super.key, required this.chartData, required this.chartTitle});
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +46,7 @@ class DataChart extends StatelessWidget {
                           return const SizedBox.shrink();
                       }
                       return SideTitleWidget(
-                        axisSide: meta.axisSide,
+                        meta: meta,
                         space: 8.0,
                         child: Text(
                           text,

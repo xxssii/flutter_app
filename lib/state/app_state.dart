@@ -14,12 +14,12 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
-import '../screens/sleep_report_screen.dart'; // ✅ 1. SleepReportScreen 임포트 확인
+import '../screens/sleep_report_screen.dart';
 
-// ✅ 2. 시연용으로 사용할 고정 ID 정의
+// ✅ 시연용으로 사용할 고정 ID 정의
 const String DEMO_USER_ID = "capstone_demo_session_01";
 
-// ✅ 3. 친구가 만든 Firebase 저장 함수 (수정)
+// ✅ Firebase 저장 함수
 Future<void> saveFakeSensorData({
   required double pressure,
   required bool snoring,
@@ -30,7 +30,7 @@ Future<void> saveFakeSensorData({
     'snoring': snoring,
     'timestamp': timestamp,
     'device_id': 'ESP32_Pillow',
-    'user_id': DEMO_USER_ID, // ✅ 4. 하드코딩된 ID를 함께 저장
+    'user_id': DEMO_USER_ID,
   });
   print('Firebase에 데이터 저장 완료: (사용자: $DEMO_USER_ID)');
 }
@@ -47,6 +47,18 @@ class AppState extends ChangeNotifier {
   double _currentHeartRate = 60.0;
   double _currentSpo2 = 97.0;
   double _currentMovementScore = 0.5;
+
+  // ----------------------------------------------------
+  // ✅ "새 뇌" (서버 뇌)를 위한 상태 변수
+  // ----------------------------------------------------
+  /// 실시간 명령 리스너 (구독)
+  StreamSubscription? _commandSubscription;
+
+  /// 현재 세션 ID
+  String _currentSessionId = "";
+
+  /// 현재 유저 ID (테스트용)
+  final String _currentUserId = "v4_test";
 
   bool get isMeasuring => _isMeasuring;
   List<String> get apneaEvents => _apneaEvents;
@@ -89,12 +101,29 @@ class AppState extends ChangeNotifier {
 
   void toggleMeasurement(BuildContext context) {
     _isMeasuring = !_isMeasuring;
+
     if (_isMeasuring) {
+      // --- 측정 시작 ---
       _apneaEvents.clear();
+
+      // BLE 스캔 시작
       Provider.of<BleService>(context, listen: false).startScan();
-      _startMockDataStream(context); // 1초 타이머 시작
+
+      // Mock 데이터 스트림 시작 (알람 확인용)
+      _startMockDataStream(context);
+
+      // "새 뇌" (서버 뇌) 리스너 시작
+      _currentSessionId = "s4_test";
+      _startCommandListener(_currentUserId, _currentSessionId);
     } else {
+      // --- 측정 종료 ---
       _stopMockDataStream(); // 1초 타이머 중지
+
+      // 리스너 종료
+      _commandSubscription?.cancel();
+      _commandSubscription = null;
+
+      // 리포트 생성
       _generatePostSleepReport(context);
     }
     notifyListeners();
@@ -280,10 +309,84 @@ class AppState extends ChangeNotifier {
     );
   }
 
+  // ----------------------------------------------------
+  // ✅ "새 뇌" (서버 뇌) 로직
+  // ----------------------------------------------------
+
+  /// 명령 수신 리스너
+  void _startCommandListener(String userId, String sessionId) {
+    print(
+      "✅ [Real Mode] '뇌'의 명령을 구독합니다... (userId: $userId, sessionId: $sessionId)",
+    );
+
+    _commandSubscription = FirebaseFirestore.instance
+        .collection('commands')
+        .where('userId', isEqualTo: userId)
+        .where('sessionId', isEqualTo: sessionId)
+        .where('status', isEqualTo: 'PENDING') // "PENDING"인 것만
+        .orderBy('ts', descending: true) // 최신 순
+        .limit(1)
+        .snapshots() // 실시간 구독
+        .listen(
+          (snapshot) {
+            print("📥 [DEBUG] Snapshot size: ${snapshot.docs.length}");
+            for (var doc in snapshot.docs) {
+              print("📄 [DEBUG] Doc: ${doc.id}, type: ${doc.data()['type']}");
+            }
+
+            if (snapshot.docs.isNotEmpty) {
+              var commandDoc = snapshot.docs.first;
+              print("🧠 [뇌로부터 새 명령 수신!] type: ${commandDoc.data()['type']}");
+
+              // "몸"이 명령을 실행 (BLE로 베개에 쏘기)
+              _executePillowCommand(commandDoc);
+            }
+          },
+          onError: (error) {
+            print("❌ [DEBUG] Listen error: $error");
+          },
+        );
+  }
+
+  /// 명령 실행 및 "DONE" 보고 함수
+  void _executePillowCommand(DocumentSnapshot commandDoc) async {
+    String commandId = commandDoc.id;
+    Map<String, dynamic> data = commandDoc.data() as Map<String, dynamic>;
+    String type = data['type'];
+    Map<String, dynamic> payload = data['payload'];
+
+    bool success = false;
+    print("💪 [몸이 명령 수행 시작] type: $type");
+
+    if (type == 'VIBRATE_STRONG' || type == 'VIBRATE_GENTLY') {
+      // (미래) BLE로 진동 명령 전송
+      print("⚡️ (시뮬레이션) 베개 진동 중... ${payload['level']}");
+      success = true; // (임시)
+    } else if (type == 'SET_HEIGHT') {
+      // (미래) BLE로 높이 변경 명령 전송
+      print("↕️ (시뮬레이션) 베개 높이 변경 중... ${payload['heightMm']}mm");
+      success = true; // (임시)
+    }
+
+    // 실행 성공 시, "뇌"에게 "완료(DONE)"라고 보고
+    if (success) {
+      try {
+        await commandDoc.reference.update({
+          'status': 'DONE',
+          'doneTs': FieldValue.serverTimestamp(),
+        });
+        print("✅ [몸이 완료 보고] $commandId 임무 완료!");
+      } catch (e) {
+        print("❌ [몸이 완료 보고] 실패: $e");
+      }
+    }
+  }
+
   @override
   void dispose() {
     _bleService?.removeListener(_onBleDataReceived);
     _sensorDataTimer?.cancel();
+    _commandSubscription?.cancel();
     super.dispose();
   }
 }

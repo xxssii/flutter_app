@@ -1,1 +1,17 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"capstone-sleep","appId":"1:164602080782:android:7974046b596f372ec6165f","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"capstone-sleep","configurations":{"android":"1:164602080782:android:7974046b596f372ec6165f","ios":"1:164602080782:ios:4c2d38c5857c1438c6165f","macos":"1:164602080782:ios:4c2d38c5857c1438c6165f","web":"1:164602080782:web:fa4dc57c1b933b08c6165f","windows":"1:164602080782:web:9af63cfc9c946dddc6165f"}}}}}}
+{
+  
+  "functions": 
+    {
+      "source": "functions",
+      
+      
+      
+      
+      "runtime": "python312"
+    }
+  ,
+  "firestore": {
+    "indexes": "firestore.indexes.json"
+  }
+  
+}

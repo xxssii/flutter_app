@@ -1,7 +1,5 @@
 // lib/utils/sleep_apnea_detector.dart
 
-import 'package:flutter/material.dart';
-
 class SleepApneaDetector {
   // 베개 높이를 조절하는 가상의 메서드
   void _adjustPillowHeight() {

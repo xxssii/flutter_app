@@ -5,7 +5,7 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
 class AddProfileScreen extends StatefulWidget {
-  const AddProfileScreen({Key? key}) : super(key: key);
+  const AddProfileScreen({super.key});
 
   @override
   _AddProfileScreenState createState() => _AddProfileScreenState();
@@ -117,10 +117,10 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
               Center(
                 child: ElevatedButton(
                   onPressed: _saveProfile,
-                  child: const Text('프로필 저장'),
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
+                  child: const Text('프로필 저장'),
                 ),
               ),
             ],
@@ -199,7 +199,7 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
             borderSide: BorderSide(color: AppColors.borderColor),
           ),
         ),
-        value: _sleepPurpose,
+        initialValue: _sleepPurpose,
         items: _sleepPurposes.map((String purpose) {
           return DropdownMenuItem<String>(value: purpose, child: Text(purpose));
         }).toList(),

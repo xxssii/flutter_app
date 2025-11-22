@@ -77,7 +77,7 @@ Future<void> _configureLocalTimeZone() async {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +251,7 @@ class MyApp extends StatelessWidget {
 }
 
 class MainWrapper extends StatefulWidget {
-  const MainWrapper({Key? key}) : super(key: key);
+  const MainWrapper({super.key});
 
   @override
   State<MainWrapper> createState() => _MainWrapperState();

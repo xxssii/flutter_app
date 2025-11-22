@@ -11,7 +11,7 @@ import 'info_screen.dart';
 import '../services/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
   _SettingsScreenState createState() => _SettingsScreenState();
@@ -129,7 +129,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (bool value) {
                     settingsState.toggleDarkMode(value);
                   },
-                  activeColor: AppColors.primaryNavy,
+                  activeThumbColor: AppColors.primaryNavy,
                 ),
               ],
             ),
@@ -363,7 +363,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // 래퍼를 제거하고 함수를 직접 전달합니다.
             // Switch의 onChanged는 Future<void>를 반환하는 함수를 처리할 수 있습니다.
             onChanged: onChanged,
-            activeColor: AppColors.primaryNavy,
+            activeThumbColor: AppColors.primaryNavy,
           ),
         ],
       ),

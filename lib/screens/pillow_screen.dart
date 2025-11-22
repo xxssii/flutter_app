@@ -8,7 +8,7 @@ import '../state/settings_state.dart';
 import '../services/ble_service.dart'; // ✅ BleService 임포트
 
 class PillowScreen extends StatefulWidget {
-  const PillowScreen({Key? key}) : super(key: key);
+  const PillowScreen({super.key});
 
   @override
   _PillowScreenState createState() => _PillowScreenState();
@@ -16,7 +16,7 @@ class PillowScreen extends StatefulWidget {
 
 class _PillowScreenState extends State<PillowScreen> {
   // 베개 높이 상태를 관리할 변수
-  double _currentPillowHeight = 12.0;
+  final double _currentPillowHeight = 12.0;
   double _targetPillowHeight = 12.0;
 
   // 자동 조절 속도
@@ -325,7 +325,7 @@ class _PillowScreenState extends State<PillowScreen> {
                       onChanged: (bool value) {
                         settingsState.toggleAutoAdjust(value);
                       },
-                      activeColor: AppColors.primaryNavy,
+                      activeThumbColor: AppColors.primaryNavy,
                     ),
                   ],
                 ),
