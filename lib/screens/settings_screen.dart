@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/settings_state.dart';
-import '../widgets/alarm_setting_widget.dart'; // 알람 시간 설정을 위한 위젯
-import 'profile_screen.dart'; // 프로필 관리 화면
+import '../widgets/alarm_setting_widget.dart';
+import 'profile_screen.dart';
+import 'info_screen.dart';
+import '../services/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -16,8 +18,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // 임시 프로필 정보 (main.dart의 _buildCurrentProfileCard와 동일)
-  final String _currentProfileName = "김코딩";
+  // 임시 프로필 정보
+  final String _currentProfileName = "김지지";
   final int _currentProfileAge = 28;
 
   @override
@@ -44,13 +46,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            _buildCurrentProfileCard(context), // 프로필 정보 상단 배치
+            _buildCurrentProfileCard(context),
             const SizedBox(height: 16),
             _buildThemeSettingsCard(context),
             const SizedBox(height: 16),
-            _buildAlarmSettingsCard(context), // 알람 설정 카드
+            _buildAlarmSettingsCard(context),
             const SizedBox(height: 16),
-            _buildNotificationSettingsCard(context), // 알림 설정 카드
+            _buildNotificationSettingsCard(context),
             const SizedBox(height: 16),
             _buildInfoCard(context),
           ],
@@ -60,7 +62,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildCurrentProfileCard(BuildContext context) {
-    // SettingsScreen의 상단에 프로필 정보를 표시합니다.
     return Card(
       child: InkWell(
         onTap: () {
@@ -72,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           );
         },
+        borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
@@ -137,6 +139,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ✅ --- 알람 설정 카드 전체 수정 ---
   Widget _buildAlarmSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -146,34 +149,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 알람 시간 설정 위젯
-                const AlarmSettingWidget(),
-                const Divider(),
-                // 알람 상태 토글들 (스누즈는 제거됨)
-                _buildToggleRow(
-                  '스마트 기상',
-                  '얕은 수면 단계에서 기상 알람을 울립니다.',
-                  settingsState.isSmartWakeUpOn,
-                  settingsState.toggleSmartWakeUp,
-                ),
-                _buildToggleRow(
-                  '진동',
-                  '알람 시 진동이 울립니다.',
-                  settingsState.isVibrationOn,
-                  settingsState.toggleVibration,
-                ),
-                _buildToggleRow(
-                  '소리',
-                  '알람 시 소리가 울립니다.',
-                  settingsState.isSoundOn,
-                  settingsState.toggleSound,
-                ),
-                _buildToggleRow(
-                  '베개 조절',
-                  '알람 시 베개 높이를 조절합니다.',
-                  settingsState.isPillowAdjustOn,
-                  settingsState.togglePillowAdjust,
-                ),
+                // 1. 알람 시간 설정 위젯 (시간 + 메인 토글)
+                const AlarmSettingWidget(key: Key('alarmWidget')),
+
+                // ✅ --- 이 부분이 핵심 ---
+                // 메인 알람(_isAlarmOn)이 켜져 있을 때만
+                // 하위 옵션들을 보여줍니다.
+                if (settingsState.isAlarmOn)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Divider(),
+
+                      // 2. 스마트 기상 마스터 토글
+                      _buildToggleRow(
+                        '스마트 기상',
+                        '설정 시간 부근 얕은 수면 시 자연스럽게 깨워줍니다.',
+                        settingsState.isSmartWakeUpOn,
+                        settingsState.toggleSmartWakeUp,
+                      ),
+
+                      // 3. 스마트 기상이 켜져 있을 때만 하위 옵션 표시
+                      if (settingsState.isSmartWakeUpOn)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            left: 16.0,
+                            top: 8.0,
+                          ), // 들여쓰기
+                          child: Column(
+                            children: [
+                              _buildToggleRow(
+                                '스마트 진동',
+                                '얕은 수면 시 진동으로 깨워줍니다.',
+                                settingsState.isSmartVibrationOn,
+                                settingsState.toggleSmartVibration,
+                              ),
+                              _buildToggleRow(
+                                '스마트 베개 조절',
+                                '얕은 수면 시 베개 높이를 조절하여 부드럽게 깨워줍니다.',
+                                settingsState.isSmartPillowAdjustOn,
+                                settingsState.toggleSmartPillowAdjust,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      const Divider(),
+
+                      // 4. "정확한 시간 알람" 옵션
+                      _buildToggleRow(
+                        '정확한 시간 알람 (기본 진동)',
+                        '수면 단계와 관계없이 설정된 시간에 진동이 울립니다.',
+                        settingsState.isExactTimeAlarmOn,
+                        settingsState.toggleExactTimeAlarm,
+                      ),
+                    ], // (if settingsState.isAlarmOn) Column
+                  ),
               ],
             ),
           ),
@@ -211,24 +242,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   settingsState.isSnoringOn,
                   settingsState.toggleSnoring,
                 ),
-                _buildToggleRow(
-                  '목표 달성 알림',
-                  '수면 목표를 달성했을 때 알림을 받습니다.',
-                  settingsState.isGoalOn,
-                  settingsState.toggleGoal,
-                ),
+
                 _buildToggleRow(
                   '가이드 알림',
                   '수면 가이드를 위한 팁을 받습니다.',
                   settingsState.isGuideOn,
                   settingsState.toggleGuide,
                 ),
-                _buildToggleRow(
-                  '팝업 알림',
-                  '베개 제어를 위한 팝업을 표시합니다.',
-                  settingsState.isPopupOn,
-                  settingsState.togglePopup,
-                ),
+
+                // '지금 테스트 알림 받기' 버튼
+                if (settingsState.isGuideOn)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0, left: 16.0),
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        NotificationService.instance.showTestNotification();
+                      },
+                      icon: const Icon(
+                        Icons.notifications_active_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('지금 테스트 알림 받기'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
+                        foregroundColor: AppColors.primaryNavy,
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -240,37 +281,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildInfoCard(BuildContext context) {
     return Card(
       color: AppColors.primaryNavy.withOpacity(0.05),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, color: AppColors.primaryNavy, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '정보',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '버전 정보, 이용 약관, 개인정보 처리 방침 등 앱 관련 정보를 확인하세요.',
-                    style: AppTextStyles.secondaryBodyText,
-                  ),
-                ],
-              ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const InfoScreen(key: Key('infoScreen')),
             ),
-          ],
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.info_outline,
+                color: AppColors.primaryNavy,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '정보',
+                      style: AppTextStyles.bodyText.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '앱 개발 정보 및 제작자 정보를 확인합니다.',
+                      style: AppTextStyles.secondaryBodyText,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: AppColors.secondaryText,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
+  // ✅ --- _buildToggleRow 수정 ---
   Widget _buildToggleRow(
     String title,
     String subtitle,
@@ -298,6 +360,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Switch(
             value: value,
+            // 래퍼를 제거하고 함수를 직접 전달합니다.
+            // Switch의 onChanged는 Future<void>를 반환하는 함수를 처리할 수 있습니다.
             onChanged: onChanged,
             activeColor: AppColors.primaryNavy,
           ),

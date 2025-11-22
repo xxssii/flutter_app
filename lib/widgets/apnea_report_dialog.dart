@@ -8,26 +8,20 @@ class ApneaReportDialog extends StatelessWidget {
   final List<String> reportDetails;
   final List<String> apneaEvents;
   final VoidCallback? onClose;
+  final VoidCallback? onViewDetails; // ✅ 1. 상세 보기 콜백 추가
 
   const ApneaReportDialog({
     Key? key,
     required this.reportDetails,
     required this.apneaEvents,
     this.onClose,
+    this.onViewDetails, // ✅ 2. 생성자에 추가
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    String reportContent;
-    if (apneaEvents.isEmpty) {
-      reportContent = '수면 중 무호흡 증상이 감지되지 않았습니다.';
-    } else {
-      reportContent =
-          '총 무호흡 의심 횟수: ${apneaEvents.length}회\n\n'
-              '발생 시기:\n' +
-          apneaEvents.join('\n');
-      reportContent += '\n\n무호흡증이 의심됩니다. 전문가와 상담해보세요.';
-    }
+    // 리포트 내용 구성 (기존 코드)
+    String reportContent = reportDetails.join('\n\n');
 
     return AlertDialog(
       backgroundColor: Theme.of(context).cardColor,
@@ -35,34 +29,29 @@ class ApneaReportDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: AppColors.primaryNavy, width: 2),
       ),
-      title: Text('수면 무호흡 리포트', style: AppTextStyles.heading2),
+      title: Text('수면 요약 리포트', style: AppTextStyles.heading2),
       content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(reportDetails.join('\n\n'), style: AppTextStyles.bodyText),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 16),
-            Text(reportContent, style: AppTextStyles.bodyText),
-          ],
-        ),
+        child: Text(reportContent, style: AppTextStyles.bodyText),
       ),
       actions: [
+        // ✅ 3. "상세 리포트 보기" 버튼 추가
         TextButton(
-          onPressed: () {
-            // onClose 콜백 함수를 호출합니다.
-            if (onClose != null) {
-              onClose!();
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
+          onPressed: onViewDetails, // 상세 보기 콜백 호출
+          child: Text(
+            '상세 리포트 보기',
+            style: AppTextStyles.bodyText.copyWith(
+              color: AppColors.primaryNavy,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        // ✅ 4. "확인" 버튼 (기존 닫기 기능)
+        TextButton(
+          onPressed: onClose, // 닫기 콜백 호출
           child: Text(
             '확인',
             style: AppTextStyles.bodyText.copyWith(
-              color: AppColors.primaryNavy,
+              color: AppColors.secondaryText,
             ),
           ),
         ),

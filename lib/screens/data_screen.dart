@@ -6,7 +6,11 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/sleep_data_state.dart';
-import '../widgets/alarm_setting_widget.dart'; // import 유지
+import 'dart:math'; // ✅ 최대값 계산을 위해 추가!
+// import '../widgets/alarm_setting_widget.dart'; // SettingsScreen으로 이동함
+
+// ⚠️ 참고: 이 파일에서 'SleepDataState' 클래스 정의가 중복되어 있었습니다.
+// 해당 중복 코드를 제거해야 main.dart와의 임포트 충돌이 해결됩니다.
 
 class DataScreen extends StatelessWidget {
   const DataScreen({Key? key}) : super(key: key);
@@ -22,7 +26,7 @@ class DataScreen extends StatelessWidget {
           children: [
             _buildHeader(context),
             const SizedBox(height: 20),
-            _buildMetricCards(), // '일관성' 지표가 제거됩니다.
+            _buildMetricCards(),
             const SizedBox(height: 20),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -86,43 +90,19 @@ class DataScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (String result) {
-                    sleepDataState.setSelectedPeriod(result);
-                  },
-                  itemBuilder: (BuildContext context) =>
-                      <PopupMenuEntry<String>>[
-                        const PopupMenuItem<String>(
-                          value: '최근30일',
-                          child: Text('최근30일'),
-                        ),
-                        const PopupMenuItem<String>(
-                          value: '최근7일',
-                          child: Text('최근7일'),
-                        ),
-                      ],
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.borderColor),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          sleepDataState.selectedPeriod,
-                          style: AppTextStyles.bodyText,
-                        ),
-                        const Icon(
-                          Icons.arrow_drop_down,
-                          color: AppColors.secondaryText,
-                        ),
-                      ],
-                    ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.borderColor),
+                  ),
+                  child: Text(
+                    sleepDataState.selectedPeriod, // '최근7일'
+                    style: AppTextStyles.bodyText,
                   ),
                 ),
               ],
@@ -139,7 +119,6 @@ class DataScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          // Expanded로 감싸 각 카드가 동일한 공간을 차지하도록 합니다.
           _buildMetricCard(
             icon: Icons.water_drop,
             color: AppColors.primaryNavy,
@@ -152,7 +131,6 @@ class DataScreen extends StatelessWidget {
             title: 'REM 비율',
             value: '20%',
           ),
-          // ❌ '일관성' 지표를 제거하고, 남은 카드 수가 3개입니다.
           _buildMetricCard(
             icon: Icons.access_time,
             color: AppColors.errorRed,
@@ -170,7 +148,6 @@ class DataScreen extends StatelessWidget {
     required String title,
     required String value,
   }) {
-    // 3개의 카드가 공간을 채우도록 Expanded를 유지합니다.
     return Expanded(
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -186,7 +163,6 @@ class DataScreen extends StatelessWidget {
                     child: Icon(icon, color: color, size: 20),
                   ),
                   const SizedBox(width: 8),
-                  // 긴 제목 때문에 오버플로우가 날 수 있으므로, 제목을 Expanded로 감싸는 것이 좋습니다.
                   Expanded(child: Text(title, style: AppTextStyles.smallText)),
                 ],
               ),
@@ -201,7 +177,7 @@ class DataScreen extends StatelessWidget {
 }
 
 // ------------------------------------------------------------------
-// 아래는 TabBarView에 들어갈 개별 탭 위젯들입니다.
+// EfficiencyTab (7일치 데이터 연동)
 // ------------------------------------------------------------------
 
 class EfficiencyTab extends StatelessWidget {
@@ -209,21 +185,25 @@ class EfficiencyTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ 1. SleepDataState에서 TIB/TST 데이터 가져오기
+    final sleepData = Provider.of<SleepDataState>(context);
+    final tibTstData = sleepData.tibTstData;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      // ❌ 가독성을 높이기 위해 Row를 Column으로 변경합니다.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildEfficiencyAnalysis(context), // ⬅️ 첫 번째 카드
+          _buildEfficiencyAnalysis(context),
           const SizedBox(height: 16),
-          _buildSleepTimeAnalysis(context), // ⬅️ 두 번째 카드
-          const SizedBox(height: 16), // 아래 여백
+          _buildSleepTimeAnalysis(context, tibTstData), // ✅ 2. 데이터 전달
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
+  // 평균 효율 카드
   Widget _buildEfficiencyAnalysis(BuildContext context) {
     return Card(
       child: Padding(
@@ -248,12 +228,160 @@ class EfficiencyTab extends StatelessWidget {
               description: '20~25%가 이상적입니다',
               color: AppColors.primaryNavy,
             ),
-            const SizedBox(height: 10),
-            _buildBarItem(
-              context,
-              label: '우수한 수면 효율',
-              value: 100,
-              color: AppColors.primaryNavy,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ 수정된 '누운 시간 vs 실 수면 시간' 그래프 (가로 스택형 - 최신 fl_chart 대응)
+  Widget _buildSleepTimeAnalysis(BuildContext context, List<TstTibData> data) {
+    // 그래프의 최대 값 계산 (가장 긴 누운 시간 + 여유분)
+    double maxTib = 0;
+    if (data.isNotEmpty) {
+      maxTib = data.map((e) => e.tib).reduce(max);
+    }
+    final double maxValue = (maxTib + 1).ceilToDouble();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('누운 시간 대비 실 수면 시간', style: AppTextStyles.heading3),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 300,
+              child: RotatedBox(
+                quarterTurns: 1,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    // ✅ 툴팁 설정 수정: API 변경에 따른 코드 수정
+                    barTouchData: BarTouchData(
+                      enabled: true,
+                      touchTooltipData: BarTouchTooltipData(
+                        getTooltipColor: (group) => AppColors.cardBackground,
+                        // tooltipDirection은 제거합니다.
+                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                          final dayLabel = data[group.x.toInt()].dayLabel;
+                          final item = data[group.x.toInt()];
+
+                          // rodIndex 0: 네이비색 (실 수면 시간)
+                          // rodIndex 1: 회색 (나머지 누운 시간 -> 전체 누운 시간으로 표시)
+                          String label;
+                          double value;
+                          if (rodIndex == 0) {
+                            label = '실 수면 시간';
+                            value = item.tst;
+                          } else {
+                            label = '전체 누운 시간';
+                            value = item.tib;
+                          }
+
+                          final tooltipText =
+                              '$dayLabel\n$label: ${value.toStringAsFixed(1)}시간';
+
+                          // ✅ WidgetSpan 대신 TextSpan을 사용합니다.
+                          // 텍스트 회전은 불가능하지만, 스타일과 정렬을 설정합니다.
+                          return BarTooltipItem(
+                            tooltipText,
+                            AppTextStyles.smallText.copyWith(
+                              color: AppColors.primaryNavy,
+                              fontWeight: FontWeight.bold, // 가독성을 위해 볼드 처리
+                            ),
+                            textAlign: TextAlign.center, // 텍스트 가운데 정렬
+                          );
+                        },
+                      ),
+                    ),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 30,
+                          interval: 2,
+                          getTitlesWidget: (double value, TitleMeta meta) {
+                            return SideTitleWidget(
+                              axisSide: meta.axisSide,
+                              space: 8,
+                              child: RotatedBox(
+                                quarterTurns: -1,
+                                child: Text(
+                                  '${value.toInt()}h',
+                                  style: AppTextStyles.smallText,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 40,
+                          getTitlesWidget: (double value, TitleMeta meta) {
+                            if (value < 0 || value >= data.length) {
+                              return const SizedBox();
+                            }
+                            final label = data[value.toInt()].dayLabel;
+                            return SideTitleWidget(
+                              axisSide: meta.axisSide,
+                              space: 8,
+                              child: RotatedBox(
+                                quarterTurns: -1,
+                                child: Text(
+                                  label,
+                                  style: AppTextStyles.smallText,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                      drawHorizontalLine: true,
+                      horizontalInterval: 2,
+                      getDrawingHorizontalLine: (value) =>
+                          FlLine(color: AppColors.borderColor, strokeWidth: 1),
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: _getBarGroups(data), // ✅ 수정된 함수 호출
+                    maxY: maxValue,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // ✅ 범례 색상 확인 (회색 배경, 네이비 채움)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLegendItem(
+                  AppColors.lightGrey, // 회색 (배경)
+                  '누운 시간',
+                  isBackground: true,
+                ),
+                const SizedBox(width: 16),
+                _buildLegendItem(AppColors.primaryNavy, '실 수면 시간'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '진한 색 막대가 연한 색 배경을 많이 채울수록 수면 효율이 높은 날입니다.',
+              style: AppTextStyles.secondaryBodyText,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -261,24 +389,72 @@ class EfficiencyTab extends StatelessWidget {
     );
   }
 
-  Widget _buildSleepTimeAnalysis(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('누운 시간 vs 실 수면 시간', style: AppTextStyles.heading3),
-            const SizedBox(height: 10),
-            _buildTimeBarItem(context, '6월23일', 94),
-            _buildTimeBarItem(context, '6월24일', 91),
-            _buildTimeBarItem(context, '6월25일', 91),
-            _buildTimeBarItem(context, '6월26일', 90),
-            _buildTimeBarItem(context, '6월27일', 90),
-          ],
+  // ✅ 범례 아이템 빌더 수정 (배경색 표현을 위해 테두리 추가 옵션)
+  Widget _buildLegendItem(
+    Color color,
+    String text, {
+    bool isBackground = false,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+            border: isBackground
+                ? Border.all(
+                    color: AppColors.primaryNavy.withOpacity(0.5),
+                    width: 1,
+                  )
+                : null,
+          ),
         ),
-      ),
+        const SizedBox(width: 8),
+        Text(text, style: AppTextStyles.smallText),
+      ],
     );
+  }
+
+  // ✅ 막대 그룹 생성 함수 수정 (스택형으로 겹치게 구현)
+  List<BarChartGroupData> _getBarGroups(List<TstTibData> data) {
+    return List.generate(data.length, (index) {
+      final item = data[index];
+      const double barThickness = 20; // 막대 두께
+
+      return BarChartGroupData(
+        x: index,
+        // ✅ 핵심: 막대를 수직으로 쌓아 올려서 겹치는 효과를 냄
+        groupVertically: true,
+        barRods: [
+          // 1. 아래쪽 막대 (먼저 그려짐): 실 수면 시간 (채움, 네이비색)
+          BarChartRodData(
+            toY: item.tst,
+            color: AppColors.primaryNavy, // 진한 네이비
+            width: barThickness,
+            // 가로 그래프이므로 왼쪽(시작점)만 둥글게 처리
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(4),
+              bottomLeft: Radius.circular(4),
+            ),
+          ),
+          // 2. 위쪽 막대 (나중에 그려져서 쌓임): 나머지 누운 시간 (배경, 회색)
+          //    값은 '전체 누운 시간 - 실 수면 시간' 만큼만 그립니다.
+          BarChartRodData(
+            toY: item.tib - item.tst,
+            color: AppColors.lightGrey, // 연한 회색
+            width: barThickness,
+            // 가로 그래프이므로 오른쪽(끝점)만 둥글게 처리
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(4),
+              bottomRight: Radius.circular(4),
+            ),
+          ),
+        ],
+        showingTooltipIndicators: [],
+      );
+    });
   }
 
   Widget _buildBarItem(
@@ -304,37 +480,11 @@ class EfficiencyTab extends StatelessWidget {
       ],
     );
   }
+} // EfficiencyTab 끝
 
-  Widget _buildTimeBarItem(BuildContext context, String date, double value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          Expanded(flex: 2, child: Text(date, style: AppTextStyles.bodyText)),
-          Expanded(
-            flex: 5,
-            child: LinearProgressIndicator(
-              value: value / 100,
-              backgroundColor: AppColors.progressBackground,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                AppColors.primaryNavy,
-              ),
-              minHeight: 12,
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              '$value%',
-              textAlign: TextAlign.right,
-              style: AppTextStyles.bodyText,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// ------------------------------------------------------------------
+// SleepStagesTab, TrendsTab, ImprovementGuideTab
+// ------------------------------------------------------------------
 
 class SleepStagesTab extends StatelessWidget {
   const SleepStagesTab({Key? key}) : super(key: key);
@@ -343,7 +493,6 @@ class SleepStagesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      // ❌ 문법 오류를 수정하고, 세로로 배치합니다.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -360,51 +509,37 @@ class SleepStagesTab extends StatelessWidget {
                     child: PieChart(
                       PieChartData(
                         sections: [
-                          // NREM1: 얕은 잠 (N1)
                           PieChartSectionData(
-                            color: AppColors.nrem1Color,
-                            value: 10, // N1 5-10% -> 10%
-                            title: 'NREM1 10%',
+                            color: AppColors.lightSleepColor,
+                            value: 60,
+                            title: 'Light 60%',
                             radius: 50,
                             titleStyle: AppTextStyles.bodyText.copyWith(
                               color: AppColors.cardBackground,
                             ),
                           ),
-                          // NREM2: 얕은 잠 (N2)
                           PieChartSectionData(
-                            color: AppColors.nrem2Color,
-                            value: 50, // N2 45-55% -> 50%
-                            title: 'NREM2 50%',
+                            color: AppColors.deepSleepColor,
+                            value: 20,
+                            title: 'Deep 20%',
                             radius: 50,
                             titleStyle: AppTextStyles.smallText.copyWith(
                               color: AppColors.cardBackground,
                             ),
                           ),
-                          // NREM3: 깊은 잠 (N3)
-                          PieChartSectionData(
-                            color: AppColors.nrem3Color,
-                            value: 20, // N3 15-25% -> 20%
-                            title: 'NREM3 20%',
-                            radius: 50,
-                            titleStyle: AppTextStyles.smallText.copyWith(
-                              color: AppColors.cardBackground,
-                            ),
-                          ),
-                          // REM 수면
                           PieChartSectionData(
                             color: AppColors.remColor,
-                            value: 15, // REM 20-25% -> 15% (예시)
+                            value: 15,
                             title: 'REM 15%',
                             radius: 50,
                             titleStyle: AppTextStyles.smallText.copyWith(
                               color: AppColors.cardBackground,
                             ),
                           ),
-                          // 깨어있음
                           PieChartSectionData(
                             color: AppColors.awakeColor,
-                            value: 5, // 깨어있음 (남은 %로 설정)
-                            title: '깨어있음 5%',
+                            value: 5,
+                            title: 'Awake 5%',
                             radius: 50,
                             titleStyle: AppTextStyles.smallText.copyWith(
                               color: AppColors.cardBackground,
@@ -438,11 +573,10 @@ class SleepStagesTab extends StatelessWidget {
           children: [
             Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
             const SizedBox(height: 10),
-            _buildDetailItem('NREM1', '0시간 20분', AppColors.nrem1Color),
-            _buildDetailItem('NREM2', '4시간 10분', AppColors.nrem2Color),
-            _buildDetailItem('NREM3', '1시간 40분', AppColors.nrem3Color),
-            _buildDetailItem('REM 수면', '1시간 15분', AppColors.remColor),
-            _buildDetailItem('깨어있음', '0시간 25분', AppColors.awakeColor),
+            _buildDetailItem('Light', '4시간 30분', AppColors.lightSleepColor),
+            _buildDetailItem('Deep', '1시간 40분', AppColors.deepSleepColor),
+            _buildDetailItem('REM', '1시간 15분', AppColors.remColor),
+            _buildDetailItem('Awake', '0시간 25분', AppColors.awakeColor),
           ],
         ),
       ),
@@ -471,64 +605,30 @@ class SleepStagesTab extends StatelessWidget {
   }
 }
 
-class TrendsTab extends StatefulWidget {
+class TrendsTab extends StatelessWidget {
   const TrendsTab({Key? key}) : super(key: key);
 
   @override
-  State<TrendsTab> createState() => _TrendsTabState();
-}
-
-class _TrendsTabState extends State<TrendsTab> {
-  // ... (TrendsTab 코드는 그대로 유지)
-  final List<FlSpot> sleepEfficiencySpots = const [
-    FlSpot(0, 93),
-    FlSpot(1, 95),
-    FlSpot(2, 92),
-    FlSpot(3, 97),
-    FlSpot(4, 96),
-    FlSpot(5, 95),
-    FlSpot(6, 97),
-    FlSpot(7, 98),
-    FlSpot(8, 97),
-    FlSpot(9, 99),
-    FlSpot(10, 98),
-    FlSpot(11, 95),
-    FlSpot(12, 94),
-    FlSpot(13, 93),
-    FlSpot(14, 92),
-    FlSpot(15, 95),
-    FlSpot(16, 96),
-    FlSpot(17, 98),
-    FlSpot(18, 97),
-    FlSpot(19, 96),
-    FlSpot(20, 98),
-  ];
-  final List<FlSpot> remRatioSpots = const [
-    FlSpot(0, 18),
-    FlSpot(1, 19),
-    FlSpot(2, 15),
-    FlSpot(3, 20),
-    FlSpot(4, 22),
-    FlSpot(5, 21),
-    FlSpot(6, 23),
-    FlSpot(7, 25),
-    FlSpot(8, 24),
-    FlSpot(9, 21),
-    FlSpot(10, 19),
-    FlSpot(11, 20),
-    FlSpot(12, 18),
-    FlSpot(13, 22),
-    FlSpot(14, 23),
-    FlSpot(15, 25),
-    FlSpot(16, 24),
-    FlSpot(17, 21),
-    FlSpot(18, 20),
-    FlSpot(19, 22),
-    FlSpot(20, 24),
-  ];
-
-  @override
   Widget build(BuildContext context) {
+    final sleepData = Provider.of<SleepDataState>(context);
+    final trendMetrics = sleepData.trendMetrics;
+
+    if (trendMetrics.isEmpty) {
+      return const Center(child: Text("트렌드 데이터가 없습니다."));
+    }
+
+    final List<FlSpot> sleepEfficiencySpots = [];
+    final List<FlSpot> remRatioSpots = [];
+    final List<String> dates = [];
+
+    for (int i = 0; i < trendMetrics.length; i++) {
+      sleepEfficiencySpots.add(
+        FlSpot(i.toDouble(), trendMetrics[i].sleepEfficiency),
+      );
+      remRatioSpots.add(FlSpot(i.toDouble(), trendMetrics[i].remRatio));
+      dates.add(trendMetrics[i].reportDate);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Card(
@@ -538,45 +638,25 @@ class _TrendsTabState extends State<TrendsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('수면 효율 및 REM 트렌드', style: AppTextStyles.heading3),
-              const SizedBox(height: 16),
-              Expanded(
+              const SizedBox(height: 50),
+              SizedBox(
+                // ✅ Expanded 대신 SizedBox로 고정 높이 지정
+                height: 250, // 적절한 높이로 조절 (예: 250, 300 등)
                 child: Padding(
                   padding: const EdgeInsets.only(right: 16, top: 16),
                   child: LineChart(
                     LineChartData(
                       lineTouchData: LineTouchData(
                         touchTooltipData: LineTouchTooltipData(
+                          // ✅ 툴팁 배경색을 불투명하게 설정하여 겹침 방지
                           getTooltipColor: (FlSpot spot) {
                             return AppColors.cardBackground.withOpacity(0.9);
                           },
                           getTooltipItems: (List<LineBarSpot> touchedSpots) {
                             return touchedSpots.map((spot) {
                               final isSleepEfficiency = spot.barIndex == 0;
-                              final dates = [
-                                '7월 13일',
-                                '7월 14일',
-                                '7월 15일',
-                                '7월 16일',
-                                '7월 17일',
-                                '7월 18일',
-                                '7월 19일',
-                                '7월 20일',
-                                '7월 21일',
-                                '7월 22일',
-                                '7월 23일',
-                                '7월 24일',
-                                '7월 25일',
-                                '7월 26일',
-                                '7월 27일',
-                                '7월 28일',
-                                '7월 29일',
-                                '7월 30일',
-                                '7월 31일',
-                                '8월 1일',
-                                '8월 2일',
-                              ];
                               final date = dates[spot.x.toInt()];
-                              final value = spot.y.toStringAsFixed(0);
+                              final value = spot.y.toStringAsFixed(1);
                               final title = isSleepEfficiency
                                   ? '수면 효율'
                                   : 'REM 비율';
@@ -605,9 +685,6 @@ class _TrendsTabState extends State<TrendsTab> {
                             (LineChartBarData barData, List<int> spotIndexes) {
                               return spotIndexes.map((index) {
                                 final spot = barData.spots[index];
-                                if (spot.x == 0 || spot.x == 20) {
-                                  return null;
-                                }
                                 return TouchedSpotIndicatorData(
                                   FlLine(
                                     color: AppColors.primaryNavy,
@@ -658,39 +735,16 @@ class _TrendsTabState extends State<TrendsTab> {
                         bottomTitles: AxisTitles(
                           sideTitles: SideTitles(
                             showTitles: true,
-                            interval: 5,
+                            interval: 1,
                             getTitlesWidget: (value, meta) {
-                              final dates = [
-                                '7월 13일',
-                                '7월 14일',
-                                '7월 15일',
-                                '7월 16일',
-                                '7월 17일',
-                                '7월 18일',
-                                '7월 19일',
-                                '7월 20일',
-                                '7월 21일',
-                                '7월 22일',
-                                '7월 23일',
-                                '7월 24일',
-                                '7월 25일',
-                                '7월 26일',
-                                '7월 27일',
-                                '7월 28일',
-                                '7월 29일',
-                                '7월 30일',
-                                '7월 31일',
-                                '8월 1일',
-                                '8월 2일',
-                              ];
                               if (value.toInt() >= 0 &&
-                                  value.toInt() < dates.length &&
-                                  value.toInt() % 5 == 0) {
+                                  value.toInt() < dates.length) {
+                                String day = dates[value.toInt()].split(' ')[1];
                                 return SideTitleWidget(
                                   axisSide: meta.axisSide,
                                   space: 8,
                                   child: Text(
-                                    dates[value.toInt()],
+                                    day,
                                     style: AppTextStyles.smallText,
                                   ),
                                 );

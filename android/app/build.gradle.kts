@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.flutter_app" // 본인의 앱 ID에 맞게 수정하세요
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"

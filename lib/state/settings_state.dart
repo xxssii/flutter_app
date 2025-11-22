@@ -1,6 +1,7 @@
 // lib/state/settings_state.dart
 
 import 'package:flutter/material.dart';
+import '../services/notification_service.dart'; // 알림 서비스 임포트
 
 class SettingsState extends ChangeNotifier {
   // 다크 모드 상태
@@ -13,43 +14,36 @@ class SettingsState extends ChangeNotifier {
   bool _isSnoringOn = true;
   bool _isGoalOn = true;
   bool _isGuideOn = true;
-  bool _isPopupOn = true;
 
   bool get isReportOn => _isReportOn;
   bool get isEfficiencyOn => _isEfficiencyOn;
   bool get isSnoringOn => _isSnoringOn;
   bool get isGoalOn => _isGoalOn;
   bool get isGuideOn => _isGuideOn;
-  bool get isPopupOn => _isPopupOn;
 
-  // ----------------------------------------------------
-  // ✅ 알람 시간 설정 상태 추가
-  // ----------------------------------------------------
+  // 알람 시간 설정 상태
   TimeOfDay? _alarmTime;
   TimeOfDay? get alarmTime => _alarmTime;
 
   // 알람 상태
   bool _isAlarmOn = true;
   bool _isSmartWakeUpOn = true;
-  bool _isVibrationOn = true;
-  bool _isSoundOn = true;
-  bool _isPillowAdjustOn = true;
-  // bool _isSnoozeOn = true; <-- 삭제됨
-  // String _snoozeDuration = '10분'; <-- 삭제됨
+  bool _isSmartVibrationOn = true;
+  bool _isSmartPillowAdjustOn = true;
+  bool _isExactTimeAlarmOn = true;
 
   bool get isAlarmOn => _isAlarmOn;
   bool get isSmartWakeUpOn => _isSmartWakeUpOn;
-  bool get isVibrationOn => _isVibrationOn;
-  bool get isSoundOn => _isSoundOn;
-  bool get isPillowAdjustOn => _isPillowAdjustOn;
-  // bool get isSnoozeOn => _isSnoozeOn; <-- 삭제됨
-  // String get snoozeDuration => _snoozeDuration; <-- 삭제됨
+  bool get isSmartVibrationOn => _isSmartVibrationOn;
+  bool get isSmartPillowAdjustOn => _isSmartPillowAdjustOn;
+  bool get isExactTimeAlarmOn => _isExactTimeAlarmOn;
 
-  // 자동 조절 상태 (유지)
+  // 자동 조절 상태
   bool _isAutoAdjustOn = true;
   bool get isAutoAdjustOn => _isAutoAdjustOn;
 
-  // 상태 변경 메서드
+  // --- 상태 변경 메서드 ---
+
   void toggleDarkMode(bool value) {
     _isDarkMode = value;
     notifyListeners();
@@ -75,61 +69,84 @@ class SettingsState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleGuide(bool value) {
-    _isGuideOn = value;
-    notifyListeners();
+  void toggleGuide(bool value) async {
+    _isGuideOn = value; // 1. UI 상태 즉시 변경
+
+    try {
+      if (_isGuideOn) {
+        // 2. 알림 예약 시도
+        await NotificationService.instance.scheduleDailySleepTip();
+      } else {
+        // 3. 알림 취소 시도
+        await NotificationService.instance.cancelAllNotifications();
+      }
+    } catch (e) {
+      // 4. 알림 예약/취소에 실패하더라도 에러를 출력하고 넘어감
+      print("알림 설정 중 오류 발생: $e");
+    } finally {
+      // 5. 알림 예약이 성공하든 실패하든, UI는 무조건 갱신
+      notifyListeners();
+    }
   }
 
-  void togglePopup(bool value) {
-    _isPopupOn = value;
-    notifyListeners();
-  }
-
-  // ----------------------------------------------------
-  // ✅ 알람 시간 설정 메서드 추가/수정
-  // ----------------------------------------------------
+  // 알람 시간 설정 메서드
   void setAlarmTime(TimeOfDay newTime) {
     _alarmTime = newTime;
-    // 시간을 설정하면 자동으로 알람을 켭니다.
     if (!_isAlarmOn) {
       _isAlarmOn = true;
     }
     notifyListeners();
-    // TODO: 알람 스케줄링 로직 호출
   }
 
+  // ✅ --- toggleAlarm 함수 수정 ---
   void toggleAlarm(bool value) {
     _isAlarmOn = value;
-    // 알람을 켰는데 시간이 설정 안 되어 있으면, 현재 시간을 기본값으로 설정
-    if (value && _alarmTime == null) {
-      _alarmTime = TimeOfDay.now();
+
+    if (value) {
+      // 알람을 켰을 때
+      // 시간이 설정 안 되어 있으면, 현재 시간을 기본값으로 설정
+      if (_alarmTime == null) {
+        _alarmTime = TimeOfDay.now();
+      }
+    } else {
+      // 알람을 껐을 때
+      // 모든 하위 알람 설정을 강제로 끕니다.
+      _isSmartWakeUpOn = false;
+      _isExactTimeAlarmOn = false;
+      _isSmartVibrationOn = false;
+      _isSmartPillowAdjustOn = false;
     }
+
     notifyListeners();
     // TODO: 알람 스케줄링/취소 로직 추가
   }
 
+  // ✅ --- toggleSmartWakeUp 함수 수정 ---
   void toggleSmartWakeUp(bool value) {
     _isSmartWakeUpOn = value;
+
+    if (!value) {
+      // 스마트 기상이 꺼지면 하위 옵션(진동, 베개)도 끕니다.
+      _isSmartVibrationOn = false;
+      _isSmartPillowAdjustOn = false;
+    }
     notifyListeners();
   }
 
-  void toggleVibration(bool value) {
-    _isVibrationOn = value;
+  void toggleExactTimeAlarm(bool value) {
+    _isExactTimeAlarmOn = value;
     notifyListeners();
   }
 
-  void toggleSound(bool value) {
-    _isSoundOn = value;
+  void toggleSmartVibration(bool value) {
+    _isSmartVibrationOn = value;
     notifyListeners();
   }
 
-  void togglePillowAdjust(bool value) {
-    _isPillowAdjustOn = value;
+  void toggleSmartPillowAdjust(bool value) {
+    _isSmartPillowAdjustOn = value;
     notifyListeners();
   }
-
-  // void toggleSnooze(bool value) { /* ... */ } <-- 삭제됨
-  // void setSnoozeDuration(String duration) { /* ... */ } <-- 삭제됨
 
   void toggleAutoAdjust(bool value) {
     _isAutoAdjustOn = value;
