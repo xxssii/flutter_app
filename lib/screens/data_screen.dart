@@ -7,10 +7,6 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/sleep_data_state.dart';
 import 'dart:math'; // ✅ 최대값 계산을 위해 추가!
-// import '../widgets/alarm_setting_widget.dart'; // SettingsScreen으로 이동함
-
-// ⚠️ 참고: 이 파일에서 'SleepDataState' 클래스 정의가 중복되어 있었습니다.
-// 해당 중복 코드를 제거해야 main.dart와의 임포트 충돌이 해결됩니다.
 
 class DataScreen extends StatelessWidget {
   const DataScreen({super.key});
@@ -185,7 +181,6 @@ class EfficiencyTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 1. SleepDataState에서 TIB/TST 데이터 가져오기
     final sleepData = Provider.of<SleepDataState>(context);
     final tibTstData = sleepData.tibTstData;
 
@@ -196,14 +191,13 @@ class EfficiencyTab extends StatelessWidget {
         children: [
           _buildEfficiencyAnalysis(context),
           const SizedBox(height: 16),
-          _buildSleepTimeAnalysis(context, tibTstData), // ✅ 2. 데이터 전달
+          _buildSleepTimeAnalysis(context, tibTstData),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  // 평균 효율 카드
   Widget _buildEfficiencyAnalysis(BuildContext context) {
     return Card(
       child: Padding(
@@ -234,9 +228,7 @@ class EfficiencyTab extends StatelessWidget {
     );
   }
 
-  // ✅ 수정된 '누운 시간 vs 실 수면 시간' 그래프 (가로 스택형 - 최신 fl_chart 대응)
   Widget _buildSleepTimeAnalysis(BuildContext context, List<TstTibData> data) {
-    // 그래프의 최대 값 계산 (가장 긴 누운 시간 + 여유분)
     double maxTib = 0;
     if (data.isNotEmpty) {
       maxTib = data.map((e) => e.tib).reduce(max);
@@ -258,18 +250,14 @@ class EfficiencyTab extends StatelessWidget {
                 child: BarChart(
                   BarChartData(
                     alignment: BarChartAlignment.spaceAround,
-                    // ✅ 툴팁 설정 수정: API 변경에 따른 코드 수정
                     barTouchData: BarTouchData(
                       enabled: true,
                       touchTooltipData: BarTouchTooltipData(
                         getTooltipColor: (group) => AppColors.cardBackground,
-                        // tooltipDirection은 제거합니다.
                         getTooltipItem: (group, groupIndex, rod, rodIndex) {
                           final dayLabel = data[group.x.toInt()].dayLabel;
                           final item = data[group.x.toInt()];
 
-                          // rodIndex 0: 네이비색 (실 수면 시간)
-                          // rodIndex 1: 회색 (나머지 누운 시간 -> 전체 누운 시간으로 표시)
                           String label;
                           double value;
                           if (rodIndex == 0) {
@@ -283,15 +271,13 @@ class EfficiencyTab extends StatelessWidget {
                           final tooltipText =
                               '$dayLabel\n$label: ${value.toStringAsFixed(1)}시간';
 
-                          // ✅ WidgetSpan 대신 TextSpan을 사용합니다.
-                          // 텍스트 회전은 불가능하지만, 스타일과 정렬을 설정합니다.
                           return BarTooltipItem(
                             tooltipText,
                             AppTextStyles.smallText.copyWith(
                               color: AppColors.primaryNavy,
-                              fontWeight: FontWeight.bold, // 가독성을 위해 볼드 처리
+                              fontWeight: FontWeight.bold,
                             ),
-                            textAlign: TextAlign.center, // 텍스트 가운데 정렬
+                            textAlign: TextAlign.center,
                           );
                         },
                       ),
@@ -357,19 +343,18 @@ class EfficiencyTab extends StatelessWidget {
                           FlLine(color: AppColors.borderColor, strokeWidth: 1),
                     ),
                     borderData: FlBorderData(show: false),
-                    barGroups: _getBarGroups(data), // ✅ 수정된 함수 호출
+                    barGroups: _getBarGroups(data),
                     maxY: maxValue,
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            // ✅ 범례 색상 확인 (회색 배경, 네이비 채움)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildLegendItem(
-                  AppColors.lightGrey, // 회색 (배경)
+                  AppColors.lightGrey,
                   '누운 시간',
                   isBackground: true,
                 ),
@@ -389,7 +374,6 @@ class EfficiencyTab extends StatelessWidget {
     );
   }
 
-  // ✅ 범례 아이템 빌더 수정 (배경색 표현을 위해 테두리 추가 옵션)
   Widget _buildLegendItem(
     Color color,
     String text, {
@@ -417,35 +401,28 @@ class EfficiencyTab extends StatelessWidget {
     );
   }
 
-  // ✅ 막대 그룹 생성 함수 수정 (스택형으로 겹치게 구현)
   List<BarChartGroupData> _getBarGroups(List<TstTibData> data) {
     return List.generate(data.length, (index) {
       final item = data[index];
-      const double barThickness = 20; // 막대 두께
+      const double barThickness = 20;
 
       return BarChartGroupData(
         x: index,
-        // ✅ 핵심: 막대를 수직으로 쌓아 올려서 겹치는 효과를 냄
         groupVertically: true,
         barRods: [
-          // 1. 아래쪽 막대 (먼저 그려짐): 실 수면 시간 (채움, 네이비색)
           BarChartRodData(
             toY: item.tst,
-            color: AppColors.primaryNavy, // 진한 네이비
+            color: AppColors.primaryNavy,
             width: barThickness,
-            // 가로 그래프이므로 왼쪽(시작점)만 둥글게 처리
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(4),
               bottomLeft: Radius.circular(4),
             ),
           ),
-          // 2. 위쪽 막대 (나중에 그려져서 쌓임): 나머지 누운 시간 (배경, 회색)
-          //    값은 '전체 누운 시간 - 실 수면 시간' 만큼만 그립니다.
           BarChartRodData(
             toY: item.tib - item.tst,
-            color: AppColors.lightGrey, // 연한 회색
+            color: AppColors.lightGrey,
             width: barThickness,
-            // 가로 그래프이므로 오른쪽(끝점)만 둥글게 처리
             borderRadius: const BorderRadius.only(
               topRight: Radius.circular(4),
               bottomRight: Radius.circular(4),
@@ -480,7 +457,7 @@ class EfficiencyTab extends StatelessWidget {
       ],
     );
   }
-} // EfficiencyTab 끝
+}
 
 // ------------------------------------------------------------------
 // SleepStagesTab, TrendsTab, ImprovementGuideTab
@@ -605,13 +582,8 @@ class SleepStagesTab extends StatelessWidget {
   }
 }
 
-<<<<<<< Updated upstream
 class TrendsTab extends StatelessWidget {
-  const TrendsTab({Key? key}) : super(key: key);
-=======
-class TrendsTab extends StatefulWidget {
   const TrendsTab({super.key});
->>>>>>> Stashed changes
 
   @override
   Widget build(BuildContext context) {
@@ -645,15 +617,13 @@ class TrendsTab extends StatefulWidget {
               Text('수면 효율 및 REM 트렌드', style: AppTextStyles.heading3),
               const SizedBox(height: 50),
               SizedBox(
-                // ✅ Expanded 대신 SizedBox로 고정 높이 지정
-                height: 250, // 적절한 높이로 조절 (예: 250, 300 등)
+                height: 250,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 16, top: 16),
                   child: LineChart(
                     LineChartData(
                       lineTouchData: LineTouchData(
                         touchTooltipData: LineTouchTooltipData(
-                          // ✅ 툴팁 배경색을 불투명하게 설정하여 겹침 방지
                           getTooltipColor: (FlSpot spot) {
                             return AppColors.cardBackground.withOpacity(0.9);
                           },
@@ -745,8 +715,11 @@ class TrendsTab extends StatefulWidget {
                               if (value.toInt() >= 0 &&
                                   value.toInt() < dates.length) {
                                 String day = dates[value.toInt()].split(' ')[1];
+
+                                // 🔥 여기가 수정된 부분입니다!
                                 return SideTitleWidget(
-                                  meta: meta,
+                                  axisSide: meta
+                                      .axisSide, // meta: meta 대신 axisSide를 사용해야 합니다.
                                   space: 8,
                                   child: Text(
                                     day,

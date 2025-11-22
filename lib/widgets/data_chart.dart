@@ -3,13 +3,17 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../utils/app_colors.dart';
-import '../utils/app_text_styles.dart'; // AppTextStyles를 import 합니다.
+import '../utils/app_text_styles.dart';
 
 class DataChart extends StatelessWidget {
   final List<FlSpot> chartData;
   final String chartTitle;
 
-  const DataChart({super.key, required this.chartData, required this.chartTitle});
+  const DataChart({
+    super.key,
+    required this.chartData,
+    required this.chartTitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +22,6 @@ class DataChart extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8.0),
-          // AppTextStyles의 heading3 스타일을 사용하여 제목을 표시합니다.
           child: Text(chartTitle, style: AppTextStyles.heading3),
         ),
         Expanded(
@@ -45,8 +48,10 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
+                      // 🔥 여기가 수정된 핵심 부분입니다!
                       return SideTitleWidget(
-                        meta: meta,
+                        axisSide: meta
+                            .axisSide, // meta: meta 대신 axisSide: meta.axisSide 사용
                         space: 8.0,
                         child: Text(
                           text,
@@ -77,6 +82,9 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
+                      // 왼쪽 타이틀은 SideTitleWidget 없이 텍스트만 반환해도 괜찮지만,
+                      // 정렬을 맞추고 싶다면 아래처럼 감싸주는 것이 좋습니다.
+                      // 일단 기존 로직(Text 반환)이 에러는 아니므로 그대로 둡니다.
                       return Text(
                         text,
                         style: const TextStyle(color: AppColors.secondaryText),
