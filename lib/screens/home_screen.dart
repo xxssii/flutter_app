@@ -1,13 +1,12 @@
-// lib/screens/home_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore 임포트
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../state/app_state.dart';
+import '../state/app_state.dart'; // ✅ DEMO_USER_ID를 가져오기 위해 임포트
 import '../state/settings_state.dart';
-import 'sleep_mode_screen.dart';
+import 'sleep_mode_screen.dart'; // s_main_moon.dart -> sleep_mode_screen.dart
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -25,12 +24,12 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '안녕하세요, 기본사용자님',
+                    '오늘 밤은 어떨까요?', // 멘트 수정됨
                     style: AppTextStyles.heading2.copyWith(fontSize: 22),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    '오늘도 좋은 수면을 위해 준비되셨나요?',
+                    '수면 측정을 시작해 주세요.', // 멘트 수정됨
                     style: AppTextStyles.secondaryBodyText.copyWith(
                       fontSize: 15,
                     ),
@@ -58,7 +57,7 @@ class HomeScreen extends StatelessWidget {
                   );
                 },
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
             ],
           ),
           body: SingleChildScrollView(
@@ -67,10 +66,13 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
-                SizedBox(height: 24),
-                // Mock 데이터 기반 실시간 지표 카드
-                _buildRealTimeMetricsCard(context, appState),
-                SizedBox(height: 16),
+                const SizedBox(height: 24),
+
+                // ✅ 1. Firestore 실시간 수면 상태 위젯 (측정 중에만 보임)
+                _buildRealTimeStatus(context, appState),
+                const SizedBox(height: 16),
+
+                // 2. 고정 정보 카드 (총 수면시간, 베개 높이 등)
                 _buildInfoCard(
                   context,
                   title: '오늘의 총 수면시간',
@@ -83,19 +85,19 @@ class HomeScreen extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '8시간 38분',
+                            '8시간 38분', // (이 값은 리포트에서 가져와야 함)
                             style: AppTextStyles.heading1.copyWith(
                               color: AppColors.primaryNavy,
                             ),
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
                             '목표: 8시간',
                             style: AppTextStyles.secondaryBodyText,
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       LinearProgressIndicator(
                         value: 0.9,
                         backgroundColor: AppColors.progressBackground,
@@ -103,7 +105,7 @@ class HomeScreen extends StatelessWidget {
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -114,7 +116,7 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 _buildInfoCard(
                   context,
                   title: '현재 베개 높이',
@@ -127,27 +129,27 @@ class HomeScreen extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '12cm',
+                            '12cm', // (이 값은 BLE/Firestore에서 가져와야 함)
                             style: AppTextStyles.heading1.copyWith(
                               color: AppColors.primaryNavy,
                             ),
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text(
                             '목표: 12cm',
                             style: AppTextStyles.secondaryBodyText,
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       LinearProgressIndicator(
-                        value: (12 - 8) / (16 - 8),
+                        value: (12 - 8) / (16 - 8), // (임시 값)
                         backgroundColor: AppColors.progressBackground,
                         color: AppColors.primaryNavy,
                         minHeight: 8,
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -158,25 +160,29 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
+                // ✅ 여기에서 version 값을 'v1.0.0'으로 전달
                 _buildDeviceCard(
                   context,
                   deviceName: '스마트 베개 Pro',
                   deviceType: '스마트 베개',
-                  isConnected: true,
+                  isConnected:
+                      false, // (이 값은 BleService.isPillowConnected와 연동 필요)
                   batteryPercentage: 87,
-                  version: 'v2.1.3',
+                  version: 'v1.0.0', // ✅ Mock 버전 직접 주입!
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
+                // ✅ 여기에서 version 값을 'v1.0.0'으로 전달
                 _buildDeviceCard(
                   context,
-                  deviceName: '수면 밴드 Plus',
+                  deviceName: '수면 팔찌 Plus',
                   deviceType: '스마트 팔찌',
-                  isConnected: true,
+                  isConnected:
+                      false, // (이 값은 BleService.isWristbandConnected와 연동 필요)
                   batteryPercentage: 73,
-                  version: 'v1.8.2',
+                  version: 'v1.0.0', // ✅ Mock 버전 직접 주입!
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 _buildSummaryCard(context),
               ],
             ),
@@ -186,44 +192,118 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
-    // 측정 중일 때만 실시간 데이터를 표시
+  // ✅ _buildRealTimeStatus 및 _getIconForStatus 함수 (이전과 동일)
+  Widget _buildRealTimeStatus(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
       return const SizedBox.shrink();
     }
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildMetricItem(
-              icon: Icons.favorite,
-              label: '심박수',
-              value: '${appState.currentHeartRate.toStringAsFixed(0)}',
-              unit: 'BPM',
-              color: AppColors.errorRed,
-            ),
-            _buildMetricItem(
-              icon: Icons.opacity,
-              label: '산소포화도',
-              value: '${appState.currentSpo2.toStringAsFixed(0)}',
-              unit: '%',
+    final Stream<DocumentSnapshot> sleepStatusStream = FirebaseFirestore
+        .instance
+        .collection('processed_data')
+        .doc(DEMO_USER_ID)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: sleepStatusStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: SpinKitFadingCircle(
               color: AppColors.primaryNavy,
+              size: 30.0,
             ),
-            _buildMetricItem(
-              icon: Icons.motion_photos_on,
-              label: '움직임',
-              value: '${appState.currentMovementScore.toStringAsFixed(1)}',
-              unit: '스코어',
-              color: AppColors.warningOrange,
+          ); // 로딩 인디케이터 변경
+        }
+        if (snapshot.hasError) {
+          return Text('데이터 로딩 실패: ${snapshot.error}');
+        }
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return const Text('수면 데이터가 없습니다.');
+        }
+
+        Map<String, dynamic> data =
+            snapshot.data!.data() as Map<String, dynamic>;
+
+        String currentStatus = data['status'] ?? '분석 중';
+        double heartRate = (data['heart_rate'] as num?)?.toDouble() ?? 0.0;
+        double spo2 = (data['spo2'] as num?)?.toDouble() ?? 0.0;
+        double movement = (data['movement_score'] as num?)?.toDouble() ?? 0.0;
+
+        IconData statusIcon = _getIconForStatus(currentStatus);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(statusIcon, color: AppColors.primaryNavy, size: 30),
+                    const SizedBox(width: 12),
+                    Text(
+                      '현재 수면 상태: $currentStatus',
+                      style: AppTextStyles.heading3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildMetricItem(
+                      icon: Icons.favorite,
+                      label: '심박수',
+                      value: heartRate.toStringAsFixed(0),
+                      unit: 'BPM',
+                      color: AppColors.errorRed,
+                    ),
+                    _buildMetricItem(
+                      icon: Icons.opacity,
+                      label: '산소포화도',
+                      value: spo2.toStringAsFixed(0),
+                      unit: '%',
+                      color: AppColors.primaryNavy,
+                    ),
+                    _buildMetricItem(
+                      icon: Icons.motion_photos_on,
+                      label: '움직임',
+                      value: movement.toStringAsFixed(1),
+                      unit: '스코어',
+                      color: AppColors.warningOrange,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
+  }
+
+  IconData _getIconForStatus(String status) {
+    switch (status) {
+      case '깨어있음':
+        return Icons.wb_sunny;
+      case '얕은 수면':
+        return Icons.cloud_queue;
+      case '깊은 수면':
+        return Icons.nights_stay;
+      case 'REM 수면':
+        return Icons.psychology;
+      default:
+        return Icons.help_outline;
+    }
   }
 
   Widget _buildMetricItem({
@@ -265,7 +345,7 @@ class HomeScreen extends StatelessWidget {
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (context) =>
-                      const SMainMoonScreen(key: Key('sleepModeScreen')),
+                      const SleepModeScreen(key: Key('sleepModeScreen')),
                 ),
               );
             }
@@ -324,7 +404,7 @@ class HomeScreen extends StatelessWidget {
     required String deviceType,
     required bool isConnected,
     required int batteryPercentage,
-    required String version,
+    required String version, // ✅ 이제 version 매개변수를 받습니다!
   }) {
     return Card(
       margin: EdgeInsets.zero,
@@ -353,28 +433,34 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
             Spacer(),
+            // ✅ 연결 상태에 따라 배터리 및 버전 표시 여부 변경
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      batteryPercentage > 20
-                          ? Icons.battery_full
-                          : Icons.battery_alert,
-                      color: batteryPercentage > 20
-                          ? AppColors.successGreen
-                          : AppColors.errorRed,
-                      size: 20,
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      '$batteryPercentage%',
-                      style: AppTextStyles.secondaryBodyText,
-                    ),
-                  ],
+                if (isConnected) // 연결되었을 때만 배터리 아이콘과 % 표시
+                  Row(
+                    children: [
+                      Icon(
+                        batteryPercentage > 20
+                            ? Icons.battery_full
+                            : Icons.battery_alert,
+                        color: batteryPercentage > 20
+                            ? AppColors.successGreen
+                            : AppColors.errorRed,
+                        size: 20,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        '$batteryPercentage%',
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                // ✅ 연결 상태에 따라 버전 또는 '미연결' 표시
+                Text(
+                  isConnected ? version : '미연결', // 연결되면 받은 version, 아니면 '미연결'
+                  style: AppTextStyles.smallText,
                 ),
-                Text(version, style: AppTextStyles.smallText),
               ],
             ),
           ],

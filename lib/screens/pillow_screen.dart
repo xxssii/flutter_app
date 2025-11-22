@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/settings_state.dart';
+import '../services/ble_service.dart'; // ✅ BleService 임포트
 
 class PillowScreen extends StatefulWidget {
   const PillowScreen({Key? key}) : super(key: key);
@@ -18,80 +19,157 @@ class _PillowScreenState extends State<PillowScreen> {
   double _currentPillowHeight = 12.0;
   double _targetPillowHeight = 12.0;
 
-  // 추가된 변수: 자동 조절 속도
+  // 자동 조절 속도
   String _adjustmentSpeed = '보통';
-  // 추가된 변수: REM 수면과 깊은 수면의 목표 높이
+  // REM 수면과 깊은 수면의 목표 높이
   double _remPillowHeight = 11.0;
   double _deepPillowHeight = 12.0;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SingleChildScrollView(
+    // ✅ BleService와 SettingsState를 동시에 사용하기 위해 Consumer2로 변경
+    return Consumer2<BleService, SettingsState>(
+      builder: (context, bleService, settingsState, child) {
+        return Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '베개 및 팔찌 제어',
+                          style: AppTextStyles.heading1,
+                        ), // ✅ 타이틀 수정
+                        Text(
+                          '스마트 기기를 연결하고 설정을 관리하세요', // ✅ 설명 수정
+                          style: AppTextStyles.secondaryBodyText,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ✅ 1. 새로운 BLE 연결 상태 카드
+                _buildConnectionStatusCard(context, bleService),
+
+                const SizedBox(height: 16),
+                _buildHeightSettingsCard(context),
+                const SizedBox(height: 16),
+                _buildAutoAdjustmentCard(
+                  context,
+                  settingsState,
+                ), // ✅ SettingsState 전달
+                const SizedBox(height: 16),
+                _buildSleepModeSettings(context),
+                const SizedBox(height: 16),
+                _buildGuideCard(context),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ✅ 2. BLE 연결 상태 및 스캔 버튼 위젯 (대대적 수정)
+  Widget _buildConnectionStatusCard(
+    BuildContext context,
+    BleService bleService,
+  ) {
+    return Card(
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            Text('기기 연결 관리', style: AppTextStyles.heading3),
+            const SizedBox(height: 12),
+
+            // 베개 상태
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    Text('베개 제어', style: AppTextStyles.heading1),
-                    Text(
-                      '스마트 베개의 높이를 조절하고 설정을 관리하세요',
-                      style: AppTextStyles.secondaryBodyText,
+                    Icon(
+                      Icons.bed_outlined,
+                      color: bleService.isPillowConnected
+                          ? AppColors.successGreen
+                          : AppColors.secondaryText,
                     ),
+                    const SizedBox(width: 8),
+                    Text('스마트 베개', style: AppTextStyles.bodyText),
                   ],
+                ),
+                Text(
+                  bleService.pillowConnectionStatus,
+                  style: AppTextStyles.bodyText.copyWith(
+                    color: bleService.isPillowConnected
+                        ? AppColors.successGreen
+                        : AppColors.errorRed,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 워치 상태
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.watch_outlined,
+                      color: bleService.isWatchConnected
+                          ? AppColors.successGreen
+                          : AppColors.secondaryText,
+                    ),
+                    const SizedBox(width: 8),
+                    Text('스마트 팔찌', style: AppTextStyles.bodyText),
+                  ],
+                ),
+                Text(
+                  bleService.watchConnectionStatus,
+                  style: AppTextStyles.bodyText.copyWith(
+                    color: bleService.isWatchConnected
+                        ? AppColors.successGreen
+                        : AppColors.errorRed,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+
+            // 스캔 버튼
+            Center(
+              child: ElevatedButton.icon(
+                onPressed:
+                    (bleService.isPillowConnected &&
+                        bleService.isWatchConnected)
+                    ? null // 두 장치가 모두 연결되면 비활성화
+                    : () => bleService.startScan(), // 버튼 클릭 시 스캔 시작
+                icon: const Icon(Icons.bluetooth_searching),
+                label: const Text('기기 스캔하기'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-            _buildDeviceStatusCard(context),
-            const SizedBox(height: 16),
-            _buildHeightSettingsCard(context),
-            const SizedBox(height: 16),
-            _buildAutoAdjustmentCard(context),
-            const SizedBox(height: 16),
-            _buildSleepModeSettings(context),
-            const SizedBox(height: 16),
-            _buildGuideCard(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDeviceStatusCard(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.bed_outlined,
-              color: AppColors.primaryNavy,
-              size: 28,
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '스마트 베개',
-                  style: AppTextStyles.bodyText.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text('연결됨: 제어 가능', style: AppTextStyles.secondaryBodyText),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // --- (이하 위젯들은 기존과 동일, _buildAutoAdjustmentCard만 수정) ---
 
   Widget _buildHeightSettingsCard(BuildContext context) {
     return Card(
@@ -203,7 +281,11 @@ class _PillowScreenState extends State<PillowScreen> {
     );
   }
 
-  Widget _buildAutoAdjustmentCard(BuildContext context) {
+  // ✅ '조절 속도' 드롭다운이 제거된 카드
+  Widget _buildAutoAdjustmentCard(
+    BuildContext context,
+    SettingsState settingsState,
+  ) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return Card(
@@ -214,11 +296,7 @@ class _PillowScreenState extends State<PillowScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(
-                      Icons.bolt,
-                      color: AppColors.primaryNavy,
-                      size: 24,
-                    ),
+                    Icon(Icons.bolt, color: AppColors.primaryNavy, size: 24),
                     const SizedBox(width: 8),
                     Text('자동 조절 설정', style: AppTextStyles.heading3),
                   ],
@@ -251,31 +329,7 @@ class _PillowScreenState extends State<PillowScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('조절 속도', style: AppTextStyles.bodyText),
-                    DropdownButton<String>(
-                      value: _adjustmentSpeed,
-                      icon: const Icon(Icons.arrow_drop_down),
-                      underline: Container(),
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _adjustmentSpeed = newValue!;
-                        });
-                      },
-                      items: <String>['느리게', '보통', '빠르게']
-                          .map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          })
-                          .toList(),
-                    ),
-                  ],
-                ),
+                // ❌ '조절 속도' Row가 여기서 삭제됨
               ],
             ),
           ),
@@ -284,6 +338,7 @@ class _PillowScreenState extends State<PillowScreen> {
     );
   }
 
+  // ✅ '목표 높이' 슬라이더가 제거된 카드
   Widget _buildSleepModeSettings(BuildContext context) {
     return Row(
       children: [
@@ -302,28 +357,10 @@ class _PillowScreenState extends State<PillowScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '꿈을 꾸는 단계에서 베개를 약간 낮춤',
+                    '꿈을 꾸는 단계에서 베개를 약간 낮춤', // ✅ 설명 유지
                     style: AppTextStyles.secondaryBodyText,
                   ),
-                  const SizedBox(height: 8),
-                  Slider(
-                    value: _remPillowHeight,
-                    min: 8.0,
-                    max: 16.0,
-                    divisions: 8,
-                    activeColor: AppColors.primaryNavy,
-                    onChanged: (double newValue) {
-                      setState(() {
-                        _remPillowHeight = newValue;
-                      });
-                    },
-                  ),
-                  Text(
-                    '목표 높이: ${_remPillowHeight.toStringAsFixed(0)}cm',
-                    style: AppTextStyles.bodyText.copyWith(
-                      color: AppColors.primaryNavy,
-                    ),
-                  ),
+                  // ❌ 목표 높이 슬라이더 삭제
                 ],
               ),
             ),
@@ -345,28 +382,10 @@ class _PillowScreenState extends State<PillowScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '깊은 잠에서 최적의 높이 유지',
+                    '깊은 잠에서 최적의 높이 유지', // ✅ 설명 유지
                     style: AppTextStyles.secondaryBodyText,
                   ),
-                  const SizedBox(height: 8),
-                  Slider(
-                    value: _deepPillowHeight,
-                    min: 8.0,
-                    max: 16.0,
-                    divisions: 8,
-                    activeColor: AppColors.primaryNavy,
-                    onChanged: (double newValue) {
-                      setState(() {
-                        _deepPillowHeight = newValue;
-                      });
-                    },
-                  ),
-                  Text(
-                    '목표 높이: ${_deepPillowHeight.toStringAsFixed(0)}cm',
-                    style: AppTextStyles.bodyText.copyWith(
-                      color: AppColors.primaryNavy,
-                    ),
-                  ),
+                  // ❌ 목표 높이 슬라이더 삭제
                 ],
               ),
             ),
@@ -402,7 +421,7 @@ class _PillowScreenState extends State<PillowScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '자동 조절이 활성화되면 수면 단계를 감지하여 최적의 높이로 조절합니다. 조절 중에도 베개가 되지 않도록 매우 부드럽게 움직입니다.',
+                    '자동 조절이 활성화되면 수면 단계를 감지하여 최적의 높이로 조절합니다. 조절 중에도 잠이 깨지 않도록 매우 부드럽게 움직입니다.',
                     style: AppTextStyles.secondaryBodyText,
                   ),
                 ],

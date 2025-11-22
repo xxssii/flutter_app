@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../state/settings_state.dart'; // SettingsState를 사용하도록 변경
+import '../state/settings_state.dart'; // SettingsState를 사용하도록 확정
 
 class AlarmSettingWidget extends StatelessWidget {
   const AlarmSettingWidget({super.key});
@@ -17,7 +17,9 @@ class AlarmSettingWidget extends StatelessWidget {
     final timeStyle = TextStyle(
       fontSize: 30,
       fontWeight: FontWeight.w600,
-      color: settingsState.isAlarmOn
+      color:
+          settingsState
+              .isAlarmOn // isAlarmOn은 SettingsState에 있음
           ? theme.primaryColor
           : Colors.grey.shade400,
     );
@@ -31,7 +33,8 @@ class AlarmSettingWidget extends StatelessWidget {
       ),
       // 2. 시간 표시 영역
       subtitle: Text(
-        settingsState.alarmTime == null
+        settingsState.alarmTime ==
+                null // alarmTime은 SettingsState에 있음
             ? '시간을 설정해 주세요'
             : settingsState.alarmTime!.format(context),
         style: timeStyle,
@@ -40,7 +43,7 @@ class AlarmSettingWidget extends StatelessWidget {
       trailing: Switch(
         value: settingsState.isAlarmOn,
         onChanged: (bool newValue) {
-          settingsState.toggleAlarm(newValue);
+          settingsState.toggleAlarm(newValue); // toggleAlarm은 SettingsState에 있음
           // 알람을 켰을 때, 시간이 설정 안 되어 있으면 TimePicker를 띄워 시간을 선택하게 유도
           if (newValue && settingsState.alarmTime == null) {
             _selectTime(context, settingsState);
@@ -48,7 +51,9 @@ class AlarmSettingWidget extends StatelessWidget {
         },
       ),
       // 4. 리스트를 탭하면 시간을 설정할 수 있도록 합니다. (알람이 켜져 있을 때만)
-      onTap: settingsState.isAlarmOn
+      onTap:
+          settingsState
+              .isAlarmOn // isAlarmOn은 SettingsState에 있음
           ? () => _selectTime(context, settingsState)
           : null, // 꺼져 있으면 탭해도 아무 일도 일어나지 않음
     );
@@ -56,7 +61,7 @@ class AlarmSettingWidget extends StatelessWidget {
 
   Future<void> _selectTime(
     BuildContext context,
-    SettingsState settingsState,
+    SettingsState settingsState, // SettingsState 인자를 받음
   ) async {
     final TimeOfDay initialTime = settingsState.alarmTime ?? TimeOfDay.now();
 
@@ -64,6 +69,7 @@ class AlarmSettingWidget extends StatelessWidget {
       context: context,
       initialTime: initialTime,
       builder: (BuildContext context, Widget? child) {
+        // TimePicker의 색상을 앱 테마에 맞게 조정
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: ColorScheme.light(
@@ -79,7 +85,7 @@ class AlarmSettingWidget extends StatelessWidget {
     );
 
     if (picked != null && picked != settingsState.alarmTime) {
-      settingsState.setAlarmTime(picked);
+      settingsState.setAlarmTime(picked); // setAlarmTime은 SettingsState에 있음
     }
   }
 }

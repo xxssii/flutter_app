@@ -12,26 +12,23 @@ class ApneaWarningDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: Theme.of(context).cardColor,
+      backgroundColor: AppColors.errorRed.withOpacity(0.1),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: AppColors.errorRed, width: 2),
       ),
       title: Row(
         children: [
-          const Icon(Icons.warning, color: AppColors.errorRed),
+          const Icon(Icons.warning_amber_rounded, color: AppColors.errorRed),
           const SizedBox(width: 10),
-          Text(
-            '경고',
-            style: AppTextStyles.heading2.copyWith(color: AppColors.errorRed),
-          ),
+          Text('무호흡 경고', style: AppTextStyles.heading2),
         ],
       ),
       content: Text(message, style: AppTextStyles.bodyText),
       actions: [
         TextButton(
           onPressed: () {
-            Navigator.of(context).pop(); // 팝업 닫기
+            Navigator.of(context).pop();
           },
           child: Text(
             '확인',

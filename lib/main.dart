@@ -4,40 +4,76 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'screens/home_screen.dart';
-import 'screens/data_screen.dart';
+
+// ✅ 1. 'data_screen'이라는 별칭으로 임포트
+import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
-
-// ✨ 이 줄을 추가합니다.
-import 'services/ble_service.dart';
-
-// ✨ SettingsScreen 위젯은 'screen'이라는 별칭으로 임포트하여 충돌을 피합니다.
 import 'screens/settings_screen.dart' as screen;
 
 import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
 import 'state/app_state.dart';
-import 'state/settings_state.dart'; // SettingsState 상태 클래스
-import 'state/sleep_data_state.dart';
+import 'state/settings_state.dart';
+import 'state/sleep_data_state.dart'; // ✅ 진짜 SleepDataState
+import 'state/profile_state.dart';
 
-// ⬇️ Firebase 초기화에 필요한 import 2줄 추가
+// Firebase
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+
+// BLE
+import 'services/ble_service.dart';
+
+// 알림 및 시간대
+import 'services/notification_service.dart';
+import 'dart:io' show Platform;
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // 알림 및 시간대 초기화
+  await _configureLocalTimeZone();
+  await NotificationService.instance.init();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AppState()),
-        ChangeNotifierProvider(create: (_) => SettingsState()),
-        ChangeNotifierProvider(create: (_) => SleepDataState()),
         ChangeNotifierProvider(create: (_) => BleService()),
+        ChangeNotifierProvider(create: (_) => SettingsState()),
+        ChangeNotifierProvider(create: (_) => SleepDataState()), // ✅ 정상 작동
+        ChangeNotifierProvider(create: (_) => ProfileState()),
+        ChangeNotifierProxyProvider2<BleService, SettingsState, AppState>(
+          create: (_) => AppState(),
+          update: (context, bleService, settingsState, appState) =>
+              appState!..updateStates(bleService, settingsState),
+        ),
       ],
       child: const MyApp(),
     ),
   );
+}
+
+// 로컬 시간대 설정 함수
+Future<void> _configureLocalTimeZone() async {
+  if (Platform.isAndroid ||
+      Platform.isIOS ||
+      Platform.isMacOS ||
+      Platform.isLinux) {
+    tz.initializeTimeZones();
+    try {
+      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(timeZoneName));
+    } catch (e) {
+      print("타임존 설정 실패: $e");
+    }
+  } else {
+    tz.initializeTimeZones();
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -50,6 +86,8 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           title: '스마트 수면 케어',
           debugShowCheckedModeBanner: false,
+
+          // --- 라이트 모드 테마 ---
           theme: ThemeData(
             primarySwatch:
                 MaterialColor(AppColors.primaryNavy.value, const <int, Color>{
@@ -84,7 +122,6 @@ class MyApp extends StatelessWidget {
                 color: AppColors.primaryText,
               ),
             ),
-            // Light Theme Text Theme
             textTheme: const TextTheme(
               bodyLarge: AppTextStyles.bodyText,
               bodyMedium: AppTextStyles.bodyText,
@@ -93,6 +130,7 @@ class MyApp extends StatelessWidget {
               titleSmall: AppTextStyles.heading3,
             ),
             cardTheme: CardThemeData(
+              // ✅ CardThemeData -> CardTheme
               color: AppColors.cardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -126,6 +164,8 @@ class MyApp extends StatelessWidget {
             ),
             brightness: Brightness.light,
           ),
+
+          // --- 다크 모드 테마 ---
           darkTheme: ThemeData(
             brightness: Brightness.dark,
             colorScheme: ColorScheme.fromSeed(
@@ -148,8 +188,8 @@ class MyApp extends StatelessWidget {
                 color: AppColors.darkPrimaryText,
               ),
             ),
-            // Dark Theme Text Theme (텍스트 색상 강제 적용)
             textTheme: TextTheme(
+              // 텍스트 색상 강제 적용
               bodyLarge: AppTextStyles.darkBodyText.copyWith(
                 color: AppColors.darkPrimaryText,
               ),
@@ -167,6 +207,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
             cardTheme: CardThemeData(
+              // ✅ CardThemeData -> CardTheme
               color: AppColors.darkCardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -221,22 +262,17 @@ class _MainWrapperState extends State<MainWrapper> {
 
   final List<Widget> _screens = [
     const HomeScreen(key: Key('homeScreen')),
-    const DataScreen(key: Key('dataScreen')),
+    const data_screen.DataScreen(key: Key('dataScreen')), // ✅ 2. 별칭 사용
     const PillowScreen(key: Key('pillowScreen')),
-    const screen.SettingsScreen(key: Key('settingsScreen')), // ✨ 별칭 사용
+    const screen.SettingsScreen(key: Key('settingsScreen')),
   ];
 
   @override
   Widget build(BuildContext context) {
-    // 현재 테마의 밝기를 확인합니다.
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-
-    // 다크 모드일 때 Inactive 텍스트를 흰색으로 강제합니다.
     final Color inactiveTextColor = isDarkMode
         ? Colors.white
         : Theme.of(context).colorScheme.onSurface;
-
-    // 선택된 아이템의 텍스트 색상을 결정합니다.
     final Color activeTitleColor = isDarkMode
         ? Colors.white
         : Theme.of(context).colorScheme.primary;
@@ -308,8 +344,4 @@ class _MainWrapperState extends State<MainWrapper> {
       ),
     );
   }
-}
-
-class SettingsScreen {
-  const SettingsScreen();
 }

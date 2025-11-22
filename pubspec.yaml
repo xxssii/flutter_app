@@ -17,12 +17,23 @@ dependencies:
     sdk: flutter
   flutter_blue_plus: ^1.12.0 # 최신 버전 확인 후 추가
 
+  # ✅ 여기에 uuid 패키지를 추가해야 해
+  uuid: ^4.0.0
+
+    # ⬇️ 1. 알림 기능 구현을 위해 이 3줄을 추가해 줘
+  flutter_local_notifications: ^17.0.0 # (최신 버전 확인)
+  flutter_timezone: ^1.0.8
+  timezone: ^0.9.3
+
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
   bottom_navy_bar: ^6.0.0 # 이 줄을 추가
   fl_chart: ^0.68.0
   flutter_spinkit: ^5.2.0
   cloud_firestore: ^4.17.5
+
+  # ✅ 날짜 포맷팅을 위해 intl 패키지 추가
+  intl: ^0.20.2 # (최신 버전으로 업데이트)
 
 dev_dependencies:
   flutter_test:
@@ -34,4 +45,14 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/icon/ # ✅ 아이콘 폴더도 assets에 추가해야 함!
+
+# ⬇️ flutter_launcher_icons 설정 추가
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/app_icon.png" # 너의 아이콘 이미지 경로
+  min_sdk_android: 21 # 최소 안드로이드 SDK 버전 (필요에 따라 조절)
+
+
 
