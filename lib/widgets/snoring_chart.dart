@@ -104,7 +104,7 @@ class SnoringChartSection extends StatelessWidget {
                         return const SizedBox.shrink(); // 나머지 숨김
 
                       return SideTitleWidget(
-                        axisSide: meta.axisSide,
+                        meta: meta,
                         space: 8.0,
                         child: Text(hourText, style: AppTextStyles.smallText),
                       );

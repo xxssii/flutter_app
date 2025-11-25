@@ -1,0 +1,21 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.whl
+*.egg-info/
+build/
+dist/
+
+# Virtual envs
+venv/
+.venv/
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node leftovers (just in case)
+node_modules/

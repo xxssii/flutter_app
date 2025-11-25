@@ -1,6 +1,5 @@
 // lib/screens/home_screen.dart
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -195,9 +194,15 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
+<<<<<<< HEAD
                 const SizedBox(height: 24),
 
                 // 1. 개발용 데이터 생성 버튼 (테스트를 위해 유지)
+=======
+
+                // --- 훈련용 데이터 생성 버튼 (7개) ---
+                const SizedBox(height: 24),
+>>>>>>> origin/master
                 Center(
                   child: Column(
                     children: [
@@ -206,6 +211,7 @@ class HomeScreen extends StatelessWidget {
                         style: AppTextStyles.secondaryBodyText,
                       ),
                       const SizedBox(height: 12),
+<<<<<<< HEAD
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -250,6 +256,51 @@ class HomeScreen extends StatelessWidget {
                           ),
                         ],
                       ),
+=======
+
+                      // 7개 훈련용 버튼
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Awake'),
+                        child: const Text('Awake 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Light'),
+                        child: const Text('Light 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Deep'),
+                        child: const Text('Deep 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'REM'),
+                        child: const Text('REM 훈련 데이터 (10s)'),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Snoring'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
+                        child: const Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Tossing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.brown,
+                        ),
+                        child: const Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Apnea'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
+                      ),
+
+>>>>>>> origin/master
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -260,6 +311,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
 
+<<<<<<< HEAD
                 // 2. Firestore 실시간 상태 (친구분 코드 - 우선 순위)
                 _buildRealTimeStatus(context, appState),
                 const SizedBox(height: 16),
@@ -268,6 +320,10 @@ class HomeScreen extends StatelessWidget {
                 if (appState.isMeasuring)
                   _buildRealTimeMetricsCard(context, appState),
 
+=======
+                const SizedBox(height: 24),
+                _buildRealTimeMetricsCard(context, appState),
+>>>>>>> origin/master
                 const SizedBox(height: 16),
                 _buildInfoCard(
                   context,
@@ -384,6 +440,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+<<<<<<< HEAD
   // --- 친구분 코드 (Firestore 연동) ---
   Widget _buildRealTimeStatus(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
@@ -476,13 +533,40 @@ class HomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
+=======
+  Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
+    if (!appState.isMeasuring) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _buildMetricItem(
+              icon: Icons.favorite,
+              label: '심박수',
+              value: appState.currentHeartRate.toStringAsFixed(0),
+              unit: 'BPM',
+              color: AppColors.errorRed,
+            ),
+            _buildMetricItem(
+              icon: Icons.opacity,
+              label: '산소포화도',
+              value: appState.currentSpo2.toStringAsFixed(0),
+              unit: '%',
+              color: AppColors.primaryNavy,
+>>>>>>> origin/master
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
+<<<<<<< HEAD
   IconData _getIconForStatus(String status) {
     switch (status) {
       case '깨어있음':
@@ -537,6 +621,8 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+=======
+>>>>>>> origin/master
   Widget _buildMetricItem({
     required IconData icon,
     required String label,
