@@ -1,0 +1,5 @@
+firebase-functions[firestore]==0.5.0
+firebase-admin==7.1.0
+google-cloud-firestore==2.21.0
+functions-framework==3.10.0
+

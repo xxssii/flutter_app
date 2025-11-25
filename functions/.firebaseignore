@@ -1,0 +1,15 @@
+# Same as .gcloudignore for Firebase CLI
+__pycache__/
+*.py[cod]
+*.pyo
+*.whl
+*.egg-info/
+build/
+dist/
+venv/
+.venv/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/
