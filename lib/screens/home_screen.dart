@@ -1,6 +1,5 @@
 // lib/screens/home_screen.dart
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -211,15 +210,6 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
-<<<<<<< Updated upstream
-                const SizedBox(height: 24),
-
-                // ✅ 1. Firestore 실시간 수면 상태 위젯 (측정 중에만 보임)
-                _buildRealTimeStatus(context, appState),
-                const SizedBox(height: 16),
-
-                // 2. 고정 정보 카드 (총 수면시간, 베개 높이 등)
-=======
 
                 // --- 훈련용 데이터 생성 버튼 (7개) ---
                 const SizedBox(height: 24),
@@ -230,51 +220,51 @@ class HomeScreen extends StatelessWidget {
                         "--- [1단계] 훈련 데이터 생성기 (v3: 진짜 범위) ---",
                         style: AppTextStyles.secondaryBodyText,
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
                       // 7개 훈련용 버튼
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Awake'),
-                        child: Text('Awake 훈련 데이터 (10s)'),
+                        child: const Text('Awake 훈련 데이터 (10s)'),
                       ),
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Light'),
-                        child: Text('Light 훈련 데이터 (10s)'),
+                        child: const Text('Light 훈련 데이터 (10s)'),
                       ),
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Deep'),
-                        child: Text('Deep 훈련 데이터 (10s)'),
+                        child: const Text('Deep 훈련 데이터 (10s)'),
                       ),
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'REM'),
-                        child: Text('REM 훈련 데이터 (10s)'),
+                        child: const Text('REM 훈련 데이터 (10s)'),
                       ),
 
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
 
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Snoring'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.teal,
                         ),
-                        child: Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
+                        child: const Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
                       ),
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Tossing'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.brown,
                         ),
-                        child: Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
+                        child: const Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
                       ),
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Apnea'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[700],
+                          backgroundColor: Colors.red,
                         ),
-                        child: Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
+                        child: const Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
                       ),
 
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
                         style: AppTextStyles.secondaryBodyText,
@@ -283,10 +273,9 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 _buildRealTimeMetricsCard(context, appState),
-                SizedBox(height: 16),
->>>>>>> Stashed changes
+                const SizedBox(height: 16),
                 _buildInfoCard(
                   context,
                   title: '오늘의 총 수면시간',
@@ -406,26 +395,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-<<<<<<< Updated upstream
-  // ✅ _buildRealTimeStatus 및 _getIconForStatus 함수 (이전과 동일)
-  Widget _buildRealTimeStatus(BuildContext context, AppState appState) {
-    if (!appState.isMeasuring) {
-      return const SizedBox.shrink();
-    }
-
-    final Stream<DocumentSnapshot> sleepStatusStream = FirebaseFirestore
-        .instance
-        .collection('processed_data')
-        .doc(DEMO_USER_ID)
-        .snapshots();
-
-    return StreamBuilder<DocumentSnapshot>(
-      stream: sleepStatusStream,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: SpinKitFadingCircle(
-=======
   Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
       return const SizedBox.shrink();
@@ -449,110 +418,12 @@ class HomeScreen extends StatelessWidget {
               label: '산소포화도',
               value: appState.currentSpo2.toStringAsFixed(0),
               unit: '%',
->>>>>>> Stashed changes
               color: AppColors.primaryNavy,
-              size: 30.0,
-            ),
-<<<<<<< Updated upstream
-          ); // 로딩 인디케이터 변경
-        }
-        if (snapshot.hasError) {
-          return Text('데이터 로딩 실패: ${snapshot.error}');
-        }
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Text('수면 데이터가 없습니다.');
-        }
-
-        Map<String, dynamic> data =
-            snapshot.data!.data() as Map<String, dynamic>;
-
-        String currentStatus = data['status'] ?? '분석 중';
-        double heartRate = (data['heart_rate'] as num?)?.toDouble() ?? 0.0;
-        double spo2 = (data['spo2'] as num?)?.toDouble() ?? 0.0;
-        double movement = (data['movement_score'] as num?)?.toDouble() ?? 0.0;
-
-        IconData statusIcon = _getIconForStatus(currentStatus);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(statusIcon, color: AppColors.primaryNavy, size: 30),
-                    const SizedBox(width: 12),
-                    Text(
-                      '현재 수면 상태: $currentStatus',
-                      style: AppTextStyles.heading3,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildMetricItem(
-                      icon: Icons.favorite,
-                      label: '심박수',
-                      value: heartRate.toStringAsFixed(0),
-                      unit: 'BPM',
-                      color: AppColors.errorRed,
-                    ),
-                    _buildMetricItem(
-                      icon: Icons.opacity,
-                      label: '산소포화도',
-                      value: spo2.toStringAsFixed(0),
-                      unit: '%',
-                      color: AppColors.primaryNavy,
-                    ),
-                    _buildMetricItem(
-                      icon: Icons.motion_photos_on,
-                      label: '움직임',
-                      value: movement.toStringAsFixed(1),
-                      unit: '스코어',
-                      color: AppColors.warningOrange,
-                    ),
-                  ],
-                ),
-              ),
-=======
-            _buildMetricItem(
-              icon: Icons.motion_photos_on,
-              label: '움직임',
-              value: appState.currentMovementScore.toStringAsFixed(1),
-              unit: '스코어',
-              color: AppColors.warningOrange,
->>>>>>> Stashed changes
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
-  }
-
-  IconData _getIconForStatus(String status) {
-    switch (status) {
-      case '깨어있음':
-        return Icons.wb_sunny;
-      case '얕은 수면':
-        return Icons.cloud_queue;
-      case '깊은 수면':
-        return Icons.nights_stay;
-      case 'REM 수면':
-        return Icons.psychology;
-      default:
-        return Icons.help_outline;
-    }
   }
 
   Widget _buildMetricItem({

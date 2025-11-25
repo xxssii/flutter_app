@@ -3,9 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
-import 'screens/home_screen.dart';
+import 'package:flutter/foundation.dart'; // ✅ 웹 환경 체크(kIsWeb)를 위해 필수
 
-// ✅ 1. 'data_screen'이라는 별칭으로 임포트
+import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
 import 'screens/settings_screen.dart' as screen;
@@ -14,7 +14,7 @@ import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
 import 'state/app_state.dart';
 import 'state/settings_state.dart';
-import 'state/sleep_data_state.dart'; // ✅ 진짜 SleepDataState
+import 'state/sleep_data_state.dart';
 import 'state/profile_state.dart';
 
 // Firebase
@@ -26,26 +26,45 @@ import 'services/ble_service.dart';
 
 // 알림 및 시간대
 import 'services/notification_service.dart';
+
+// ⚠️ dart:io는 웹에서 직접 쓰면 에러가 나므로 조심해야 합니다.
 import 'dart:io' show Platform;
+
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 알림 및 시간대 초기화
-  await _configureLocalTimeZone();
-  await NotificationService.instance.init();
+  // 1. Firebase 초기화 (에러 방지용 try-catch)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    print("⚠️ Firebase 초기화 경고: $e");
+  }
+
+  // 2. 알림 및 시간대 초기화 (웹 호환성 처리)
+  try {
+    await _configureLocalTimeZone();
+
+    // ✅ [핵심] 웹이 아닐 때만(!kIsWeb) 알림 기능을 켭니다.
+    // 웹에서 NotificationService를 그냥 켜면 앱이 멈춥니다.
+    if (!kIsWeb) {
+      await NotificationService.instance.init();
+    }
+  } catch (e) {
+    print("⚠️ 초기화 설정 중 오류 (무시 가능): $e");
+  }
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => BleService()),
         ChangeNotifierProvider(create: (_) => SettingsState()),
-        ChangeNotifierProvider(create: (_) => SleepDataState()), // ✅ 정상 작동
+        ChangeNotifierProvider(create: (_) => SleepDataState()),
         ChangeNotifierProvider(create: (_) => ProfileState()),
         ChangeNotifierProxyProvider2<BleService, SettingsState, AppState>(
           create: (_) => AppState(),
@@ -58,21 +77,28 @@ Future<void> main() async {
   );
 }
 
-// 로컬 시간대 설정 함수
+// 로컬 시간대 설정 함수 (웹 에러 방지 수정)
 Future<void> _configureLocalTimeZone() async {
+  tz.initializeTimeZones();
+
+  // ✅ [핵심] 웹(Chrome)이라면 여기서 함수를 끝냅니다.
+  // 아래의 Platform 코드를 실행하면 앱이 죽기 때문입니다.
+  if (kIsWeb) {
+    print("🌐 웹 환경 감지: 모바일 전용 설정 건너뜀");
+    return;
+  }
+
+  // 여기부터는 모바일(앱)일 때만 실행됨
   if (Platform.isAndroid ||
       Platform.isIOS ||
       Platform.isMacOS ||
       Platform.isLinux) {
-    tz.initializeTimeZones();
     try {
       final String timeZoneName = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(timeZoneName));
     } catch (e) {
       print("타임존 설정 실패: $e");
     }
-  } else {
-    tz.initializeTimeZones();
   }
 }
 
@@ -130,7 +156,6 @@ class MyApp extends StatelessWidget {
               titleSmall: AppTextStyles.heading3,
             ),
             cardTheme: CardThemeData(
-              // ✅ CardThemeData -> CardTheme
               color: AppColors.cardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -189,7 +214,6 @@ class MyApp extends StatelessWidget {
               ),
             ),
             textTheme: TextTheme(
-              // 텍스트 색상 강제 적용
               bodyLarge: AppTextStyles.darkBodyText.copyWith(
                 color: AppColors.darkPrimaryText,
               ),
@@ -207,7 +231,6 @@ class MyApp extends StatelessWidget {
               ),
             ),
             cardTheme: CardThemeData(
-              // ✅ CardThemeData -> CardTheme
               color: AppColors.darkCardBackground,
               elevation: 1,
               shape: RoundedRectangleBorder(
@@ -262,7 +285,7 @@ class _MainWrapperState extends State<MainWrapper> {
 
   final List<Widget> _screens = [
     const HomeScreen(key: Key('homeScreen')),
-    const data_screen.DataScreen(key: Key('dataScreen')), // ✅ 2. 별칭 사용
+    const data_screen.DataScreen(key: Key('dataScreen')),
     const PillowScreen(key: Key('pillowScreen')),
     const screen.SettingsScreen(key: Key('settingsScreen')),
   ];

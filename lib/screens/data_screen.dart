@@ -305,7 +305,7 @@ class EfficiencyTab extends StatelessWidget {
                           interval: 2,
                           getTitlesWidget: (double value, TitleMeta meta) {
                             return SideTitleWidget(
-                              axisSide: meta.axisSide,
+                              meta: meta,
                               space: 8,
                               child: RotatedBox(
                                 quarterTurns: -1,
@@ -328,7 +328,7 @@ class EfficiencyTab extends StatelessWidget {
                             }
                             final label = data[value.toInt()].dayLabel;
                             return SideTitleWidget(
-                              axisSide: meta.axisSide,
+                              meta: meta,
                               space: 8,
                               child: RotatedBox(
                                 quarterTurns: -1,
@@ -605,13 +605,8 @@ class SleepStagesTab extends StatelessWidget {
   }
 }
 
-<<<<<<< Updated upstream
 class TrendsTab extends StatelessWidget {
   const TrendsTab({Key? key}) : super(key: key);
-=======
-class TrendsTab extends StatefulWidget {
-  const TrendsTab({super.key});
->>>>>>> Stashed changes
 
   @override
   Widget build(BuildContext context) {
@@ -689,7 +684,6 @@ class TrendsTab extends StatefulWidget {
                         getTouchedSpotIndicator:
                             (LineChartBarData barData, List<int> spotIndexes) {
                               return spotIndexes.map((index) {
-                                final spot = barData.spots[index];
                                 return TouchedSpotIndicatorData(
                                   FlLine(
                                     color: AppColors.primaryNavy,

@@ -1,7 +1,6 @@
 // lib/screens/info_screen.dart
 
 import 'package:flutter/material.dart';
-import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
 class InfoScreen extends StatelessWidget {

@@ -54,7 +54,7 @@ class HeartRateChartSection extends StatelessWidget {
                       // 실제로는 시작 시간(예: 23:00)을 더해서 표시해야 함
                       int time = (22 + value.toInt()) % 24;
                       return SideTitleWidget(
-                        axisSide: meta.axisSide,
+                        meta: meta,
                         child: Text('${time}시', style: AppTextStyles.smallText),
                       );
                     },

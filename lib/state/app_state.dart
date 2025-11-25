@@ -10,8 +10,6 @@ import '../utils/sleep_score_analyzer.dart';
 import '../services/notification_service.dart';
 import '../widgets/apnea_warning_dialog.dart';
 import '../widgets/apnea_report_dialog.dart';
-import '../utils/app_colors.dart';
-import '../utils/app_text_styles.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
@@ -213,7 +211,6 @@ class AppState extends ChangeNotifier {
   }
 
   void _generatePostSleepReport(BuildContext context) {
-    final apneaDetector = SleepApneaDetector();
     final analyzer = SleepScoreAnalyzer();
 
     if (_settingsState == null) {

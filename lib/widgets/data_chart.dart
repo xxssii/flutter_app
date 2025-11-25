@@ -9,7 +9,11 @@ class DataChart extends StatelessWidget {
   final List<FlSpot> chartData;
   final String chartTitle;
 
-  const DataChart({super.key, required this.chartData, required this.chartTitle});
+  const DataChart({
+    super.key,
+    required this.chartData,
+    required this.chartTitle,
+  });
 
   @override
   Widget build(BuildContext context) {
