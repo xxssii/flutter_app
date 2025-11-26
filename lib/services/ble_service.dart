@@ -4,16 +4,24 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart'; // ✅ 추가: kIsWeb 사용
 
-// --- 베개 UUID ---
-const String PILLOW_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const String PRESSURE_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-const String SNORING_CHAR_UUID = "1c95d5e2-0a21-48e6-86cf-1a6f0542d4a6";
-const String ALARM_CHAR_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+// --- 베개 UUID (하드웨어 팀 새 정보 반영) ---
+// SERVICE_UUID가 변경되었습니다. (베개는 이전과 동일한 UUID가 맞다면 그대로 유지합니다.
+// 만약 "4fafc201-1fb5-459e-8fcc-c7c9c331914b" 가 베개 서비스 UUID라면 기존 그대로 두세요.)
+// 새로운 정보에서는 "4fafc201-1fb5-459e-8fcc-c7c9c331914b"가 베개 서비스로 보입니다.
+const String PILLOW_SERVICE_UUID =
+    "4fafc201-1fb5-459e-8fcc-c7c9c331914b"; // ✅ 수정됨 (c5c9 -> c7c9)
+const String PRESSURE_CHAR_UUID =
+    "beb5483e-36e1-4688-b7f5-ea07361b26a8"; // 변경 없음
+const String SNORING_CHAR_UUID =
+    "a3c4287c-c51d-4054-9f7a-85d7065f4900"; // ✅ 수정됨
 
-// --- 팔찌 UUID ---
-const String WRISTBAND_SERVICE_UUID = "0000180d-0000-1000-8000-00805f9b34fb";
-const String HEART_RATE_CHAR_UUID = "00002a37-0000-1000-8000-00805f9b34fb";
-const String SPO2_CHAR_UUID = "00002a5f-0000-1000-8000-00805f9b34fb";
+// --- 팔찌 UUID (하드웨어 팀 새 정보 반영) ---
+const String WRISTBAND_SERVICE_UUID =
+    "6e400001-b5a3-f393-e0a9-e50e24dcca9e"; // ✅ 수정됨
+const String HEART_RATE_CHAR_UUID =
+    "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // ✅ 수정됨
+const String SPO2_CHAR_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // ✅ 수정됨
+const String ALARM_CHAR_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"; // 변경 없음
 
 class BleService extends ChangeNotifier {
   // 장치 분리

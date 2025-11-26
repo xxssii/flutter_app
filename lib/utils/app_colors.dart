@@ -20,6 +20,8 @@ class AppColors {
   static const Color warningOrange = Color(0xFFF39C12);
   static const Color errorRed = Color(0xFFE74C3C);
   static const Color progressBackground = Color(0xFFE0E0E0);
+  // ✅ 이 줄을 추가해주세요! (라이트 모드용 구분선 색상)
+  static const Color divider = Color(0xFFE0E0E0);
 
   // ✅ --- Chart Colors (4단계로 수정됨) ---
   static final Color lightSleepColor = primaryNavy.withOpacity(
@@ -48,4 +50,6 @@ class AppColors {
   static const Color darkDeepSleepColor = darkPrimaryNavy;
   static const Color darkRemColor = darkSecondaryText;
   static const Color darkAwakeColor = darkErrorRed;
+  // ✅ 이 줄도 추가해주세요! (다크 모드용 구분선 색상)
+  static const Color darkDivider = Color(0xFF424242);
 }

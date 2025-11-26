@@ -48,10 +48,10 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
-                      // 🔥 여기가 수정된 핵심 부분입니다!
+
+                      // ✅ 수정됨: axisSide 에러 해결 -> meta 파라미터 사용
                       return SideTitleWidget(
-                        axisSide: meta
-                            .axisSide, // meta: meta 대신 axisSide: meta.axisSide 사용
+                        meta: meta, // axisSide: meta.axisSide 대신 meta: meta 사용
                         space: 8.0,
                         child: Text(
                           text,
@@ -82,9 +82,8 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
-                      // 왼쪽 타이틀은 SideTitleWidget 없이 텍스트만 반환해도 괜찮지만,
-                      // 정렬을 맞추고 싶다면 아래처럼 감싸주는 것이 좋습니다.
-                      // 일단 기존 로직(Text 반환)이 에러는 아니므로 그대로 둡니다.
+                      // 여기도 SideTitleWidget으로 감싸는 것이 안전하지만,
+                      // 텍스트만 리턴해도 작동한다면 그대로 두셔도 됩니다.
                       return Text(
                         text,
                         style: const TextStyle(color: AppColors.secondaryText),

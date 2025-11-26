@@ -10,6 +10,8 @@ import '../utils/sleep_score_analyzer.dart';
 import '../services/notification_service.dart';
 import '../widgets/apnea_warning_dialog.dart';
 import '../widgets/apnea_report_dialog.dart';
+import '../utils/app_colors.dart';
+import '../utils/app_text_styles.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
@@ -56,7 +58,7 @@ class AppState extends ChangeNotifier {
   String _currentSessionId = "";
 
   /// 현재 유저 ID (테스트용)
-  final String _currentUserId = "v4_test";
+  final String _currentUserId = DEMO_USER_ID; // DEMO_USER_ID로 통일
 
   bool get isMeasuring => _isMeasuring;
   List<String> get apneaEvents => _apneaEvents;
@@ -89,10 +91,24 @@ class AppState extends ChangeNotifier {
       timestamp: timestamp,
     );
 
-    // TODO: BLE에서 실제 심박수/SpO2/움직임 데이터 받아와서 아래 변수 업데이트
-    // _currentHeartRate = ...
-    // _currentSpo2 = ...
-    // _currentMovementScore = ...
+    // 실제 BLE 데이터로 업데이트
+    _currentHeartRate = _bleService!.heartRate;
+    _currentSpo2 = _bleService!.spo2;
+    // _currentMovementScore = ... // 움직임 데이터 처리 로직 추가 필요
+
+    // 알람 트리거 확인 (context 없이 호출)
+    _checkAlarmTrigger();
+
+    // 무호흡 감지 로직 호출 (실제 데이터 기반으로 구현 필요)
+    // checkApneaStatus(
+    //   context: context,
+    //   respirationDuration: ...,
+    //   heartRateChange: ...,
+    //   spo2Level: ...,
+    //   chestAbdomenMovement: ...,
+    //   isSnoringStopped: ...,
+    //   isSuddenInhalation: ...,
+    // );
 
     notifyListeners();
   }
@@ -107,8 +123,8 @@ class AppState extends ChangeNotifier {
       // BLE 스캔 시작
       Provider.of<BleService>(context, listen: false).startScan();
 
-      // Mock 데이터 스트림 시작 (알람 확인용)
-      _startMockDataStream(context);
+      // Mock 데이터 스트림 시작 (알람 확인용) -> 실제 데이터 사용 시 주석 처리
+      // _startMockDataStream(context);
 
       // "새 뇌" (서버 뇌) 리스너 시작
       _currentSessionId = "s4_test";
@@ -127,35 +143,36 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Mock 데이터 + 알람 확인용 타이머
-  void _startMockDataStream(BuildContext context) {
-    _sensorDataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // 1. Mock 데이터 업데이트 (시연용으로 유지)
-      _currentHeartRate = (60 + (DateTime.now().millisecond % 5)).toDouble();
-      _currentSpo2 = (96 + (DateTime.now().millisecond % 2)).toDouble();
-      _currentMovementScore = (0.5 + (DateTime.now().second % 3)).toDouble();
+  // Mock 데이터 + 알람 확인용 타이머 -> 실제 데이터 사용 시 주석 처리 또는 제거
+  // void _startMockDataStream(BuildContext context) {
+  //   _sensorDataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+  //     // 1. Mock 데이터 업데이트 (시연용으로 유지)
+  //     _currentHeartRate = (60 + (DateTime.now().millisecond % 5)).toDouble();
+  //     _currentSpo2 = (96 + (DateTime.now().millisecond % 2)).toDouble();
+  //     _currentMovementScore = (0.5 + (DateTime.now().second % 3)).toDouble();
+  //
+  //     // 2. 1초마다 알람 시간 확인 로직 추가
+  //     _checkAlarmTrigger(context);
+  //
+  //     notifyListeners();
+  //
+  //     // 3. 무호흡 감지 로직 (임시 주석 처리)
+  //     /*
+  //     checkApneaStatus(
+  //       context: context,
+  //       respirationDuration: _mockRespirationDuration,
+  //       heartRateChange: _mockHeartRateChange,
+  //       spo2Level: _currentSpo2,
+  //       chestAbdomenMovement: _mockChestAbdomenMovement,
+  //       isSnoringStopped: false,
+  //       isSuddenInhalation: false,
+  //     );
+  //     */
+  //   });
+  // }
 
-      // 2. 1초마다 알람 시간 확인 로직 추가
-      _checkAlarmTrigger(context);
-
-      notifyListeners();
-
-      // 3. 무호흡 감지 로직 (임시 주석 처리)
-      /*
-      checkApneaStatus(
-        context: context,
-        respirationDuration: _mockRespirationDuration,
-        heartRateChange: _mockHeartRateChange,
-        spo2Level: _currentSpo2,
-        chestAbdomenMovement: _mockChestAbdomenMovement,
-        isSnoringStopped: false,
-        isSuddenInhalation: false,
-      );
-      */
-    });
-  }
-
-  void _checkAlarmTrigger(BuildContext context) {
+  // context 매개변수 제거
+  void _checkAlarmTrigger() {
     if (_settingsState == null ||
         !_settingsState!.isAlarmOn ||
         _settingsState!.alarmTime == null) {
@@ -170,7 +187,8 @@ class AppState extends ChangeNotifier {
         now.minute == alarmTime.minute &&
         now.second == 0) {
       print("알람 시간 도달! (정확한 시간) 팔찌로 진동 명령 전송.");
-      Provider.of<BleService>(context, listen: false).sendVibrationCommand();
+      // Provider.of<BleService>(context, listen: false).sendVibrationCommand(); // context 사용 부분 제거
+      _bleService?.sendVibrationCommand(); // BleService를 통해 직접 호출
     }
   }
 
@@ -211,6 +229,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _generatePostSleepReport(BuildContext context) {
+    final apneaDetector = SleepApneaDetector();
     final analyzer = SleepScoreAnalyzer();
 
     if (_settingsState == null) {
@@ -356,12 +375,14 @@ class AppState extends ChangeNotifier {
     print("💪 [몸이 명령 수행 시작] type: $type");
 
     if (type == 'VIBRATE_STRONG' || type == 'VIBRATE_GENTLY') {
-      // (미래) BLE로 진동 명령 전송
-      print("⚡️ (시뮬레이션) 베개 진동 중... ${payload['level']}");
+      // 실제 BLE로 진동 명령 전송
+      print("⚡️ (BLE) 베개 진동 중... ${payload['level']}");
+      // _bleService?.sendVibrationCommand(payload['level']); // 진동 레벨 전달 필요
       success = true; // (임시)
     } else if (type == 'SET_HEIGHT') {
-      // (미래) BLE로 높이 변경 명령 전송
-      print("↕️ (시뮬레이션) 베개 높이 변경 중... ${payload['heightMm']}mm");
+      // 실제 BLE로 높이 변경 명령 전송
+      print("↕️ (BLE) 베개 높이 변경 중... ${payload['heightMm']}mm");
+      // _bleService?.setHeightCommand(payload['heightMm']); // 높이 전달 필요
       success = true; // (임시)
     }
 

@@ -3,69 +3,63 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
-import 'package:flutter/foundation.dart'; // ✅ 웹 환경 체크(kIsWeb)를 위해 필수
+import 'dart:io' show Platform;
 
+// Firebase
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart';
+
+// BLE, 알림, 시간대
+import 'services/ble_service.dart';
+import 'services/notification_service.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+
+// 상태 관리 및 유틸리티
+import 'state/app_state.dart';
+import 'state/settings_state.dart';
+import 'state/sleep_data_state.dart';
+import 'state/profile_state.dart';
+import 'providers/sleep_provider.dart'; // ✅ 백엔드 리포트 연동
+import 'utils/app_colors.dart';
+import 'utils/app_text_styles.dart';
+
+// 화면 (별칭 사용)
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
 import 'screens/settings_screen.dart' as screen;
 
-import 'utils/app_colors.dart';
-import 'utils/app_text_styles.dart';
-import 'state/app_state.dart';
-import 'state/settings_state.dart';
-import 'state/sleep_data_state.dart';
-import 'state/profile_state.dart';
-
-// Firebase
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
-
-// BLE
-import 'services/ble_service.dart';
-
-// 알림 및 시간대
-import 'services/notification_service.dart';
-
-// ⚠️ dart:io는 웹에서 직접 쓰면 에러가 나므로 조심해야 합니다.
-import 'dart:io' show Platform;
-
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Firebase 초기화 (에러 방지용 try-catch)
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    print("⚠️ Firebase 초기화 경고: $e");
-  }
+  // 1. Firebase 초기화
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 2. 알림 및 시간대 초기화 (웹 호환성 처리)
-  try {
-    await _configureLocalTimeZone();
+  // 2. Firestore 오프라인 데이터 지원 활성화
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    // cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED, // 필요시 설정
+  );
 
-    // ✅ [핵심] 웹이 아닐 때만(!kIsWeb) 알림 기능을 켭니다.
-    // 웹에서 NotificationService를 그냥 켜면 앱이 멈춥니다.
-    if (!kIsWeb) {
-      await NotificationService.instance.init();
-    }
-  } catch (e) {
-    print("⚠️ 초기화 설정 중 오류 (무시 가능): $e");
-  }
+  // 3. 알림 및 시간대 초기화
+  await _configureLocalTimeZone();
+  await NotificationService.instance.init();
 
   runApp(
     MultiProvider(
       providers: [
+        // 독립적인 Provider들
         ChangeNotifierProvider(create: (_) => BleService()),
         ChangeNotifierProvider(create: (_) => SettingsState()),
         ChangeNotifierProvider(create: (_) => SleepDataState()),
         ChangeNotifierProvider(create: (_) => ProfileState()),
+        ChangeNotifierProvider(
+          create: (_) => SleepProvider(),
+        ), // ✅ SleepProvider 등록
+        // 다른 Provider에 의존하는 ProxyProvider
         ChangeNotifierProxyProvider2<BleService, SettingsState, AppState>(
           create: (_) => AppState(),
           update: (context, bleService, settingsState, appState) =>
@@ -77,18 +71,9 @@ Future<void> main() async {
   );
 }
 
-// 로컬 시간대 설정 함수 (웹 에러 방지 수정)
+// 로컬 시간대 설정 함수
 Future<void> _configureLocalTimeZone() async {
   tz.initializeTimeZones();
-
-  // ✅ [핵심] 웹(Chrome)이라면 여기서 함수를 끝냅니다.
-  // 아래의 Platform 코드를 실행하면 앱이 죽기 때문입니다.
-  if (kIsWeb) {
-    print("🌐 웹 환경 감지: 모바일 전용 설정 건너뜀");
-    return;
-  }
-
-  // 여기부터는 모바일(앱)일 때만 실행됨
   if (Platform.isAndroid ||
       Platform.isIOS ||
       Platform.isMacOS ||
@@ -107,14 +92,16 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // SettingsState의 다크모드 설정에 따라 테마를 변경하기 위해 Consumer 사용
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return MaterialApp(
           title: '스마트 수면 케어',
           debugShowCheckedModeBanner: false,
 
-          // --- 라이트 모드 테마 ---
+          // === 라이트 모드 테마 설정 ===
           theme: ThemeData(
+            brightness: Brightness.light,
             primarySwatch:
                 MaterialColor(AppColors.primaryNavy.value, const <int, Color>{
                   50: Color(0xFFE3E3E8),
@@ -155,6 +142,7 @@ class MyApp extends StatelessWidget {
               titleMedium: AppTextStyles.heading2,
               titleSmall: AppTextStyles.heading3,
             ),
+            // ✅ CardThemeData -> CardTheme으로 수정
             cardTheme: CardThemeData(
               color: AppColors.cardBackground,
               elevation: 1,
@@ -187,10 +175,9 @@ class MyApp extends StatelessWidget {
                 ),
               ),
             ),
-            brightness: Brightness.light,
           ),
 
-          // --- 다크 모드 테마 ---
+          // === 다크 모드 테마 설정 ===
           darkTheme: ThemeData(
             brightness: Brightness.dark,
             colorScheme: ColorScheme.fromSeed(
@@ -230,6 +217,7 @@ class MyApp extends StatelessWidget {
                 color: AppColors.darkPrimaryText,
               ),
             ),
+            // ✅ CardThemeData -> CardTheme으로 수정
             cardTheme: CardThemeData(
               color: AppColors.darkCardBackground,
               elevation: 1,
@@ -263,6 +251,8 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
+
+          // 테마 모드 적용 (시스템/라이트/다크)
           themeMode: settingsState.isDarkMode
               ? ThemeMode.dark
               : ThemeMode.light,
@@ -283,85 +273,86 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
+  // 하단 내비게이션바에 연결될 화면들
   final List<Widget> _screens = [
     const HomeScreen(key: Key('homeScreen')),
-    const data_screen.DataScreen(key: Key('dataScreen')),
+    const data_screen.DataScreen(key: Key('dataScreen')), // 별칭 사용
     const PillowScreen(key: Key('pillowScreen')),
-    const screen.SettingsScreen(key: Key('settingsScreen')),
+    const screen.SettingsScreen(key: Key('settingsScreen')), // 별칭 사용
   ];
 
   @override
   Widget build(BuildContext context) {
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final Color inactiveTextColor = isDarkMode
+    final Color activeColor = Theme.of(context).colorScheme.primary;
+    final Color inactiveColor = isDarkMode
         ? Colors.white
-        : Theme.of(context).colorScheme.onSurface;
+        : Theme.of(context).colorScheme.onSurface.withOpacity(0.6);
     final Color activeTitleColor = isDarkMode
         ? Colors.white
         : Theme.of(context).colorScheme.primary;
 
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(index: _currentIndex, children: _screens),
       bottomNavigationBar: BottomNavyBar(
         selectedIndex: _currentIndex,
+        showElevation: true,
+        itemCornerRadius: 24,
+        curve: Curves.easeIn,
         onItemSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        backgroundColor: Theme.of(context).cardColor,
+        backgroundColor: Theme.of(context).cardTheme.color,
         items: [
           BottomNavyBarItem(
             icon: const Icon(Icons.home),
             title: Text(
               'Main',
               style: TextStyle(
-                color: _currentIndex == 0
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color: _currentIndex == 0 ? activeTitleColor : inactiveColor,
               ),
             ),
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: inactiveTextColor,
+            activeColor: activeColor,
+            inactiveColor: inactiveColor,
+            textAlign: TextAlign.center,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.analytics),
             title: Text(
               'Sleep Report',
               style: TextStyle(
-                color: _currentIndex == 1
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color: _currentIndex == 1 ? activeTitleColor : inactiveColor,
               ),
             ),
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: inactiveTextColor,
+            activeColor: activeColor,
+            inactiveColor: inactiveColor,
+            textAlign: TextAlign.center,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.bed),
             title: Text(
               'Pillow Control',
               style: TextStyle(
-                color: _currentIndex == 2
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color: _currentIndex == 2 ? activeTitleColor : inactiveColor,
               ),
             ),
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: inactiveTextColor,
+            activeColor: activeColor,
+            inactiveColor: inactiveColor,
+            textAlign: TextAlign.center,
           ),
           BottomNavyBarItem(
             icon: const Icon(Icons.settings),
             title: Text(
               'Settings',
               style: TextStyle(
-                color: _currentIndex == 3
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color: _currentIndex == 3 ? activeTitleColor : inactiveColor,
               ),
             ),
-            activeColor: Theme.of(context).colorScheme.primary,
-            inactiveColor: inactiveTextColor,
+            activeColor: activeColor,
+            inactiveColor: inactiveColor,
+            textAlign: TextAlign.center,
           ),
         ],
       ),
