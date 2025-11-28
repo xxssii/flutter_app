@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart'; // kIsWeb 사용을 위해 필요
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
-import 'screens/settings_screen.dart' as screen;
+import 'screens/settings_screen.dart'; // ✅ "as screen" 제거!
 
 import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
@@ -255,7 +255,7 @@ class _MainWrapperState extends State<MainWrapper> {
     const HomeScreen(key: Key('homeScreen')),
     const data_screen.DataScreen(key: Key('dataScreen')),
     const PillowScreen(key: Key('pillowScreen')),
-    const screen.SettingsScreen(key: Key('settingsScreen')),
+    const SettingsScreen(key: Key('settingsScreen')), // ✅ "screen." 제거!
   ];
 
   @override

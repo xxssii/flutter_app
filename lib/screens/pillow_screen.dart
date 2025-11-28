@@ -1,5 +1,4 @@
 // lib/screens/pillow_screen.dart
-// lib/screens/pillow_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -259,28 +258,76 @@ class _PillowScreenState extends State<PillowScreen> {
             ),
             const Divider(height: 24),
 
-            // ✅ 스캔 버튼
+            // ✅ 조건부 버튼: 스캔하기 ↔ 스캔 종료
             Center(
               child: ElevatedButton.icon(
-                onPressed: (bleService.isPillowConnected &&
-                        bleService.isWatchConnected)
-                    ? null
-                    : () async {
-                        print("\n🔵 [사용자 액션] 스캔 버튼 클릭됨");
+                onPressed: () async {
+                  // 하나라도 연결되어 있으면 → 연결 해제
+                  if (bleService.isPillowConnected ||
+                      bleService.isWatchConnected) {
+                    print("\n🔴 [사용자 액션] 스캔 종료 (연결 해제) 클릭됨");
 
-                        bool hasPermission = await _requestPermissions();
+                    // 확인 다이얼로그
+                    bool? confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('연결 해제'),
+                        content: const Text('모든 기기의 연결을 해제하시겠습니까?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('취소'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('해제',
+                                style: TextStyle(color: Colors.red)),
+                          ),
+                        ],
+                      ),
+                    );
 
-                        if (hasPermission) {
-                          print("✅ 권한 확인 완료. 스캔 시작...\n");
-                          await bleService.startScan();
-                        } else {
-                          print("❌ 권한 없음. 스캔 취소.\n");
-                        }
-                      },
-                icon: const Icon(Icons.bluetooth_searching),
-                label: const Text('기기 스캔하기'),
+                    if (confirm == true) {
+                      await bleService.disconnectAll();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('기기 연결이 해제되었습니다'),
+                            backgroundColor: Colors.blue,
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    // 연결 안 되어 있으면 → 스캔 시작
+                    print("\n🔵 [사용자 액션] 스캔 버튼 클릭됨");
+
+                    bool hasPermission = await _requestPermissions();
+
+                    if (hasPermission) {
+                      print("✅ 권한 확인 완료. 스캔 시작...\n");
+                      await bleService.startScan();
+                    } else {
+                      print("❌ 권한 없음. 스캔 취소.\n");
+                    }
+                  }
+                },
+                icon: Icon(
+                  (bleService.isPillowConnected || bleService.isWatchConnected)
+                      ? Icons.link_off
+                      : Icons.bluetooth_searching,
+                ),
+                label: Text(
+                  (bleService.isPillowConnected || bleService.isWatchConnected)
+                      ? '스캔 종료 (연결 해제)'
+                      : '기기 스캔하기',
+                ),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 44),
+                  backgroundColor: (bleService.isPillowConnected ||
+                          bleService.isWatchConnected)
+                      ? Colors.red
+                      : AppColors.primaryNavy,
                 ),
               ),
             ),
@@ -299,8 +346,7 @@ class _PillowScreenState extends State<PillowScreen> {
     );
   }
 
-  // ... 나머지 위젯들은 이전과 동일 ...
-
+  // 나머지 함수들은 기존과 동일
   Widget _buildHeightSettingsCard(BuildContext context, BleService bleService) {
     return Card(
       child: Padding(

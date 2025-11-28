@@ -4,13 +4,14 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart'; // ✅ 추가!
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/app_state.dart';
 import '../state/settings_state.dart';
 import 'sleep_mode_screen.dart';
+import '../services/ble_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -21,12 +22,11 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ========================================
-  // ✨ 새로 추가된 함수: 7일치 테스트 데이터 생성
+  // ✨ 7일치 테스트 데이터 생성
   // ========================================
   Future<void> _generateWeeklyTestData(BuildContext context) async {
     if (!context.mounted) return;
 
-    // 로딩 다이얼로그 표시
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -45,20 +45,16 @@ class HomeScreen extends StatelessWidget {
       final now = DateTime.now();
       int totalDataPoints = 0;
 
-      // 7일치 데이터 생성
       for (int dayOffset = 6; dayOffset >= 0; dayOffset--) {
         final date = now.subtract(Duration(days: dayOffset));
         final dateString =
             '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
         final sessionId = 'session-$dateString';
-        final userId = 'demo_user'; // 실제 userId로 변경 가능
+        final userId = 'demo_user';
 
         print('📅 날짜: $dateString 데이터 생성 시작...');
 
-        // 수면 시작 시간 (22:00)
         DateTime currentTime = DateTime(date.year, date.month, date.day, 22, 0);
-
-        // 8시간 수면 시뮬레이션 (1분 간격 = 480개 데이터)
         final sleepCycle = _generateRealisticSleepCycle();
 
         for (int minute = 0; minute < 480; minute++) {
@@ -74,7 +70,6 @@ class HomeScreen extends StatelessWidget {
           currentTime = currentTime.add(const Duration(minutes: 1));
           totalDataPoints++;
 
-          // 100개마다 진행 상황 출력
           if (totalDataPoints % 100 == 0) {
             print('✅ $totalDataPoints개 데이터 저장됨...');
           }
@@ -83,9 +78,8 @@ class HomeScreen extends StatelessWidget {
         print('✅ $dateString 완료! (480개 데이터)');
       }
 
-      // 완료 후 다이얼로그 닫기
       if (context.mounted) {
-        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+        Navigator.of(context).pop();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -99,7 +93,7 @@ class HomeScreen extends StatelessWidget {
       print('🎉 전체 완료! 총 $totalDataPoints개 데이터 생성됨');
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+        Navigator.of(context).pop();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -112,38 +106,19 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  // 현실적인 수면 사이클 생성 (480분 = 8시간)
   List<String> _generateRealisticSleepCycle() {
     final List<String> cycle = [];
-
-    // 22:00 - 23:00 (60분): Light (잠들기)
     cycle.addAll(List.filled(60, 'Light'));
-
-    // 23:00 - 01:00 (120분): Deep (깊은 수면 1차)
     cycle.addAll(List.filled(120, 'Deep'));
-
-    // 01:00 - 02:30 (90분): Light
     cycle.addAll(List.filled(90, 'Light'));
-
-    // 02:30 - 03:00 (30분): REM (1차 렘수면)
     cycle.addAll(List.filled(30, 'REM'));
-
-    // 03:00 - 04:30 (90분): Deep (2차 깊은 수면)
     cycle.addAll(List.filled(90, 'Deep'));
-
-    // 04:30 - 05:00 (30분): Light
     cycle.addAll(List.filled(30, 'Light'));
-
-    // 05:00 - 05:30 (30분): REM (2차 렘수면)
     cycle.addAll(List.filled(30, 'REM'));
-
-    // 05:30 - 06:00 (30분): Light (깨어나기 전)
     cycle.addAll(List.filled(30, 'Light'));
-
     return cycle;
   }
 
-  // 수면 단계에 맞는 센서 데이터 생성
   Map<String, dynamic> _generateDataForStage({
     required String stage,
     required String userId,
@@ -213,10 +188,9 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ========================================
-  // ✨ 테스트: 수면 점수 계산 Cloud Function 호출
+  // ✨ 수면 점수 계산 테스트
   // ========================================
   Future<void> _testCalculateSleepScore(BuildContext context) async {
-    // 가장 최근 날짜의 sessionId
     final now = DateTime.now();
     final dateString =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
@@ -224,7 +198,6 @@ class HomeScreen extends StatelessWidget {
 
     print('🧪 테스트 시작: sessionId = $sessionId');
 
-    // 로딩 표시
     if (!context.mounted) return;
     showDialog(
       context: context,
@@ -241,7 +214,6 @@ class HomeScreen extends StatelessWidget {
     );
 
     try {
-      // Cloud Functions 호출
       final functions =
           FirebaseFunctions.instanceFor(region: 'asia-northeast3');
       final callable = functions.httpsCallable('calculate_sleep_score');
@@ -253,9 +225,8 @@ class HomeScreen extends StatelessWidget {
       final data = result.data;
 
       if (!context.mounted) return;
-      Navigator.of(context).pop(); // 로딩 닫기
+      Navigator.of(context).pop();
 
-      // 결과 표시
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -298,7 +269,7 @@ class HomeScreen extends StatelessWidget {
       print('총 수면 시간: ${data['summary']['total_duration_hours']}시간');
     } catch (e) {
       if (context.mounted) {
-        Navigator.of(context).pop(); // 로딩 닫기
+        Navigator.of(context).pop();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -312,7 +283,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ========================================
-  // 기존 훈련 데이터 생성 함수
+  // 훈련 데이터 생성
   // ========================================
   Future<void> _pushBurstData(BuildContext context, String label) async {
     final String userId = "train_user_v3";
@@ -497,10 +468,6 @@ class HomeScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
-
-                // ========================================
-                // ✨ 새로 추가된 버튼: 7일치 테스트 데이터 생성
-                // ========================================
                 const SizedBox(height: 24),
                 Center(
                   child: Column(
@@ -533,10 +500,6 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.grey,
                         ),
                       ),
-
-                      // ========================================
-                      // ✨ 테스트 버튼 추가
-                      // ========================================
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
                         onPressed: () => _testCalculateSleepScore(context),
@@ -558,7 +521,6 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.grey,
                         ),
                       ),
-
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -567,8 +529,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // 훈련용 데이터 생성 버튼 (7개)
                 const SizedBox(height: 24),
                 Center(
                   child: Column(
@@ -624,7 +584,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 24),
                 _buildRealTimeMetricsCard(context, appState),
                 const SizedBox(height: 16),
@@ -793,6 +752,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  // ✅ 측정 버튼 (BleService 연동)
   Widget _buildMeasurementButton(BuildContext context, AppState appState) {
     final bool isMeasuring = appState.isMeasuring;
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
@@ -805,13 +765,76 @@ class HomeScreen extends StatelessWidget {
       children: [
         GestureDetector(
           onTap: () {
-            appState.toggleMeasurement(context);
+            final bleService = Provider.of<BleService>(context, listen: false);
 
-            if (appState.isMeasuring) {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) =>
-                      const SleepModeScreen(key: Key('sleepModeScreen')),
+            if (isMeasuring) {
+              // 측정 중지
+              showDialog(
+                context: context,
+                builder: (BuildContext dialogContext) {
+                  return AlertDialog(
+                    title: const Text('수면 측정 종료'),
+                    content: const Text('측정을 종료하고 기기 연결을 해제하시겠습니까?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: const Text('취소'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await bleService.stopDataCollectionAndDisconnect();
+                          appState.toggleMeasurement(context);
+                          Navigator.of(dialogContext).pop();
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('수면 측정 종료 및 기기 연결 해제 완료'),
+                                backgroundColor: Colors.blue,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text(
+                          '종료',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            } else {
+              // 측정 시작
+              if (!bleService.isPillowConnected &&
+                  !bleService.isWatchConnected) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('먼저 기기를 연결해주세요!'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              bleService.startDataCollection();
+              appState.toggleMeasurement(context);
+
+              if (appState.isMeasuring) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        const SleepModeScreen(key: Key('sleepModeScreen')),
+                  ),
+                );
+              }
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('수면 측정을 시작합니다 ✨'),
+                  backgroundColor: Colors.green,
                 ),
               );
             }

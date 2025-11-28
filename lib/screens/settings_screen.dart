@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/settings_state.dart';
+import '../state/profile_state.dart'; // ★ 추가: ProfileState 임포트
 import '../widgets/alarm_setting_widget.dart';
 import 'profile_screen.dart';
 import 'info_screen.dart';
@@ -18,59 +19,66 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // 임시 프로필 정보
-  final String _currentProfileName = "김지지";
-  final int _currentProfileAge = 28;
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('설정', style: AppTextStyles.heading1),
-                    Text(
-                      '앱 환경과 개인 설정을 관리하세요.',
-                      style: AppTextStyles.secondaryBodyText,
+    // ★ 수정: 전체를 Consumer<ProfileState>로 감싸서 프로필 변경 시 리빌드
+    return Consumer<ProfileState>(
+      builder: (context, profileState, child) {
+        // 현재 활성 프로필 정보 가져오기
+        final activeProfile = profileState.activeProfile;
+
+        return Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('설정', style: AppTextStyles.heading1),
+                        Text(
+                          '앱 환경과 개인 설정을 관리하세요.',
+                          style: AppTextStyles.secondaryBodyText,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 20),
+                // ★ 수정: 현재 활성 프로필 정보를 전달
+                _buildCurrentProfileCard(
+                  context,
+                  activeProfile.name,
+                  activeProfile.age,
+                ),
+                const SizedBox(height: 16),
+                _buildThemeSettingsCard(context),
+                const SizedBox(height: 16),
+                _buildAlarmSettingsCard(context),
+                const SizedBox(height: 16),
+                _buildNotificationSettingsCard(context),
+                const SizedBox(height: 16),
+                _buildInfoCard(context),
+              ],
             ),
-            const SizedBox(height: 20),
-            _buildCurrentProfileCard(context),
-            const SizedBox(height: 16),
-            _buildThemeSettingsCard(context),
-            const SizedBox(height: 16),
-            _buildAlarmSettingsCard(context),
-            const SizedBox(height: 16),
-            _buildNotificationSettingsCard(context),
-            const SizedBox(height: 16),
-            _buildInfoCard(context),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildCurrentProfileCard(BuildContext context) {
+  // ★ 수정: 프로필 이름과 나이를 인자로 받음
+  Widget _buildCurrentProfileCard(BuildContext context, String name, int age) {
     return Card(
       child: InkWell(
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  const ProfileScreen(key: Key('profileScreen')),
-            ),
+            MaterialPageRoute(builder: (context) => const ProfileScreen()),
           );
         },
         borderRadius: BorderRadius.circular(12),
@@ -84,9 +92,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_currentProfileName, style: AppTextStyles.heading1),
+                    // ★ 수정: 인자로 받은 이름과 나이 표시
+                    Text(name, style: AppTextStyles.heading1),
                     const SizedBox(height: 4),
-                    Text('$_currentProfileAge세', style: AppTextStyles.bodyText),
+                    Text('$age세', style: AppTextStyles.bodyText),
                   ],
                 ),
               ),
@@ -139,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ✅ --- 알람 설정 카드 전체 수정 ---
+  // ✅--- 알람 설정 카드 전체 수정---
   Widget _buildAlarmSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -149,10 +158,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. 알람 시간 설정 위젯 (시간 + 메인 토글)
-                const AlarmSettingWidget(key: Key('alarmWidget')),
+                // 1. 알람 시간 설정 위젯(시간+ 메인 토글)
+                const AlarmSettingWidget(),
 
-                // ✅ --- 이 부분이 핵심 ---
+                // ✅--- 이 부분이 핵심---
                 // 메인 알람(_isAlarmOn)이 켜져 있을 때만
                 // 하위 옵션들을 보여줍니다.
                 if (settingsState.isAlarmOn)
@@ -198,7 +207,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                       // 4. "정확한 시간 알람" 옵션
                       _buildToggleRow(
-                        '정확한 시간 알람 (기본 진동)',
+                        '정확한 시간 알람(기본 진동)',
                         '수면 단계와 관계없이 설정된 시간에 진동이 울립니다.',
                         settingsState.isExactTimeAlarmOn,
                         settingsState.toggleExactTimeAlarm,
@@ -332,7 +341,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ✅ --- _buildToggleRow 수정 ---
+  // ✅--- _buildToggleRow 수정---
   Widget _buildToggleRow(
     String title,
     String subtitle,
@@ -361,7 +370,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             // 래퍼를 제거하고 함수를 직접 전달합니다.
-            // Switch의 onChanged는 Future<void>를 반환하는 함수를 처리할 수 있습니다.
+            // Switch의onChanged는Future<void>를 반환하는 함수를 처리할 수 있습니다.
             onChanged: onChanged,
             activeThumbColor: AppColors.primaryNavy,
           ),
