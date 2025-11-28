@@ -11,7 +11,6 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/app_state.dart';
 import '../state/settings_state.dart';
-// ✅ 올바른 임포트
 import '../providers/sleep_provider.dart';
 import '../models/sleep_report_model.dart';
 import 'sleep_mode_screen.dart';
@@ -24,13 +23,18 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // ✅ [테마 적용] 색상 팔레트 정의 (배경색 제외)
+  final Color _mainDeepColor = const Color(0xFF011F25);
+  final Color _lightSleepColor = const Color(0xFF1B4561);
+  // final Color _remSleepColor = const Color(0xFF6292BE); // 현재 사용 안함
+  final Color _awakeColor = const Color(0xFFBD9A8E);
+  final Color _themeLightGray = const Color(0xFFB5C1D4);
+
   @override
   void initState() {
     super.initState();
-    // 화면 로드 시 최신 수면 리포트 가져오기
     final sleepProvider = Provider.of<SleepProvider>(context, listen: false);
-    // ✅ TODO: 실제 사용자의 ID나 마지막 세션 ID를 사용해야 합니다.
-    // 테스트를 위해 하드코딩된 세션 ID 사용. 실제 Firestore에 존재하는 ID로 교체 필요.
+    // TODO: 실제 사용자의 ID나 마지막 세션 ID를 사용해야 합니다.
     sleepProvider.fetchLatestSleepReport('your_test_session_id');
   }
 
@@ -41,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pushBurstData(BuildContext context, String label) async {
-    final String userId = "train_user_v3"; // v3 훈련용 ID
+    final String userId = "train_user_v3";
     final String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
 
     for (int i = 0; i < 10; i++) {
@@ -53,7 +57,6 @@ class _HomeScreenState extends State<HomeScreen> {
           micMax = 30,
           pressureMin = 500,
           pressureMax = 1000;
-
       switch (label) {
         case 'Awake':
           hrMin = 70;
@@ -126,7 +129,6 @@ class _HomeScreenState extends State<HomeScreen> {
           pressureMax = 500;
           break;
       }
-
       final Map<String, dynamic> data = {
         'hr': _randRange(hrMin, hrMax).toInt(),
         'spo2': _randRange(spo2Min, spo2Max),
@@ -137,7 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
         'sessionId': sessionId,
         'ts': FieldValue.serverTimestamp(),
       };
-
       try {
         await FirebaseFirestore.instance.collection('raw_data').add(data);
         if (i < 9) await Future.delayed(const Duration(seconds: 1));
@@ -146,12 +147,11 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       }
     }
-
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('✅ $label 훈련 데이터 (10건) 전송 완료'),
-          backgroundColor: Colors.green,
+          backgroundColor: _lightSleepColor,
         ),
       );
     }
@@ -160,10 +160,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Consumer2를 사용하여 AppState와 SleepProvider 모두 구독
     return Consumer2<AppState, SleepProvider>(
       builder: (context, appState, sleepProvider, child) {
         return Scaffold(
+          // ✅ 배경색을 원래대로 AppColors.background로 복원
+          backgroundColor: AppColors.background,
           appBar: _buildAppBar(context),
           body: _buildBody(context, appState, sleepProvider),
         );
@@ -221,38 +222,25 @@ class _HomeScreenState extends State<HomeScreen> {
     AppState appState,
     SleepProvider sleepProvider,
   ) {
-    // 🔥 중요 변경: 에러가 있어도 기본 화면 구조는 유지합니다.
-    // 에러 처리는 _buildSummaryCard 내부로 이동했습니다.
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. 측정 시작/중지 버튼 (AppState 연동)
           Center(child: _buildMeasurementButton(context, appState)),
           const SizedBox(height: 24),
-
-          // 2. [개발용] 데이터 생성기 버튼들
           _buildDevTools(context),
           const SizedBox(height: 24),
-
-          // 3. Firestore 실시간 상태 스트림 (측정 중에만 표시)
           _buildRealTimeStatusStream(context, appState),
-
           const SizedBox(height: 16),
-
-          // 4. 최신 수면 리포트 요약 카드 (백엔드 데이터 연동)
-          // ✅ sleepProvider 자체를 넘겨서 내부에서 상태를 처리하도록 합니다.
-          _buildSummaryCard(context, sleepProvider),
+          // ✅ 수정됨: context 전달 제거
+          _buildSummaryCard(sleepProvider),
           const SizedBox(height: 16),
-
-          // 5. 기타 정보 카드 (현재는 하드코딩된 데이터, 추후 연동 필요)
-          _buildPlaceholderInfoCards(context),
+          // ✅ 수정됨: context 전달 제거
+          _buildPlaceholderInfoCards(),
           const SizedBox(height: 24),
-
-          // 6. 기기 상태 카드 (현재는 하드코딩된 데이터)
-          _buildDeviceCards(context),
+          // ✅ 수정됨: context 전달 제거
+          _buildDeviceCards(),
         ],
       ),
     );
@@ -267,9 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final descriptionText = isMeasuring
         ? '수면을 측정하고 있습니다.'
         : '버튼을 눌러 수면 측정을 시작하세요.';
-    final buttonColor = isMeasuring
-        ? AppColors.errorRed
-        : AppColors.primaryNavy;
+    // ✅ [테마 적용] 측정 중(_awakeColor), 대기 중(_mainDeepColor)
+    final buttonColor = isMeasuring ? _awakeColor : _mainDeepColor;
 
     return Column(
       children: [
@@ -331,15 +318,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ])
                 ElevatedButton(
                   onPressed: () => _pushBurstData(context, label),
-                  style: ['Snoring', 'Tossing', 'Apnea'].contains(label)
-                      ? ElevatedButton.styleFrom(
-                          backgroundColor: label == 'Snoring'
-                              ? Colors.teal
-                              : label == 'Tossing'
-                              ? Colors.brown
-                              : Colors.red[700],
-                        )
-                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: label == 'Apnea'
+                        ? _awakeColor
+                        : label == 'Snoring'
+                        ? _lightSleepColor
+                        : _mainDeepColor,
+                    foregroundColor: Colors.white,
+                  ),
                   child: Text(label),
                 ),
             ],
@@ -354,13 +340,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 3. 실시간 상태 스트림 빌더 (Firestore 연동)
+  // 3. 실시간 상태 스트림 빌더
   Widget _buildRealTimeStatusStream(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
       return const SizedBox.shrink();
     }
 
-    // TODO: 실제 실시간 데이터를 스트리밍할 사용자 ID로 변경해야 합니다.
     final Stream<DocumentSnapshot> sleepStatusStream = FirebaseFirestore
         .instance
         .collection('processed_data')
@@ -371,17 +356,14 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: sleepStatusStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: SpinKitFadingCircle(
-              color: AppColors.primaryNavy,
-              size: 30.0,
-            ),
+          return Center(
+            child: SpinKitFadingCircle(color: _mainDeepColor, size: 30.0),
           );
         }
         if (snapshot.hasError) {
           return Text(
             '데이터 로딩 실패: ${snapshot.error}',
-            style: const TextStyle(color: AppColors.errorRed),
+            style: TextStyle(color: _awakeColor),
           );
         }
         if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -391,12 +373,9 @@ class _HomeScreenState extends State<HomeScreen> {
         Map<String, dynamic> data =
             snapshot.data!.data() as Map<String, dynamic>;
 
-        String currentStatus =
-            data['stage'] ?? '분석 중'; // 'status' -> 'stage'로 변경됨
+        String currentStatus = data['stage'] ?? '분석 중';
         double heartRate = (data['heart_rate'] as num?)?.toDouble() ?? 0.0;
         double spo2 = (data['spo2'] as num?)?.toDouble() ?? 0.0;
-
-        IconData statusIcon = _getIconForStatus(currentStatus);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,7 +387,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(statusIcon, color: AppColors.primaryNavy, size: 30),
+                    Icon(
+                      _getIconForStatus(currentStatus),
+                      color: _mainDeepColor,
+                      size: 30,
+                    ),
                     const SizedBox(width: 12),
                     Text(
                       '현재 수면 상태: $currentStatus',
@@ -431,15 +414,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       label: '심박수',
                       value: heartRate.toStringAsFixed(0),
                       unit: 'BPM',
-                      color: AppColors.errorRed,
-                      isAnimated: true, // ✅ 여기에 true를 추가해서 애니메이션을 켭니다!
+                      color: _awakeColor,
+                      isAnimated: true,
                     ),
                     _buildMetricItem(
                       icon: Icons.opacity,
                       label: '산소포화도',
                       value: spo2.toStringAsFixed(0),
                       unit: '%',
-                      color: AppColors.primaryNavy,
+                      color: _mainDeepColor,
                     ),
                   ],
                 ),
@@ -451,26 +434,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 4. 최신 수면 리포트 요약 카드 (백엔드 데이터 사용)
-  // 🔥 중요 변경: SleepProvider를 받아서 내부에서 로딩/에러/데이터 상태를 처리합니다.
-  Widget _buildSummaryCard(BuildContext context, SleepProvider sleepProvider) {
-    // 1. 로딩 중일 때
+  // 4. 최신 수면 리포트 요약 카드
+  // ✅ 수정됨: context 매개변수 제거
+  Widget _buildSummaryCard(SleepProvider sleepProvider) {
     if (sleepProvider.isLoading) {
-      return const Card(
+      return Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20.0),
           child: Center(
-            child: SpinKitFadingCircle(
-              color: AppColors.primaryNavy,
-              size: 30.0,
-            ),
+            child: SpinKitFadingCircle(color: _mainDeepColor, size: 30.0),
           ),
         ),
       );
     }
 
-    // 2. 에러가 발생했을 때 (image_0.png 상황)
     if (sleepProvider.errorMessage != null) {
       return Card(
         margin: EdgeInsets.zero,
@@ -478,8 +456,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(20.0),
           child: Center(
             child: Text(
-              sleepProvider.errorMessage!, // 에러 메시지 표시
-              style: const TextStyle(color: AppColors.errorRed),
+              sleepProvider.errorMessage!,
+              style: TextStyle(color: _awakeColor),
               textAlign: TextAlign.center,
             ),
           ),
@@ -489,7 +467,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final report = sleepProvider.latestSleepReport;
 
-    // 3. 데이터가 없을 때 (에러는 아니지만 데이터가 없는 경우)
     if (report == null) {
       return Card(
         margin: EdgeInsets.zero,
@@ -505,9 +482,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // 4. 데이터가 정상적으로 있을 때
     final summary = report.summary;
     final dateFormat = DateFormat('MM/dd HH:mm');
+    final scoreColor = report.totalScore >= 80 ? _mainDeepColor : _awakeColor;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -529,11 +506,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 8),
             Text(
               '${report.totalScore}점 (${report.grade}등급)',
-              style: AppTextStyles.heading2.copyWith(
-                color: report.totalScore >= 80
-                    ? AppColors.successGreen
-                    : AppColors.warningOrange,
-              ),
+              style: AppTextStyles.heading2.copyWith(color: scoreColor),
             ),
             const SizedBox(height: 4),
             Text(report.message, style: AppTextStyles.secondaryBodyText),
@@ -541,22 +514,20 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
+                // ✅ 수정됨: context 전달 제거
                 _buildSummaryItem(
                   '${summary.totalDurationHours.toStringAsFixed(1)}시간',
                   '총 수면',
-                  context,
                 ),
                 _buildSummaryItem(
                   '${summary.deepRatio.toStringAsFixed(1)}%',
                   '깊은 수면',
-                  context,
                 ),
                 _buildSummaryItem(
                   '${summary.remRatio.toStringAsFixed(1)}%',
                   'REM 수면',
-                  context,
                 ),
-                _buildSummaryItem('${summary.apneaCount}회', '무호흡', context),
+                _buildSummaryItem('${summary.apneaCount}회', '무호흡'),
               ],
             ),
           ],
@@ -565,25 +536,25 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 5. 플레이스홀더 정보 카드들 (목표 수면, 베개 높이 - 추후 실제 데이터 연동 필요)
-  Widget _buildPlaceholderInfoCards(BuildContext context) {
+  // 5. 플레이스홀더 정보 카드들
+  // ✅ 수정됨: context 매개변수 제거
+  Widget _buildPlaceholderInfoCards() {
     return Column(
       children: [
-        // 첫 번째 카드: 수면 시간
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: _buildAnimatedDonutContent(
               title: '목표: 8시간',
-              centerValue: '6시간 48분', // 예시 데이터
+              centerValue: '6시간 48분',
               footerLabel: '오늘의 수면 달성률',
-              progress: 0.85, // 85% 달성
+              progress: 0.85,
+              color: _lightSleepColor,
             ),
           ),
         ),
         const SizedBox(height: 16),
-        // 두 번째 카드: 베개 높이
         Card(
           margin: EdgeInsets.zero,
           child: Padding(
@@ -592,8 +563,8 @@ class _HomeScreenState extends State<HomeScreen> {
               title: '권장: 10~12cm',
               centerValue: '12cm',
               footerLabel: '현재 높이 상태',
-              progress: 0.6, // 적정 범위 내 위치 표시 (예시)
-              color: AppColors.successGreen, // 상태가 좋으면 초록색으로 표시해 볼까요?
+              progress: 0.6,
+              color: _lightSleepColor,
             ),
           ),
         ),
@@ -601,12 +572,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 6. 기기 상태 카드들 (플레이스홀더)
-  Widget _buildDeviceCards(BuildContext context) {
+  // 6. 기기 상태 카드들
+  // ✅ 수정됨: context 매개변수 제거
+  Widget _buildDeviceCards() {
     return Column(
       children: [
+        // ✅ 수정됨: context 전달 제거
         _buildDeviceCard(
-          context,
           deviceName: '스마트 베개 Pro',
           deviceType: '스마트 베개',
           isConnected: false,
@@ -614,8 +586,8 @@ class _HomeScreenState extends State<HomeScreen> {
           version: 'v1.0.0',
         ),
         const SizedBox(height: 16),
+        // ✅ 수정됨: context 전달 제거
         _buildDeviceCard(
-          context,
           deviceName: '수면 팔찌 Plus',
           deviceType: '스마트 팔찌',
           isConnected: false,
@@ -651,25 +623,22 @@ class _HomeScreenState extends State<HomeScreen> {
     required String value,
     required String unit,
     required Color color,
-    bool isAnimated = false, // ✅ 파라미터 추가 (기본값 false)
+    bool isAnimated = false,
   }) {
-    // ✅ 애니메이션 여부에 따라 아이콘 위젯 결정
     Widget iconWidget;
     if (isAnimated && icon == Icons.favorite) {
-      // 심박수이고 애니메이션이 켜져있으면 박동하는 하트 사용
       iconWidget = SpinKitPumpingHeart(
         color: color,
-        size: 30.0, // 아이콘보다 약간 키워서 박동감 강조
-        duration: const Duration(milliseconds: 1200), // 박동 속도 조절
+        size: 30.0,
+        duration: const Duration(milliseconds: 1200),
       );
     } else {
-      // 그 외에는 일반 정적 아이콘 사용
       iconWidget = Icon(icon, color: color, size: 28);
     }
 
     return Column(
       children: [
-        Icon(icon, color: color, size: 24),
+        iconWidget,
         const SizedBox(height: 8),
         Text(value, style: AppTextStyles.heading2.copyWith(color: color)),
         Text(unit, style: AppTextStyles.smallText),
@@ -679,7 +648,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSummaryItem(String value, String label, BuildContext context) {
+  // ✅ 수정됨: context 매개변수 제거
+  Widget _buildSummaryItem(String value, String label) {
     return Column(
       children: [
         Text(
@@ -695,99 +665,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildInfoCard(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Widget content,
-  }) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: AppColors.primaryNavy, size: 24),
-                const SizedBox(width: 8),
-                Text(title, style: AppTextStyles.heading3),
-              ],
-            ),
-            const SizedBox(height: 16),
-            content,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProgressBarContent({
-    required String current,
-    required String target,
-    required double progress,
-    required String startLabel,
-    required String endLabel,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              current,
-              style: AppTextStyles.heading1.copyWith(
-                color: AppColors.primaryNavy,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text('목표: $target', style: AppTextStyles.secondaryBodyText),
-          ],
-        ),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(
-          value: progress,
-          backgroundColor: AppColors.progressBackground,
-          color: AppColors.primaryNavy,
-          minHeight: 8,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(startLabel, style: AppTextStyles.secondaryBodyText),
-            Text(endLabel, style: AppTextStyles.secondaryBodyText),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildDeviceCard(
-    BuildContext context, {
+  // ✅ 수정됨: required BuildContext context 매개변수 제거
+  Widget _buildDeviceCard({
     required String deviceName,
     required String deviceType,
     required bool isConnected,
     required int batteryPercentage,
     required String version,
   }) {
+    final batteryColor = batteryPercentage > 20
+        ? _lightSleepColor
+        : _awakeColor;
+    final connectionColor = isConnected
+        ? _lightSleepColor
+        : AppColors.secondaryText;
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
-            Icon(
-              Icons.wifi,
-              color: isConnected
-                  ? AppColors.successGreen
-                  : AppColors.secondaryText,
-              size: 24,
-            ),
+            Icon(Icons.wifi, color: connectionColor, size: 24),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -811,9 +710,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       batteryPercentage > 20
                           ? Icons.battery_full
                           : Icons.battery_alert,
-                      color: batteryPercentage > 20
-                          ? AppColors.successGreen
-                          : AppColors.errorRed,
+                      color: batteryColor,
                       size: 20,
                     ),
                     const SizedBox(width: 4),
@@ -834,86 +731,78 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-}
-// lib/screens/home_screen.dart 맨 하단 헬퍼 함수 영역에 추가
 
-// ✅ 새로 추가되는 도넛 그래프 위젯 함수
-Widget _buildAnimatedDonutContent({
-  required String title,
-  required String centerValue,
-  required String footerLabel,
-  required double progress, // 0.0 ~ 1.0 사이의 값
-  Color color = AppColors.primaryNavy,
-}) {
-  return Row(
-    children: [
-      // 왼쪽: 텍스트 정보
-      Expanded(
-        flex: 3,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              centerValue,
-              style: AppTextStyles.heading2.copyWith(color: color),
-            ),
-            const SizedBox(height: 8),
-            Text(title, style: AppTextStyles.heading3),
-            const SizedBox(height: 8),
-            Text(footerLabel, style: AppTextStyles.secondaryBodyText),
-          ],
+  // 도넛 그래프 위젯
+  Widget _buildAnimatedDonutContent({
+    required String title,
+    required String centerValue,
+    required String footerLabel,
+    required double progress,
+    Color color = AppColors.primaryNavy,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                centerValue,
+                style: AppTextStyles.heading2.copyWith(color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(title, style: AppTextStyles.heading3),
+              const SizedBox(height: 8),
+              Text(footerLabel, style: AppTextStyles.secondaryBodyText),
+            ],
+          ),
         ),
-      ),
-      // 오른쪽: 애니메이션 도넛 그래프
-      Expanded(
-        flex: 2,
-        child: Center(
-          child: SizedBox(
-            width: 100, // 그래프 크기
-            height: 100,
-            // TweenAnimationBuilder가 값이 변할 때 애니메이션을 만들어줍니다.
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 0.0, end: progress),
-              duration: const Duration(
-                milliseconds: 1500,
-              ), // 애니메이션 지속 시간 (1.5초)
-              curve: Curves.easeOutCubic, // 자연스러운 속도 곡선
-              builder: (context, value, _) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 1. 배경이 되는 회색 원
-                    CircularProgressIndicator(
-                      value: 1.0,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.progressBackground,
+        Expanded(
+          flex: 2,
+          child: Center(
+            child: SizedBox(
+              width: 100,
+              height: 100,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: progress),
+                duration: const Duration(milliseconds: 1500),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: 1.0,
+                        // ✅ [테마 적용] 배경색 투명도 조절
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          _themeLightGray.withOpacity(0.3),
+                        ),
+                        strokeWidth: 12,
                       ),
-                      strokeWidth: 12,
-                    ),
-                    // 2. 실제 진행률을 보여주는 색상 원 (애니메이션 값 적용)
-                    CircularProgressIndicator(
-                      value: value, // 여기에 애니메이션 값이 들어갑니다.
-                      valueColor: AlwaysStoppedAnimation<Color>(color),
-                      strokeWidth: 12,
-                      strokeCap: StrokeCap.round, // 끝부분을 둥글게
-                    ),
-                    // 3. 가운데 퍼센트 텍스트
-                    Center(
-                      child: Text(
-                        '${(value * 100).toInt()}%',
-                        style: AppTextStyles.heading3.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: color,
+                      CircularProgressIndicator(
+                        value: value,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        strokeWidth: 12,
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Center(
+                        child: Text(
+                          '${(value * 100).toInt()}%',
+                          style: AppTextStyles.heading3.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }

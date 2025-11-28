@@ -28,6 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final activeProfile = profileState.activeProfile;
 
         return Scaffold(
+          // ✅ 배경색 변경 없음 (기본 배경 사용)
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(

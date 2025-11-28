@@ -31,6 +31,9 @@ class AppColors {
   static const Color remColor = secondaryText;
   static const Color awakeColor = errorRed;
 
+  // ✅ 이 부분을 추가해 주세요!
+  static const Color cardBorder = Color(0xFFE0E0E0); // 카드 테두리 색상 (연한 회색 예시)
+
   // ----------------------------------------------------
   // Dark Theme Colors
   // ----------------------------------------------------
