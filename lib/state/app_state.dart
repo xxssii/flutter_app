@@ -63,7 +63,7 @@ class AppState extends ChangeNotifier {
   double get currentHeartRate => _currentHeartRate;
   double get currentSpo2 => _currentSpo2;
   double get currentMovementScore => _currentMovementScore;
-  double get currentPressure => _bleService?.pressureValue ?? 0.0;
+  double get currentPressure => _bleService?.pressureAvg ?? 0.0;
   bool get isSnoringNow => _bleService?.isSnoring ?? false;
 
   void updateStates(BleService bleService, SettingsState settingsState) {
@@ -79,7 +79,7 @@ class AppState extends ChangeNotifier {
   void _onBleDataReceived() {
     if (!_isMeasuring) return;
 
-    final pressure = _bleService!.pressureValue;
+    final pressure = _bleService!.pressureAvg;
     final snoring = _bleService!.isSnoring;
     final timestamp = DateTime.now();
 
@@ -170,7 +170,7 @@ class AppState extends ChangeNotifier {
         now.minute == alarmTime.minute &&
         now.second == 0) {
       print("알람 시간 도달! (정확한 시간) 팔찌로 진동 명령 전송.");
-      Provider.of<BleService>(context, listen: false).sendVibrationCommand();
+      Provider.of<BleService>(context, listen: false).sendVibrateStrong();
     }
   }
 
@@ -325,24 +325,24 @@ class AppState extends ChangeNotifier {
         .limit(1)
         .snapshots() // 실시간 구독
         .listen(
-          (snapshot) {
-            print("📥 [DEBUG] Snapshot size: ${snapshot.docs.length}");
-            for (var doc in snapshot.docs) {
-              print("📄 [DEBUG] Doc: ${doc.id}, type: ${doc.data()['type']}");
-            }
+      (snapshot) {
+        print("📥 [DEBUG] Snapshot size: ${snapshot.docs.length}");
+        for (var doc in snapshot.docs) {
+          print("📄 [DEBUG] Doc: ${doc.id}, type: ${doc.data()['type']}");
+        }
 
-            if (snapshot.docs.isNotEmpty) {
-              var commandDoc = snapshot.docs.first;
-              print("🧠 [뇌로부터 새 명령 수신!] type: ${commandDoc.data()['type']}");
+        if (snapshot.docs.isNotEmpty) {
+          var commandDoc = snapshot.docs.first;
+          print("🧠 [뇌로부터 새 명령 수신!] type: ${commandDoc.data()['type']}");
 
-              // "몸"이 명령을 실행 (BLE로 베개에 쏘기)
-              _executePillowCommand(commandDoc);
-            }
-          },
-          onError: (error) {
-            print("❌ [DEBUG] Listen error: $error");
-          },
-        );
+          // "몸"이 명령을 실행 (BLE로 베개에 쏘기)
+          _executePillowCommand(commandDoc);
+        }
+      },
+      onError: (error) {
+        print("❌ [DEBUG] Listen error: $error");
+      },
+    );
   }
 
   /// 명령 실행 및 "DONE" 보고 함수

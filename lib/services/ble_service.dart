@@ -69,6 +69,9 @@ class BleService extends ChangeNotifier {
   // ==========================================
   // 2. 스캔
   // ==========================================
+  // ==========================================
+// 2. 스캔
+// ==========================================
   Future<void> startScan() async {
     if (kIsWeb) {
       _pillowStatus = "웹 환경: BLE 비활성화";
@@ -83,27 +86,53 @@ class BleService extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // ✅ 모든 기기 스캔 (UUID 필터 제거)
       await FlutterBluePlus.startScan(
-        withServices: [Guid(PILLOW_SERVICE_UUID), Guid(WRISTBAND_SERVICE_UUID)],
+        // withServices: [Guid(PILLOW_SERVICE_UUID), Guid(WRISTBAND_SERVICE_UUID)],
         timeout: const Duration(seconds: 15),
       );
 
       FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
-          // 베개 찾기
-          if (r.advertisementData.serviceUuids
-                  .contains(Guid(PILLOW_SERVICE_UUID)) &&
-              _pillowDevice == null) {
-            print("✅ 베개 발견: ${r.device.platformName}");
+          // ✅ 모든 발견된 기기 출력
+          print(
+              "📡 발견: 이름='${r.device.platformName}' ID='${r.device.remoteId}'");
+          print("   서비스 UUID: ${r.advertisementData.serviceUuids}");
+          print("   신호 세기: ${r.rssi} dBm");
+          print("---");
+
+          String deviceName = r.device.platformName.toLowerCase();
+
+          // ✅ 베개 찾기 (이름으로)
+          if (deviceName.contains("smartpillow") && _pillowDevice == null) {
+            print("✅✅✅ 베개 발견: ${r.device.platformName}");
             _pillowDevice = r.device;
             connectToPillow();
           }
 
-          // 팔찌 찾기
+          // ✅ 팔찌 찾기 (이름으로)
+          if ((deviceName.contains("watch") ||
+                  deviceName.contains("band") ||
+                  deviceName.contains("wristband")) &&
+              _watchDevice == null) {
+            print("✅✅✅ 팔찌 발견: ${r.device.platformName}");
+            _watchDevice = r.device;
+            connectToWatch();
+          }
+
+          // 기존 UUID 방식도 유지 (혹시 나중에 UUID가 나오면)
+          if (r.advertisementData.serviceUuids
+                  .contains(Guid(PILLOW_SERVICE_UUID)) &&
+              _pillowDevice == null) {
+            print("✅ 베개 발견 (UUID): ${r.device.platformName}");
+            _pillowDevice = r.device;
+            connectToPillow();
+          }
+
           if (r.advertisementData.serviceUuids
                   .contains(Guid(WRISTBAND_SERVICE_UUID)) &&
               _watchDevice == null) {
-            print("✅ 팔찌 발견: ${r.device.platformName}");
+            print("✅ 팔찌 발견 (UUID): ${r.device.platformName}");
             _watchDevice = r.device;
             connectToWatch();
           }

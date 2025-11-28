@@ -3,32 +3,322 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore 임포트
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart'; // ✅ 추가!
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../state/app_state.dart'; // ✅ DEMO_USER_ID를 가져오기 위해 임포트
+import '../state/app_state.dart';
 import '../state/settings_state.dart';
-import 'sleep_mode_screen.dart'; // s_main_moon.dart -> sleep_mode_screen.dart
+import 'sleep_mode_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  // --- "진짜 뇌" 훈련을 위한 데이터 생성 함수 (v3: "진짜" 범위 적용) ---
 
   static final _random = Random();
   static double _randRange(double min, double max) {
     return min + _random.nextDouble() * (max - min);
   }
 
-  /// [label]에 해당하는 "진짜" 센서 범위의 프로필을 10초간 1Hz로 전송합니다.
+  // ========================================
+  // ✨ 새로 추가된 함수: 7일치 테스트 데이터 생성
+  // ========================================
+  Future<void> _generateWeeklyTestData(BuildContext context) async {
+    if (!context.mounted) return;
+
+    // 로딩 다이얼로그 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('7일치 데이터 생성 중...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final now = DateTime.now();
+      int totalDataPoints = 0;
+
+      // 7일치 데이터 생성
+      for (int dayOffset = 6; dayOffset >= 0; dayOffset--) {
+        final date = now.subtract(Duration(days: dayOffset));
+        final dateString =
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        final sessionId = 'session-$dateString';
+        final userId = 'demo_user'; // 실제 userId로 변경 가능
+
+        print('📅 날짜: $dateString 데이터 생성 시작...');
+
+        // 수면 시작 시간 (22:00)
+        DateTime currentTime = DateTime(date.year, date.month, date.day, 22, 0);
+
+        // 8시간 수면 시뮬레이션 (1분 간격 = 480개 데이터)
+        final sleepCycle = _generateRealisticSleepCycle();
+
+        for (int minute = 0; minute < 480; minute++) {
+          final stage = sleepCycle[minute];
+          final data = _generateDataForStage(
+            stage: stage,
+            userId: userId,
+            sessionId: sessionId,
+            timestamp: currentTime,
+          );
+
+          await FirebaseFirestore.instance.collection('raw_data').add(data);
+          currentTime = currentTime.add(const Duration(minutes: 1));
+          totalDataPoints++;
+
+          // 100개마다 진행 상황 출력
+          if (totalDataPoints % 100 == 0) {
+            print('✅ $totalDataPoints개 데이터 저장됨...');
+          }
+        }
+
+        print('✅ $dateString 완료! (480개 데이터)');
+      }
+
+      // 완료 후 다이얼로그 닫기
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ 7일치 데이터 생성 완료! (총 $totalDataPoints개)'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+
+      print('🎉 전체 완료! 총 $totalDataPoints개 데이터 생성됨');
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 로딩 다이얼로그 닫기
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 데이터 생성 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ 오류 발생: $e');
+    }
+  }
+
+  // 현실적인 수면 사이클 생성 (480분 = 8시간)
+  List<String> _generateRealisticSleepCycle() {
+    final List<String> cycle = [];
+
+    // 22:00 - 23:00 (60분): Light (잠들기)
+    cycle.addAll(List.filled(60, 'Light'));
+
+    // 23:00 - 01:00 (120분): Deep (깊은 수면 1차)
+    cycle.addAll(List.filled(120, 'Deep'));
+
+    // 01:00 - 02:30 (90분): Light
+    cycle.addAll(List.filled(90, 'Light'));
+
+    // 02:30 - 03:00 (30분): REM (1차 렘수면)
+    cycle.addAll(List.filled(30, 'REM'));
+
+    // 03:00 - 04:30 (90분): Deep (2차 깊은 수면)
+    cycle.addAll(List.filled(90, 'Deep'));
+
+    // 04:30 - 05:00 (30분): Light
+    cycle.addAll(List.filled(30, 'Light'));
+
+    // 05:00 - 05:30 (30분): REM (2차 렘수면)
+    cycle.addAll(List.filled(30, 'REM'));
+
+    // 05:30 - 06:00 (30분): Light (깨어나기 전)
+    cycle.addAll(List.filled(30, 'Light'));
+
+    return cycle;
+  }
+
+  // 수면 단계에 맞는 센서 데이터 생성
+  Map<String, dynamic> _generateDataForStage({
+    required String stage,
+    required String userId,
+    required String sessionId,
+    required DateTime timestamp,
+  }) {
+    double hrMin,
+        hrMax,
+        spo2Min,
+        spo2Max,
+        micMin,
+        micMax,
+        pressureMin,
+        pressureMax;
+
+    switch (stage) {
+      case 'Light':
+        hrMin = 60;
+        hrMax = 70;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 10;
+        micMax = 40;
+        pressureMin = 500;
+        pressureMax = 1500;
+        break;
+      case 'Deep':
+        hrMin = 50;
+        hrMax = 60;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 5;
+        micMax = 20;
+        pressureMin = 100;
+        pressureMax = 500;
+        break;
+      case 'REM':
+        hrMin = 65;
+        hrMax = 75;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 5;
+        micMax = 20;
+        pressureMin = 100;
+        pressureMax = 500;
+        break;
+      default:
+        hrMin = 60;
+        hrMax = 70;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 10;
+        micMax = 30;
+        pressureMin = 500;
+        pressureMax = 1000;
+    }
+
+    return {
+      'hr': _randRange(hrMin, hrMax).toInt(),
+      'spo2': _randRange(spo2Min, spo2Max),
+      'mic_level': _randRange(micMin, micMax).toInt(),
+      'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
+      'userId': userId,
+      'sessionId': sessionId,
+      'ts': Timestamp.fromDate(timestamp),
+    };
+  }
+
+  // ========================================
+  // ✨ 테스트: 수면 점수 계산 Cloud Function 호출
+  // ========================================
+  Future<void> _testCalculateSleepScore(BuildContext context) async {
+    // 가장 최근 날짜의 sessionId
+    final now = DateTime.now();
+    final dateString =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final sessionId = 'session-$dateString';
+
+    print('🧪 테스트 시작: sessionId = $sessionId');
+
+    // 로딩 표시
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('수면 점수 계산 중...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      // Cloud Functions 호출
+      final functions =
+          FirebaseFunctions.instanceFor(region: 'asia-northeast3');
+      final callable = functions.httpsCallable('calculate_sleep_score');
+
+      final result = await callable.call({
+        'session_id': sessionId,
+      });
+
+      final data = result.data;
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop(); // 로딩 닫기
+
+      // 결과 표시
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('📊 수면 점수'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('세션: $sessionId', style: const TextStyle(fontSize: 12)),
+                const Divider(),
+                Text(
+                  '총점: ${data['total_score']}점',
+                  style: const TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                Text('등급: ${data['grade']}'),
+                Text('평가: ${data['message']}'),
+                const SizedBox(height: 16),
+                const Text('수면 요약:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('총 수면: ${data['summary']['total_duration_hours']}시간'),
+                Text('깊은 수면: ${data['summary']['deep_sleep_hours']}시간'),
+                Text('REM 수면: ${data['summary']['rem_sleep_hours']}시간'),
+                Text('얕은 수면: ${data['summary']['light_sleep_hours']}시간'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('확인'),
+            ),
+          ],
+        ),
+      );
+
+      print('✅ 테스트 성공!');
+      print('점수: ${data['total_score']}');
+      print('총 수면 시간: ${data['summary']['total_duration_hours']}시간');
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 로딩 닫기
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 오류 발생: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ 테스트 실패: $e');
+    }
+  }
+
+  // ========================================
+  // 기존 훈련 데이터 생성 함수
+  // ========================================
   Future<void> _pushBurstData(BuildContext context, String label) async {
-    final String userId = "train_user_v3"; // v3 훈련용 ID
+    final String userId = "train_user_v3";
     final String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
 
     for (int i = 0; i < 10; i++) {
-      // "진짜" 센서 범위(0-4095, 0-255) 기반 프로필 정의
-      // HR/SpO2는 표준 범위로 가정 (추후 수정 가능)
       double hrMin = 60,
           hrMax = 70,
           spo2Min = 96,
@@ -39,17 +329,17 @@ class HomeScreen extends StatelessWidget {
           pressureMax = 1000;
 
       switch (label) {
-        case 'Awake': // 깨어있음 (움직임 많음)
+        case 'Awake':
           hrMin = 70;
           hrMax = 90;
           spo2Min = 97;
           spo2Max = 99;
           micMin = 100;
-          micMax = 160; // 말소리/소음 (0-255)
+          micMax = 160;
           pressureMin = 1500;
-          pressureMax = 2500; // 뒤척임 (0-4095)
+          pressureMax = 2500;
           break;
-        case 'Light': // 얕은 잠 (약간의 움직임)
+        case 'Light':
           hrMin = 60;
           hrMax = 70;
           spo2Min = 96;
@@ -57,39 +347,39 @@ class HomeScreen extends StatelessWidget {
           micMin = 10;
           micMax = 40;
           pressureMin = 500;
-          pressureMax = 1500; // 약간의 뒤척임 (0-4095)
+          pressureMax = 1500;
           break;
-        case 'Deep': // 깊은 잠 (움직임 없음)
+        case 'Deep':
           hrMin = 50;
           hrMax = 60;
           spo2Min = 96;
           spo2Max = 98;
           micMin = 5;
-          micMax = 20; // 조용함
+          micMax = 20;
           pressureMin = 100;
-          pressureMax = 500; // 안정적 (0-4095)
+          pressureMax = 500;
           break;
-        case 'REM': // 렘수면 (★REM vs Light 구분점★)
+        case 'REM':
           hrMin = 65;
-          hrMax = 75; // 심박수는 Light와 비슷하게 활발
+          hrMax = 75;
           spo2Min = 96;
           spo2Max = 98;
           micMin = 5;
-          micMax = 20; // 조용함
+          micMax = 20;
           pressureMin = 100;
-          pressureMax = 500; // ★몸은 Deep처럼 안정적 (0-4095)
+          pressureMax = 500;
           break;
-        case 'Snoring': // ★ 코골이
+        case 'Snoring':
           hrMin = 65;
           hrMax = 80;
           spo2Min = 94;
           spo2Max = 97;
           micMin = 180;
-          micMax = 250; // 마이크 레벨 (0-255)
+          micMax = 250;
           pressureMin = 200;
-          pressureMax = 800; // 코골이 진동 (0-4095)
+          pressureMax = 800;
           break;
-        case 'Tossing': // ★ 뒤척임
+        case 'Tossing':
           hrMin = 70;
           hrMax = 85;
           spo2Min = 97;
@@ -97,27 +387,25 @@ class HomeScreen extends StatelessWidget {
           micMin = 20;
           micMax = 70;
           pressureMin = 3000;
-          pressureMax = 4095; // 압력 레벨 (0-4095)
+          pressureMax = 4095;
           break;
-        case 'Apnea': // ★ 무호흡
+        case 'Apnea':
           hrMin = 75;
-          hrMax = 90; // 심박수 상승 (보상 작용)
+          hrMax = 90;
           spo2Min = 80;
-          spo2Max = 90; // 산소포화도 (낮음)
+          spo2Max = 90;
           micMin = 0;
-          micMax = 10; // 조용함
+          micMax = 10;
           pressureMin = 100;
-          pressureMax = 500; // 안정적 (0-4095)
+          pressureMax = 500;
           break;
       }
 
       final Map<String, dynamic> data = {
-        // 4대 핵심 센서 데이터
         'hr': _randRange(hrMin, hrMax).toInt(),
         'spo2': _randRange(spo2Min, spo2Max),
         'mic_level': _randRange(micMin, micMax).toInt(),
         'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
-        // 훈련 및 메타 데이터
         'label': label,
         'userId': userId,
         'sessionId': sessionId,
@@ -153,7 +441,6 @@ class HomeScreen extends StatelessWidget {
       );
     }
   }
-  // --- 여기까지 ---
 
   @override
   Widget build(BuildContext context) {
@@ -168,12 +455,12 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '오늘 밤은 어떨까요?', // 멘트 수정됨
+                    '오늘 밤은 어떨까요?',
                     style: AppTextStyles.heading2.copyWith(fontSize: 22),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '수면 측정을 시작해 주세요.', // 멘트 수정됨
+                    '수면 측정을 시작해 주세요.',
                     style: AppTextStyles.secondaryBodyText.copyWith(
                       fontSize: 15,
                     ),
@@ -211,7 +498,77 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
 
-                // --- 훈련용 데이터 생성 버튼 (7개) ---
+                // ========================================
+                // ✨ 새로 추가된 버튼: 7일치 테스트 데이터 생성
+                // ========================================
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "--- [0단계] 테스트 데이터 생성 (날짜별 분리) ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: () => _generateWeeklyTestData(context),
+                        icon: const Icon(Icons.calendar_month),
+                        label: const Text('7일치 테스트 데이터 생성 (날짜별)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '각 날짜마다 다른 sessionId로 8시간 수면 데이터 생성',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+
+                      // ========================================
+                      // ✨ 테스트 버튼 추가
+                      // ========================================
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => _testCalculateSleepScore(context),
+                        icon: const Icon(Icons.analytics),
+                        label: const Text('📊 수면 점수 계산 테스트'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '가장 최근 세션의 수면 점수 계산',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 훈련용 데이터 생성 버튼 (7개)
                 const SizedBox(height: 24),
                 Center(
                   child: Column(
@@ -221,8 +578,6 @@ class HomeScreen extends StatelessWidget {
                         style: AppTextStyles.secondaryBodyText,
                       ),
                       const SizedBox(height: 12),
-
-                      // 7개 훈련용 버튼
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Awake'),
                         child: const Text('Awake 훈련 데이터 (10s)'),
@@ -239,9 +594,7 @@ class HomeScreen extends StatelessWidget {
                         onPressed: () => _pushBurstData(context, 'REM'),
                         child: const Text('REM 훈련 데이터 (10s)'),
                       ),
-
                       const SizedBox(height: 12),
-
                       ElevatedButton(
                         onPressed: () => _pushBurstData(context, 'Snoring'),
                         style: ElevatedButton.styleFrom(
@@ -263,7 +616,6 @@ class HomeScreen extends StatelessWidget {
                         ),
                         child: const Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
                       ),
-
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -288,7 +640,7 @@ class HomeScreen extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '8시간 38분', // (이 값은 리포트에서 가져와야 함)
+                            '8시간 38분',
                             style: AppTextStyles.heading1.copyWith(
                               color: AppColors.primaryNavy,
                             ),
@@ -332,7 +684,7 @@ class HomeScreen extends StatelessWidget {
                         textBaseline: TextBaseline.alphabetic,
                         children: [
                           Text(
-                            '12cm', // (이 값은 BLE/Firestore에서 가져와야 함)
+                            '12cm',
                             style: AppTextStyles.heading1.copyWith(
                               color: AppColors.primaryNavy,
                             ),
@@ -346,7 +698,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
-                        value: (12 - 8) / (16 - 8), // (임시 값)
+                        value: (12 - 8) / (16 - 8),
                         backgroundColor: AppColors.progressBackground,
                         color: AppColors.primaryNavy,
                         minHeight: 8,
@@ -364,26 +716,22 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                // ✅ 여기에서 version 값을 'v1.0.0'으로 전달
                 _buildDeviceCard(
                   context,
                   deviceName: '스마트 베개 Pro',
                   deviceType: '스마트 베개',
-                  isConnected:
-                      false, // (이 값은 BleService.isPillowConnected와 연동 필요)
+                  isConnected: false,
                   batteryPercentage: 87,
-                  version: 'v1.0.0', // ✅ Mock 버전 직접 주입!
+                  version: 'v1.0.0',
                 ),
                 const SizedBox(height: 16),
-                // ✅ 여기에서 version 값을 'v1.0.0'으로 전달
                 _buildDeviceCard(
                   context,
                   deviceName: '수면 팔찌 Plus',
                   deviceType: '스마트 팔찌',
-                  isConnected:
-                      false, // (이 값은 BleService.isWristbandConnected와 연동 필요)
+                  isConnected: false,
                   batteryPercentage: 73,
-                  version: 'v1.0.0', // ✅ Mock 버전 직접 주입!
+                  version: 'v1.0.0',
                 ),
                 const SizedBox(height: 24),
                 _buildSummaryCard(context),
@@ -448,12 +796,10 @@ class HomeScreen extends StatelessWidget {
   Widget _buildMeasurementButton(BuildContext context, AppState appState) {
     final bool isMeasuring = appState.isMeasuring;
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
-    final descriptionText = isMeasuring
-        ? '수면을 측정하고 있습니다.'
-        : '버튼을 눌러 수면 측정을 시작하세요.';
-    final buttonColor = isMeasuring
-        ? AppColors.errorRed
-        : AppColors.primaryNavy;
+    final descriptionText =
+        isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
+    final buttonColor =
+        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
 
     return Column(
       children: [
@@ -482,9 +828,9 @@ class HomeScreen extends StatelessWidget {
                 : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
           ),
         ),
-        SizedBox(height: 16),
+        const SizedBox(height: 16),
         Text(buttonText, style: AppTextStyles.heading2),
-        SizedBox(height: 8),
+        const SizedBox(height: 8),
         Text(descriptionText, style: AppTextStyles.secondaryBodyText),
       ],
     );
@@ -506,11 +852,11 @@ class HomeScreen extends StatelessWidget {
             Row(
               children: [
                 Icon(icon, color: AppColors.primaryNavy, size: 24),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Text(title, style: AppTextStyles.heading3),
               ],
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             content,
           ],
         ),
@@ -524,7 +870,7 @@ class HomeScreen extends StatelessWidget {
     required String deviceType,
     required bool isConnected,
     required int batteryPercentage,
-    required String version, // ✅ 이제 version 매개변수를 받습니다!
+    required String version,
   }) {
     return Card(
       margin: EdgeInsets.zero,
@@ -539,7 +885,7 @@ class HomeScreen extends StatelessWidget {
                   : AppColors.secondaryText,
               size: 24,
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -552,12 +898,11 @@ class HomeScreen extends StatelessWidget {
                 Text(deviceType, style: AppTextStyles.secondaryBodyText),
               ],
             ),
-            Spacer(),
-            // ✅ 연결 상태에 따라 배터리 및 버전 표시 여부 변경
+            const Spacer(),
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (isConnected) // 연결되었을 때만 배터리 아이콘과 % 표시
+                if (isConnected)
                   Row(
                     children: [
                       Icon(
@@ -569,16 +914,15 @@ class HomeScreen extends StatelessWidget {
                             : AppColors.errorRed,
                         size: 20,
                       ),
-                      SizedBox(width: 4),
+                      const SizedBox(width: 4),
                       Text(
                         '$batteryPercentage%',
                         style: AppTextStyles.secondaryBodyText,
                       ),
                     ],
                   ),
-                // ✅ 연결 상태에 따라 버전 또는 '미연결' 표시
                 Text(
-                  isConnected ? version : '미연결', // 연결되면 받은 version, 아니면 '미연결'
+                  isConnected ? version : '미연결',
                   style: AppTextStyles.smallText,
                 ),
               ],
@@ -598,7 +942,7 @@ class HomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('최근 수면 요약', style: AppTextStyles.heading3),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [

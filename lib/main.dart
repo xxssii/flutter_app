@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
-import 'package:flutter/foundation.dart'; // ✅ 웹 환경 체크(kIsWeb)를 위해 필수
+import 'package:flutter/foundation.dart'; // kIsWeb 사용을 위해 필요
 
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
@@ -24,20 +24,15 @@ import 'firebase_options.dart';
 // BLE
 import 'services/ble_service.dart';
 
-// 알림 및 시간대
+// ✅ 더미 알림 서비스 (에러 방지용)
 import 'services/notification_service.dart';
 
-// ⚠️ dart:io는 웹에서 직접 쓰면 에러가 나므로 조심해야 합니다.
 import 'dart:io' show Platform;
-
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Firebase 초기화 (에러 방지용 try-catch)
+  // 1. Firebase 초기화
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -46,13 +41,10 @@ Future<void> main() async {
     print("⚠️ Firebase 초기화 경고: $e");
   }
 
-  // 2. 알림 및 시간대 초기화 (웹 호환성 처리)
+  // 2. 초기화 설정 (웹이 아닐 때만 실행)
   try {
-    await _configureLocalTimeZone();
-
-    // ✅ [핵심] 웹이 아닐 때만(!kIsWeb) 알림 기능을 켭니다.
-    // 웹에서 NotificationService를 그냥 켜면 앱이 멈춥니다.
     if (!kIsWeb) {
+      // ✅ 더미 서비스 초기화 (다른 코드들이 의존하므로 호출 유지)
       await NotificationService.instance.init();
     }
   } catch (e) {
@@ -77,31 +69,6 @@ Future<void> main() async {
   );
 }
 
-// 로컬 시간대 설정 함수 (웹 에러 방지 수정)
-Future<void> _configureLocalTimeZone() async {
-  tz.initializeTimeZones();
-
-  // ✅ [핵심] 웹(Chrome)이라면 여기서 함수를 끝냅니다.
-  // 아래의 Platform 코드를 실행하면 앱이 죽기 때문입니다.
-  if (kIsWeb) {
-    print("🌐 웹 환경 감지: 모바일 전용 설정 건너뜀");
-    return;
-  }
-
-  // 여기부터는 모바일(앱)일 때만 실행됨
-  if (Platform.isAndroid ||
-      Platform.isIOS ||
-      Platform.isMacOS ||
-      Platform.isLinux) {
-    try {
-      final String timeZoneName = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(timeZoneName));
-    } catch (e) {
-      print("타임존 설정 실패: $e");
-    }
-  }
-}
-
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -115,19 +82,21 @@ class MyApp extends StatelessWidget {
 
           // --- 라이트 모드 테마 ---
           theme: ThemeData(
-            primarySwatch:
-                MaterialColor(AppColors.primaryNavy.value, const <int, Color>{
-                  50: Color(0xFFE3E3E8),
-                  100: Color(0xFFB8B8C2),
-                  200: Color(0xFF8A8A9B),
-                  300: Color(0xFF5C5C73),
-                  400: Color(0xFF3B3B57),
-                  500: AppColors.primaryNavy,
-                  600: Color(0xFF171734),
-                  700: Color(0xFF13132D),
-                  800: Color(0xFF0F0F26),
-                  900: Color(0xFF08081A),
-                }),
+            primarySwatch: MaterialColor(
+              AppColors.primaryNavy.value,
+              const <int, Color>{
+                50: Color(0xFFE3E3E8),
+                100: Color(0xFFB8B8C2),
+                200: Color(0xFF8A8A9B),
+                300: Color(0xFF5C5C73),
+                400: Color(0xFF3B3B57),
+                500: AppColors.primaryNavy,
+                600: Color(0xFF171734),
+                700: Color(0xFF13132D),
+                800: Color(0xFF0F0F26),
+                900: Color(0xFF08081A),
+              },
+            ),
             colorScheme: ColorScheme.fromSeed(
               seedColor: AppColors.primaryNavy,
               brightness: Brightness.light,
@@ -263,9 +232,8 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          themeMode: settingsState.isDarkMode
-              ? ThemeMode.dark
-              : ThemeMode.light,
+          themeMode:
+              settingsState.isDarkMode ? ThemeMode.dark : ThemeMode.light,
           home: const MainWrapper(),
         );
       },
@@ -293,12 +261,10 @@ class _MainWrapperState extends State<MainWrapper> {
   @override
   Widget build(BuildContext context) {
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final Color inactiveTextColor = isDarkMode
-        ? Colors.white
-        : Theme.of(context).colorScheme.onSurface;
-    final Color activeTitleColor = isDarkMode
-        ? Colors.white
-        : Theme.of(context).colorScheme.primary;
+    final Color inactiveTextColor =
+        isDarkMode ? Colors.white : Theme.of(context).colorScheme.onSurface;
+    final Color activeTitleColor =
+        isDarkMode ? Colors.white : Theme.of(context).colorScheme.primary;
 
     return Scaffold(
       body: _screens[_currentIndex],
@@ -316,9 +282,8 @@ class _MainWrapperState extends State<MainWrapper> {
             title: Text(
               'Main',
               style: TextStyle(
-                color: _currentIndex == 0
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color:
+                    _currentIndex == 0 ? activeTitleColor : inactiveTextColor,
               ),
             ),
             activeColor: Theme.of(context).colorScheme.primary,
@@ -329,9 +294,8 @@ class _MainWrapperState extends State<MainWrapper> {
             title: Text(
               'Sleep Report',
               style: TextStyle(
-                color: _currentIndex == 1
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color:
+                    _currentIndex == 1 ? activeTitleColor : inactiveTextColor,
               ),
             ),
             activeColor: Theme.of(context).colorScheme.primary,
@@ -342,9 +306,8 @@ class _MainWrapperState extends State<MainWrapper> {
             title: Text(
               'Pillow Control',
               style: TextStyle(
-                color: _currentIndex == 2
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color:
+                    _currentIndex == 2 ? activeTitleColor : inactiveTextColor,
               ),
             ),
             activeColor: Theme.of(context).colorScheme.primary,
@@ -355,9 +318,8 @@ class _MainWrapperState extends State<MainWrapper> {
             title: Text(
               'Settings',
               style: TextStyle(
-                color: _currentIndex == 3
-                    ? activeTitleColor
-                    : inactiveTextColor,
+                color:
+                    _currentIndex == 3 ? activeTitleColor : inactiveTextColor,
               ),
             ),
             activeColor: Theme.of(context).colorScheme.primary,
