@@ -33,16 +33,20 @@ class _PillowScreenState extends State<PillowScreen> {
     3: '높음 (약 14cm)',
   };
 
-  // ... (권한 요청 함수 _requestPermissions는 그대로 유지) ...
+
+
+  // ✅ 개선된 권한 요청 함수 (위치 권한 선택사항)
   Future<bool> _requestPermissions() async {
-    // (기존 코드와 동일)
     print("\n" + "=" * 50);
     print("📱 권한 요청 시작...");
     print("=" * 50);
 
+    // ✅ 필수 권한만 체크
     PermissionStatus bluetoothScan = await Permission.bluetoothScan.request();
-    PermissionStatus bluetoothConnect = await Permission.bluetoothConnect
-        .request();
+    PermissionStatus bluetoothConnect =
+        await Permission.bluetoothConnect.request();
+
+    // ✅ 위치는 선택사항으로 (Android 12 미만에서만 필요)
     PermissionStatus location = await Permission.location.request();
 
     print("\n📋 권한 상태:");
@@ -51,38 +55,98 @@ class _PillowScreenState extends State<PillowScreen> {
     print("   📍 location: $location (선택사항)");
     print("");
 
+    // ✅ 필수 권한만 확인 (위치는 제외)
     List<String> deniedPermissions = [];
-    if (!bluetoothScan.isGranted) deniedPermissions.add("블루투스 스캔");
-    if (!bluetoothConnect.isGranted) deniedPermissions.add("블루투스 연결");
+
+    if (!bluetoothScan.isGranted) {
+      deniedPermissions.add("블루투스 스캔");
+      print("   ❌ 블루투스 스캔 권한 거부됨");
+    }
+    if (!bluetoothConnect.isGranted) {
+      deniedPermissions.add("블루투스 연결");
+      print("   ❌ 블루투스 연결 권한 거부됨");
+    }
+
+    // ✅ 위치 권한은 경고만 출력
+    if (!location.isGranted) {
+      print("   ⚠️ 위치 권한 거부됨 (선택사항, Android 12+ 에서는 불필요)");
+    }
 
     if (deniedPermissions.isNotEmpty) {
       print("\n💥 거부된 필수 권한: ${deniedPermissions.join(', ')}");
       print("=" * 50 + "\n");
+
       if (mounted) {
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('권한이 필요합니다'),
-            content: Text('필수 권한이 거부되었습니다.\n설정에서 권한을 허용해주세요.'),
+            title: Row(
+              children: const [
+                Icon(Icons.warning_amber_rounded,
+                    color: Colors.orange, size: 28),
+                SizedBox(width: 8),
+                Text('권한이 필요합니다'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '다음 필수 권한이 거부되었습니다:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                ...deniedPermissions
+                    .map((perm) => Padding(
+                          padding: const EdgeInsets.only(left: 8, bottom: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.close,
+                                  color: Colors.red, size: 16),
+                              const SizedBox(width: 8),
+                              Text(perm),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+                const SizedBox(height: 16),
+                const Text(
+                  '앱 설정에서 권한을 허용해주세요.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text('취소'),
               ),
-              ElevatedButton(
+              ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
                   openAppSettings();
                 },
-                child: const Text('설정 열기'),
+                icon: const Icon(Icons.settings),
+                label: const Text('설정 열기'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryNavy,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ],
           ),
         );
       }
+
       return false;
     }
+
+    // ✅ 필수 권한(bluetoothScan, bluetoothConnect)만 허용되면 OK!
     print("✅ 필수 권한 허용됨! 스캔 가능!");
+    if (!location.isGranted) {
+      print("ℹ️ 위치 권한은 없지만 Android 12+ 에서는 문제없습니다.");
+    }
     print("=" * 50 + "\n");
     return true;
   }
@@ -177,6 +241,7 @@ class _PillowScreenState extends State<PillowScreen> {
               ],
             ),
             const SizedBox(height: 12),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -390,8 +455,6 @@ class _PillowScreenState extends State<PillowScreen> {
       ),
     );
   }
-
-  // ... (_buildAutoAdjustmentCard, _buildSleepModeSettings, _buildGuideCard는 그대로 유지) ...
   Widget _buildAutoAdjustmentCard(
     BuildContext context,
     SettingsState settingsState,
@@ -452,12 +515,9 @@ class _PillowScreenState extends State<PillowScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'REM 수면 단계',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text('REM 수면 단계',
+                      style: AppTextStyles.bodyText
+                          .copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
                     '꿈을 꾸는 단계에서 베개를 약간 낮춤',
@@ -476,12 +536,9 @@ class _PillowScreenState extends State<PillowScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '깊은 수면 단계',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text('깊은 수면 단계',
+                      style: AppTextStyles.bodyText
+                          .copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
                     '깊은 잠에서 최적의 높이 유지',
@@ -511,17 +568,13 @@ class _PillowScreenState extends State<PillowScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '스마트 조절 안내',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text('스마트 조절 안내',
+                      style: AppTextStyles.bodyText
+                          .copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(
-                    '자동 조절이 활성화되면 수면 단계를 감지하여 최적의 높이로 조절합니다. 조절 중에도 잠이 깨지 않도록 매우 부드럽게 움직입니다.',
-                    style: AppTextStyles.secondaryBodyText,
-                  ),
+                      '자동 조절이 활성화되면 수면 단계를 감지하여 최적의 높이로 조절합니다. 조절 중에도 잠이 깨지 않도록 매우 부드럽게 움직입니다.',
+                      style: AppTextStyles.secondaryBodyText),
                 ],
               ),
             ),

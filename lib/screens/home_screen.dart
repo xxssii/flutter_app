@@ -25,7 +25,6 @@ class HomeScreen extends StatelessWidget {
   final Color _remSleepColor = const Color(0xFF6292BE);
   final Color _awakeColor = const Color(0xFFBD9A8E);
   final Color _themeLightGray = const Color(0xFFB5C1D4);
-
   static final _random = Random();
   static double _randRange(double min, double max) {
     return min + _random.nextDouble() * (max - min);
@@ -288,6 +287,116 @@ class HomeScreen extends StatelessWidget {
           SnackBar(content: Text('❌ 오류 발생: $e'), backgroundColor: Colors.red),
         );
       }
+      print('❌ 직접 계산 실패: $e');
+    }
+  }
+
+  // ========================================
+  // 🔧 Cloud Functions 트리거 테스트
+  // ========================================
+  Future<void> _testOnNewDataTrigger(BuildContext context) async {
+    print('🔧 트리거 테스트 시작...');
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('트리거 테스트 중...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final now = DateTime.now();
+      final testSessionId = 'test-trigger-${now.millisecondsSinceEpoch}';
+
+      print('📝 raw_data에 테스트 데이터 추가 중...');
+
+      final docRef =
+          await FirebaseFirestore.instance.collection('raw_data').add({
+        'hr': 65,
+        'spo2': 97.5,
+        'mic_level': 20,
+        'pressure_level': 300,
+        'userId': 'test_user',
+        'sessionId': testSessionId,
+        'ts': Timestamp.now(),
+      });
+
+      print('✅ raw_data 추가 완료! docId: ${docRef.id}');
+
+      print('⏳ 5초 대기 중 (트리거 실행 시간)...');
+      await Future.delayed(const Duration(seconds: 5));
+
+      print('🔍 processed_data 확인 중...');
+
+      final processedQuery = await FirebaseFirestore.instance
+          .collection('processed_data')
+          .where('sessionId', isEqualTo: testSessionId)
+          .get();
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+
+      if (processedQuery.docs.isEmpty) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('❌ 트리거 작동 안 함'),
+            content: const Text('5초를 기다렸지만 processed_data에 데이터가 생성되지 않았습니다.\n\n'
+                'Cloud Functions의 on_new_data 트리거가 작동하지 않고 있습니다.\n\n'
+                '원인:\n'
+                '1. Functions 배포 안 됨\n'
+                '2. 트리거 설정 오류\n'
+                '3. 코드 오류'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+        print('❌ 트리거 작동 안 함!');
+      } else {
+        final processedDoc = processedQuery.docs.first;
+        final stage = processedDoc['stage'];
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('✅ 트리거 작동함!'),
+            content: Text('Cloud Functions가 정상 작동합니다!\n\n'
+                '분류된 단계: $stage\n\n'
+                'processed_data에 데이터가 생성되었습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+        print('✅ 트리거 작동함! stage: $stage');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 오류 발생: $e'),
+            backgroundColor: Colors.red,
+          ),
+
+        );
+      }
       print('❌ 테스트 실패: $e');
     }
   }
@@ -533,6 +642,31 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.grey,
                         ),
                       ),
+
+                      // ========================================
+                      // ✨ 새로 추가: 트리거 테스트 버튼
+                      // ========================================
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => _testOnNewDataTrigger(context),
+                        icon: const Icon(Icons.bug_report),
+                        label: const Text('🔧 Cloud Functions 트리거 테스트'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'raw_data에 1개 테스트 데이터 추가 (트리거 확인용)',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -697,7 +831,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 24),
                 _buildRealTimeMetricsCard(context, appState),
                 const SizedBox(height: 16),
@@ -769,12 +902,10 @@ class HomeScreen extends StatelessWidget {
   Widget _buildMeasurementButton(BuildContext context, AppState appState) {
     final bool isMeasuring = appState.isMeasuring;
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
-    final descriptionText = isMeasuring
-        ? '수면을 측정하고 있습니다.'
-        : '버튼을 눌러 수면 측정을 시작하세요.';
-    final buttonColor = isMeasuring
-        ? AppColors.errorRed
-        : AppColors.primaryNavy;
+    final descriptionText =
+        isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
+    final buttonColor =
+        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
 
     return Column(
       children: [
@@ -791,6 +922,12 @@ class HomeScreen extends StatelessWidget {
                     title: const Text('수면 측정 종료'),
                     content: const Text('측정을 종료하고 기기 연결을 해제하시겠습니까?'),
                     actions: [
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                        child: const Text('취소'),
+                      ),
                       TextButton(
                         onPressed: () {
                           // ✅ 수정됨: 데이터 수집만 중지하는 함수 호출
