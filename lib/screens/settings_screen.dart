@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/settings_state.dart';
-import '../state/profile_state.dart'; // ★ 추가: ProfileState 임포트
+import '../state/profile_state.dart';
 import '../widgets/alarm_setting_widget.dart';
 import 'profile_screen.dart';
 import 'info_screen.dart';
@@ -19,12 +19,14 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  // ✅ [테마 적용] 색상 팔레트 정의
+  // 요청하신 0xFF011F25 색상을 메인 강조 색상으로 사용합니다.
+  final Color _mainDeepColor = const Color(0xFF011F25);
+
   @override
   Widget build(BuildContext context) {
-    // ★ 수정: 전체를 Consumer<ProfileState>로 감싸서 프로필 변경 시 리빌드
     return Consumer<ProfileState>(
       builder: (context, profileState, child) {
-        // 현재 활성 프로필 정보 가져오기
         final activeProfile = profileState.activeProfile;
 
         return Scaffold(
@@ -50,7 +52,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                // ★ 수정: 현재 활성 프로필 정보를 전달
                 _buildCurrentProfileCard(
                   context,
                   activeProfile.name,
@@ -72,7 +73,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ★ 수정: 프로필 이름과 나이를 인자로 받음
   Widget _buildCurrentProfileCard(BuildContext context, String name, int age) {
     return Card(
       child: InkWell(
@@ -87,20 +87,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              const Icon(Icons.person, size: 40, color: AppColors.primaryNavy),
+              // ✅ [테마 적용] 아이콘 색상 변경
+              Icon(Icons.person, size: 40, color: _mainDeepColor),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ★ 수정: 인자로 받은 이름과 나이 표시
                     Text(name, style: AppTextStyles.heading1),
                     const SizedBox(height: 4),
                     Text('$age세', style: AppTextStyles.bodyText),
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios, size: 16),
+              // ✅ [테마 적용] 화살표 아이콘 색상 변경
+              Icon(Icons.arrow_forward_ios, size: 16, color: _mainDeepColor),
             ],
           ),
         ),
@@ -139,7 +140,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (bool value) {
                     settingsState.toggleDarkMode(value);
                   },
-                  activeThumbColor: AppColors.primaryNavy,
+                  // ✅ [테마 적용] 스위치 활성 색상 변경
+                  activeThumbColor: _mainDeepColor,
+                  activeTrackColor: _mainDeepColor.withOpacity(0.5),
                 ),
               ],
             ),
@@ -149,7 +152,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ✅--- 알람 설정 카드 전체 수정---
   Widget _buildAlarmSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -159,33 +161,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. 알람 시간 설정 위젯(시간+ 메인 토글)
                 const AlarmSettingWidget(),
-
-                // ✅--- 이 부분이 핵심---
-                // 메인 알람(_isAlarmOn)이 켜져 있을 때만
-                // 하위 옵션들을 보여줍니다.
                 if (settingsState.isAlarmOn)
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Divider(),
-
-                      // 2. 스마트 기상 마스터 토글
                       _buildToggleRow(
                         '스마트 기상',
                         '설정 시간 부근 얕은 수면 시 자연스럽게 깨워줍니다.',
                         settingsState.isSmartWakeUpOn,
                         settingsState.toggleSmartWakeUp,
                       ),
-
-                      // 3. 스마트 기상이 켜져 있을 때만 하위 옵션 표시
                       if (settingsState.isSmartWakeUpOn)
                         Padding(
-                          padding: const EdgeInsets.only(
-                            left: 16.0,
-                            top: 8.0,
-                          ), // 들여쓰기
+                          padding: const EdgeInsets.only(left: 16.0, top: 8.0),
                           child: Column(
                             children: [
                               _buildToggleRow(
@@ -203,17 +193,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ),
-
                       const Divider(),
-
-                      // 4. "정확한 시간 알람" 옵션
                       _buildToggleRow(
                         '정확한 시간 알람(기본 진동)',
                         '수면 단계와 관계없이 설정된 시간에 진동이 울립니다.',
                         settingsState.isExactTimeAlarmOn,
                         settingsState.toggleExactTimeAlarm,
                       ),
-                    ], // (if settingsState.isAlarmOn) Column
+                    ],
                   ),
               ],
             ),
@@ -223,6 +210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // ✅ 수정된 알림 설정 카드
   Widget _buildNotificationSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -232,40 +220,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('알림 설정', style: AppTextStyles.heading3),
+                // 🔔 직관적인 제목으로 변경
+                Text('푸시 알림 설정', style: AppTextStyles.heading3),
+                const SizedBox(height: 8),
+                Text(
+                  '중요한 수면 정보를 푸시 알림으로 받아보세요.',
+                  style: AppTextStyles.secondaryBodyText,
+                ),
                 const SizedBox(height: 16),
                 _buildToggleRow(
                   '수면 리포트 알림',
-                  '매일 아침 수면 리포트를 받습니다.',
+                  '매일 아침 수면 리포트가 도착하면 알림을 받습니다.',
                   settingsState.isReportOn,
                   settingsState.toggleReport,
                 ),
                 _buildToggleRow(
                   '수면 효율 알림',
-                  '수면 효율이 낮을 때 알림을 받습니다.',
+                  '수면 효율이 낮을 때 개선 팁 알림을 받습니다.',
                   settingsState.isEfficiencyOn,
                   settingsState.toggleEfficiency,
                 ),
                 _buildToggleRow(
                   '코골이 개선 알림',
-                  '코골이가 심할 때 알림을 받습니다.',
+                  '코골이가 심할 때 주의 알림을 받습니다.',
                   settingsState.isSnoringOn,
                   settingsState.toggleSnoring,
                 ),
-
                 _buildToggleRow(
                   '가이드 알림',
-                  '수면 가이드를 위한 팁을 받습니다.',
+                  '숙면을 위한 유용한 팁 알림을 받습니다.',
                   settingsState.isGuideOn,
                   settingsState.toggleGuide,
                 ),
 
-                // '지금 테스트 알림 받기' 버튼
-                if (settingsState.isGuideOn)
+                // 🔔 테스트 알림 버튼 추가
+                if (settingsState.isGuideOn) // 가이드 알림이 켜져있을 때만 테스트 버튼 표시
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0, left: 16.0),
                     child: ElevatedButton.icon(
                       onPressed: () {
+                        // 🔔 테스트 알림 발송 (시연용)
                         NotificationService.instance.showTestNotification();
                       },
                       icon: const Icon(
@@ -274,8 +268,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       label: const Text('지금 테스트 알림 받기'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryNavy.withOpacity(0.1),
-                        foregroundColor: AppColors.primaryNavy,
+                        // ✅ [테마 적용] 버튼 배경 및 텍스트 색상 변경
+                        backgroundColor: _mainDeepColor.withOpacity(0.1),
+                        foregroundColor: _mainDeepColor,
                         elevation: 0,
                       ),
                     ),
@@ -290,7 +285,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildInfoCard(BuildContext context) {
     return Card(
-      color: AppColors.primaryNavy.withOpacity(0.05),
+      // ✅ [테마 적용] 카드 배경색 변경
+      color: _mainDeepColor.withOpacity(0.05),
       child: InkWell(
         onTap: () {
           Navigator.push(
@@ -306,11 +302,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.info_outline,
-                color: AppColors.primaryNavy,
-                size: 24,
-              ),
+              // ✅ [테마 적용] 아이콘 색상 변경
+              Icon(Icons.info_outline, color: _mainDeepColor, size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -330,11 +323,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
-              const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: AppColors.secondaryText,
-              ),
+              // ✅ [테마 적용] 화살표 아이콘 색상 변경
+              Icon(Icons.arrow_forward_ios, size: 16, color: _mainDeepColor),
             ],
           ),
         ),
@@ -342,7 +332,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ✅--- _buildToggleRow 수정---
   Widget _buildToggleRow(
     String title,
     String subtitle,
@@ -370,10 +359,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Switch(
             value: value,
-            // 래퍼를 제거하고 함수를 직접 전달합니다.
-            // Switch의onChanged는Future<void>를 반환하는 함수를 처리할 수 있습니다.
             onChanged: onChanged,
-            activeThumbColor: AppColors.primaryNavy,
+            // ✅ [테마 적용] 스위치 활성 색상 변경
+            activeThumbColor: _mainDeepColor,
+            activeTrackColor: _mainDeepColor.withOpacity(0.5),
           ),
         ],
       ),

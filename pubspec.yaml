@@ -38,6 +38,7 @@ dependencies:
 
   # ✅ 날짜 포맷팅을 위해 intl 패키지 추가
   intl: ^0.20.2 # (최신 버전으로 업데이트)
+  permission_handler: ^12.0.1
 
 dev_dependencies:
   flutter_test:

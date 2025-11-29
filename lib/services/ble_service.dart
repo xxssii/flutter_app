@@ -37,6 +37,8 @@ class BleService extends ChangeNotifier {
   String _watchStatus = "팔찌 연결 끊김";
   bool _isPillowConnected = false;
   bool _isWatchConnected = false;
+  // ✅ 데이터 수집 제어 플래그
+  bool _isCollectingData = false;
 
   // 센서 데이터
   double pressure1 = 0.0;
@@ -58,13 +60,14 @@ class BleService extends ChangeNotifier {
   // Firebase
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   String userId = "demoUser";
-  String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
+  String sessionId = ""; // ✅ 빈 문자열로 초기화 (측정 시작할 때 생성)
 
   // Getters
   String get pillowConnectionStatus => _pillowStatus;
   String get watchConnectionStatus => _watchStatus;
   bool get isPillowConnected => _isPillowConnected;
   bool get isWatchConnected => _isWatchConnected;
+  bool get isCollectingData => _isCollectingData;
 
   // ==========================================
   // 2. 스캔
@@ -83,29 +86,51 @@ class BleService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await FlutterBluePlus.startScan(
-        withServices: [Guid(PILLOW_SERVICE_UUID), Guid(WRISTBAND_SERVICE_UUID)],
-        timeout: const Duration(seconds: 15),
-      );
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
 
       FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
-          // 베개 찾기
-          if (r.advertisementData.serviceUuids.contains(
-                Guid(PILLOW_SERVICE_UUID),
-              ) &&
-              _pillowDevice == null) {
-            print("✅ 베개 발견: ${r.device.platformName}");
+          print(
+            "📡 발견: 이름='${r.device.platformName}' ID='${r.device.remoteId}'",
+          );
+          print("   서비스 UUID: ${r.advertisementData.serviceUuids}");
+          print("   신호 세기: ${r.rssi} dBm");
+          print("---");
+
+          String deviceName = r.device.platformName.toLowerCase();
+
+          // ✅ 베개 찾기 (이름으로)
+          if (deviceName.contains("smartpillow") && _pillowDevice == null) {
+            print("✅✅✅ 베개 발견: ${r.device.platformName}");
             _pillowDevice = r.device;
             connectToPillow();
           }
 
-          // 팔찌 찾기
+          // ✅ 팔찌 찾기 (이름으로)
+          if ((deviceName.contains("watch") ||
+                  deviceName.contains("band") ||
+                  deviceName.contains("wristband")) &&
+              _watchDevice == null) {
+            print("✅✅✅ 팔찌 발견: ${r.device.platformName}");
+            _watchDevice = r.device;
+            connectToWatch();
+          }
+
+          // 기존 UUID 방식도 유지
+          if (r.advertisementData.serviceUuids.contains(
+                Guid(PILLOW_SERVICE_UUID),
+              ) &&
+              _pillowDevice == null) {
+            print("✅ 베개 발견 (UUID): ${r.device.platformName}");
+            _pillowDevice = r.device;
+            connectToPillow();
+          }
+
           if (r.advertisementData.serviceUuids.contains(
                 Guid(WRISTBAND_SERVICE_UUID),
               ) &&
               _watchDevice == null) {
-            print("✅ 팔찌 발견: ${r.device.platformName}");
+            print("✅ 팔찌 발견 (UUID): ${r.device.platformName}");
             _watchDevice = r.device;
             connectToWatch();
           }
@@ -268,7 +293,7 @@ class BleService extends ChangeNotifier {
 
               _subscribeToCharacteristic(c, (value) {
                 try {
-                  String rawData = String.fromCharCodes(value); // "3.95/87"
+                  String rawData = String.fromCharCodes(value);
                   List<String> values = rawData.split('/');
 
                   if (values.length >= 2) {
@@ -310,18 +335,15 @@ class BleService extends ChangeNotifier {
           print("✅ 팔찌 서비스 발견!");
 
           for (var c in s.characteristics) {
-            // 통합 데이터 (bpm, spo2, battery)
             if (c.uuid == Guid(WATCH_DATA_CHAR_UUID)) {
               _watchDataChar = c;
               print("✅ 팔찌 통합 데이터 특성 발견");
 
               _subscribeToCharacteristic(c, (value) {
                 try {
-                  // "bpm : 80, spo2 : 98, bat: 100" 파싱
                   String rawData = String.fromCharCodes(value);
                   print("📱 받은 데이터: $rawData");
 
-                  // 정규식으로 숫자 추출
                   RegExp bpmRegex = RegExp(r'bpm\s*:\s*(\d+)');
                   RegExp spo2Regex = RegExp(r'spo2\s*:\s*(\d+)');
                   RegExp batRegex = RegExp(r'bat:\s*(\d+)');
@@ -360,9 +382,36 @@ class BleService extends ChangeNotifier {
   }
 
   // ==========================================
+  // 데이터 수집 제어
+  // ==========================================
+
+  /// ✅ 데이터 수집 시작 (새로운 sessionId 생성!)
+  void startDataCollection() {
+    _isCollectingData = true;
+    // ✅ 새로운 세션 ID 생성!
+    sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
+    print("✅ 데이터 수집 시작! (sessionId: $sessionId)");
+    notifyListeners();
+  }
+
+  /// ✅ (수정됨) 데이터 수집만 종료 (연결은 유지)
+  void stopDataCollection() {
+    _isCollectingData = false;
+    print("⏹️ 데이터 수집 종료! (sessionId: $sessionId, 연결은 유지됨)");
+    // 연결 해제 코드(disconnectAll)를 제거했습니다.
+    notifyListeners();
+  }
+
+  // ==========================================
   // 7. Firebase 전송
   // ==========================================
   Future<void> _sendToFirebase() async {
+    // ✅ 데이터 수집 중이 아니면 전송하지 않음
+    if (!_isCollectingData) {
+      print("⏸️ 데이터 수집 중지 상태 - Firebase 전송 안 함");
+      return;
+    }
+
     if (heartRate == 0 && spo2 == 0 && pressureAvg == 0) {
       return;
     }
@@ -404,7 +453,6 @@ class BleService extends ChangeNotifier {
   // 8. 명령 전송
   // ==========================================
 
-  // 진동 명령 (강함)
   Future<void> sendVibrateStrong() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -412,14 +460,13 @@ class BleService extends ChangeNotifier {
     }
 
     try {
-      await _commandChar!.write([0x37], withoutResponse: true); // '7'
+      await _commandChar!.write([0x37], withoutResponse: true);
       print("📤 강한 진동 명령 전송 성공");
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");
     }
   }
 
-  // 진동 명령 (부드럽게)
   Future<void> sendVibrateGently() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -427,16 +474,15 @@ class BleService extends ChangeNotifier {
     }
 
     try {
-      await _commandChar!.write([0x37], withoutResponse: true); // '7'
+      await _commandChar!.write([0x37], withoutResponse: true);
       await Future.delayed(const Duration(milliseconds: 500));
-      await _commandChar!.write([0x38], withoutResponse: true); // '8'
+      await _commandChar!.write([0x38], withoutResponse: true);
       print("📤 부드러운 진동 명령 전송 성공");
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");
     }
   }
 
-  // 베개 높이 조절
   Future<void> adjustHeight(int cellNumber) async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -449,7 +495,6 @@ class BleService extends ChangeNotifier {
     }
 
     try {
-      // '1', '2', '3' = 셀 공기 주입
       int command = 0x30 + cellNumber;
       await _commandChar!.write([command], withoutResponse: true);
       print("📤 셀 $cellNumber 높이 조절 명령 전송");
@@ -458,7 +503,6 @@ class BleService extends ChangeNotifier {
     }
   }
 
-  // 전체 정지
   Future<void> stopAll() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -466,7 +510,7 @@ class BleService extends ChangeNotifier {
     }
 
     try {
-      await _commandChar!.write([0x30], withoutResponse: true); // '0'
+      await _commandChar!.write([0x30], withoutResponse: true);
       print("📤 전체 정지 명령 전송");
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");

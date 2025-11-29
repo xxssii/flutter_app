@@ -28,6 +28,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
   late Animation<double> _chartAnimation;
 
   int? _touchedTrendIndex;
+  // ✅ [추가] 막대 그래프에서 터치된 인덱스
+  int? _touchedBarIndex;
 
   // ✅ [수정됨] 요청하신 이미지의 색상 조합으로 변경
   // 깊은 수면 / 긍정적 지표 (#011F25)
@@ -126,6 +128,12 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
       if (_tabController.index != 2) {
         setState(() {
           _touchedTrendIndex = null;
+        });
+      }
+      // ✅ [추가] 탭 변경 시 막대 그래프 터치 초기화
+      if (_tabController.index != 0) {
+        setState(() {
+          _touchedBarIndex = null;
         });
       }
     });
@@ -421,6 +429,12 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
           children: [
             Text('누운 시간 vs 실 수면 시간', style: AppTextStyles.heading3),
             const SizedBox(height: 24),
+            // ✅ [추가] 터치 시 상세 정보 박스 표시
+            if (_touchedBarIndex != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: _buildBarChartTooltip(data[_touchedBarIndex!]),
+              ),
             SizedBox(
               height: 250,
               child: LayoutBuilder(
@@ -455,54 +469,77 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                             final targetActualWidth =
                                 (d['actual'] / maxHours) * availableWidth;
 
-                            return AnimatedBuilder(
-                              animation: _barChartAnimation,
-                              builder: (context, child) {
-                                final animationValue = _barChartAnimation.value;
-                                final currentTotalWidth =
-                                    targetTotalWidth * animationValue;
-                                final currentActualWidth =
-                                    targetActualWidth * animationValue;
-
-                                return Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 40,
-                                      child: Text(
-                                        d['date'],
-                                        style: AppTextStyles.smallText,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Stack(
-                                        alignment: Alignment.centerLeft,
-                                        children: [
-                                          // ✅ 테마 적용: 배경
-                                          Container(
-                                            height: 20,
-                                            width: currentTotalWidth,
-                                            decoration: BoxDecoration(
-                                              color: _themeLightGray,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          // ✅ 테마 적용: 전경
-                                          Container(
-                                            height: 20,
-                                            width: currentActualWidth,
-                                            decoration: BoxDecoration(
-                                              color: _mainDeepColor,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
+                            // ✅ [추가] 터치 감지를 위한 GestureDetector
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_touchedBarIndex == index) {
+                                    _touchedBarIndex = null; // 같은 것 터치 시 해제
+                                  } else {
+                                    _touchedBarIndex = index; // 터치 시 인덱스 저장
+                                  }
+                                });
                               },
+                              child: AnimatedBuilder(
+                                animation: _barChartAnimation,
+                                builder: (context, child) {
+                                  final animationValue =
+                                      _barChartAnimation.value;
+                                  final currentTotalWidth =
+                                      targetTotalWidth * animationValue;
+                                  final currentActualWidth =
+                                      targetActualWidth * animationValue;
+
+                                  return Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 40,
+                                        child: Text(
+                                          d['date'],
+                                          style: AppTextStyles.smallText
+                                              .copyWith(
+                                                // 터치된 항목 강조
+                                                fontWeight:
+                                                    _touchedBarIndex == index
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                                color: _touchedBarIndex == index
+                                                    ? AppColors.primaryNavy
+                                                    : AppColors.secondaryText,
+                                              ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Stack(
+                                          alignment: Alignment.centerLeft,
+                                          children: [
+                                            // ✅ 테마 적용: 배경
+                                            Container(
+                                              height: 20,
+                                              width: currentTotalWidth,
+                                              decoration: BoxDecoration(
+                                                color: _themeLightGray,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            // ✅ 테마 적용: 전경
+                                            Container(
+                                              height: 20,
+                                              width: currentActualWidth,
+                                              decoration: BoxDecoration(
+                                                color: _mainDeepColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
                             );
                           },
                         ),
@@ -537,6 +574,77 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ✅ [추가] 막대 차트 툴팁 박스 빌더
+  Widget _buildBarChartTooltip(Map<String, dynamic> data) {
+    final total = data['total'].toStringAsFixed(1);
+    final actual = data['actual'].toStringAsFixed(1);
+    final efficiency = ((data['actual'] / data['total']) * 100).toStringAsFixed(
+      0,
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        // 투명한 배경 박스
+        color: AppColors.primaryNavy.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primaryNavy.withOpacity(0.1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${data['date']} 상세 정보',
+                style: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '수면 효율: $efficiency%',
+                style: AppTextStyles.smallText.copyWith(
+                  color: AppColors.primaryNavy,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Column(
+                children: [
+                  _buildLegendItem(_themeLightGray, '누운 시간'),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${total}h',
+                    style: AppTextStyles.bodyText.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Column(
+                children: [
+                  _buildLegendItem(_mainDeepColor, '실 수면'),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${actual}h',
+                    style: AppTextStyles.bodyText.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
