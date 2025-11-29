@@ -51,17 +51,16 @@ Future<void> main() async {
     debugPrint('⚠️ 사용자 ID 생성 실패, demoUser 사용: $e');
   }
 
-  // 3. FCM 알림 서비스 초기화 (웹이 아닐 때만)
+  // 3. FCM 알림 서비스 초기화
   try {
-    if (!kIsWeb) {
-      // ✅ 실제 FCM 초기화 (userId는 로그인 후 업데이트 필요)
-      await NotificationService.instance.init(
-        userId: userId, // 자동 생성된 ID 사용!
-      );
-      debugPrint('✅ FCM 알림 서비스 초기화 완료!');
-    }
+    // ✅ 실제 FCM 초기화 (플랫폼 체크는 NotificationService 내부에서 처리)
+    await NotificationService.instance.init(
+      userId: userId, // 자동 생성된 ID 사용!
+    );
+    debugPrint('✅ 알림 서비스 초기화 완료!');
   } catch (e) {
-    debugPrint('⚠️ 알림 서비스 초기화 실패 (무시 가능): $e');
+    debugPrint('⚠️ 알림 서비스 초기화 실패: $e');
+    // Windows/Linux/macOS에서는 정상적으로 플랫폼 제한 메시지가 표시됩니다.
   }
 
   runApp(
