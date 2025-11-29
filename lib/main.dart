@@ -9,6 +9,7 @@ import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
 import 'screens/settings_screen.dart';
+import 'providers/sleep_provider.dart';
 
 import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
@@ -71,6 +72,8 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => SettingsState()),
         ChangeNotifierProvider(create: (_) => SleepDataState()),
         ChangeNotifierProvider(create: (_) => ProfileState()),
+        // ✅ [Fix] SleepProvider 추가
+        ChangeNotifierProvider(create: (_) => SleepProvider()),
         ChangeNotifierProxyProvider2<BleService, SettingsState, AppState>(
           create: (_) => AppState(),
           update: (context, bleService, settingsState, appState) =>

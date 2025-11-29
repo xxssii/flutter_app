@@ -261,8 +261,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
 
   Widget _buildTopSummaryCards(SleepReport report) {
     final summary = report.summary;
-    final efficiency =
-        (summary.deepSleepHours +
+    final efficiency = (summary.deepSleepHours +
             summary.remSleepHours +
             summary.lightSleepHours) /
         summary.totalDurationHours;
@@ -430,7 +429,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             Text('누운 시간 vs 실 수면 시간', style: AppTextStyles.heading3),
             const SizedBox(height: 24),
             // ✅ [추가] 터치 시 상세 정보 박스 표시
-            if (_touchedBarIndex != null)
+            if (_touchedBarIndex != null &&
+                _touchedBarIndex! < data.length) // data.length 범위 확인 추가
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: _buildBarChartTooltip(data[_touchedBarIndex!]),
@@ -496,17 +496,17 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                                         width: 40,
                                         child: Text(
                                           d['date'],
-                                          style: AppTextStyles.smallText
-                                              .copyWith(
-                                                // 터치된 항목 강조
-                                                fontWeight:
-                                                    _touchedBarIndex == index
+                                          style:
+                                              AppTextStyles.smallText.copyWith(
+                                            // 터치된 항목 강조
+                                            fontWeight:
+                                                _touchedBarIndex == index
                                                     ? FontWeight.bold
                                                     : FontWeight.normal,
-                                                color: _touchedBarIndex == index
-                                                    ? AppColors.primaryNavy
-                                                    : AppColors.secondaryText,
-                                              ),
+                                            color: _touchedBarIndex == index
+                                                ? AppColors.primaryNavy
+                                                : AppColors.secondaryText,
+                                          ),
                                         ),
                                       ),
                                       Expanded(
@@ -705,8 +705,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     curve: Curves.easeOutCubic,
                     builder: (context, value, _) {
                       final deepEnd = summary.deepRatio * value;
-                      final lightEnd =
-                          deepEnd +
+                      final lightEnd = deepEnd +
                           (summary.lightSleepHours /
                                   summary.totalDurationHours) *
                               value;
@@ -916,34 +915,34 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     enabled: true,
                     touchCallback:
                         (FlTouchEvent event, LineTouchResponse? touchResponse) {
-                          if (event is FlTapUpEvent ||
-                              event is FlPanEndEvent ||
-                              touchResponse == null ||
-                              touchResponse.lineBarSpots == null ||
-                              touchResponse.lineBarSpots!.isEmpty) {
-                            setState(() {
-                              _touchedTrendIndex = null;
-                            });
-                          } else {
-                            setState(() {
-                              _touchedTrendIndex =
-                                  touchResponse.lineBarSpots![0].spotIndex;
-                            });
-                          }
-                        },
+                      if (event is FlTapUpEvent ||
+                          event is FlPanEndEvent ||
+                          touchResponse == null ||
+                          touchResponse.lineBarSpots == null ||
+                          touchResponse.lineBarSpots!.isEmpty) {
+                        setState(() {
+                          _touchedTrendIndex = null;
+                        });
+                      } else {
+                        setState(() {
+                          _touchedTrendIndex =
+                              touchResponse.lineBarSpots![0].spotIndex;
+                        });
+                      }
+                    },
                     handleBuiltInTouches: true,
                     getTouchedSpotIndicator:
                         (LineChartBarData barData, List<int> spotIndexes) {
-                          return spotIndexes.map((index) {
-                            return TouchedSpotIndicatorData(
-                              FlLine(
-                                color: AppColors.secondaryText.withOpacity(0.5),
-                                strokeWidth: 1,
-                              ),
-                              FlDotData(show: false),
-                            );
-                          }).toList();
-                        },
+                      return spotIndexes.map((index) {
+                        return TouchedSpotIndicatorData(
+                          FlLine(
+                            color: AppColors.secondaryText.withOpacity(0.5),
+                            strokeWidth: 1,
+                          ),
+                          FlDotData(show: false),
+                        );
+                      }).toList();
+                    },
                     touchTooltipData: LineTouchTooltipData(
                       getTooltipColor: (LineBarSpot touchedSpot) =>
                           Colors.transparent,
