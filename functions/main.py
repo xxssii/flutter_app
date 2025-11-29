@@ -414,7 +414,7 @@ def create_command_for_stage(db: gcf.Client, user_id: str, session_id: str, stab
 options.set_global_options(region="asia-northeast3")
 
 # 이벤트 구독 리전(Eventarc/Firestore 위치): asia-northeast3 (프로젝트 Firestore가 서울)
-@firestore_fn.on_document_created(document="raw_data/{docId}", region="asia-northeast3")
+@firestore_fn.on_document_created(document="raw_sensor_data/{docId}", region="asia-northeast3")
 def on_new_data(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None]):
     db = get_db()
 

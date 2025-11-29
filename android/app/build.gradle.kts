@@ -45,7 +45,7 @@ flutter {
 }
 
 dependencies {
-    // ✅ Desugaring 라이브러리
+    // ✅ Desugaring 라이브러리 (flutter_local_notifications 요구사항: 2.1.4+)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
     // Firebase

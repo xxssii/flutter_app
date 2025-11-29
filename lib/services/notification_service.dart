@@ -1,5 +1,6 @@
 // lib/services/notification_service.dart
 
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -38,6 +39,23 @@ class NotificationService {
   bool _isInitialized = false;
 
   // ========================================
+  // 🔍 플랫폼 지원 체크
+  // ========================================
+  /// FCM이 현재 플랫폼에서 지원되는지 확인
+  /// FCM은 Android, iOS, Web에서만 지원됩니다
+  bool _isFCMSupported() {
+    if (kIsWeb) return true; // 웹은 지원
+    
+    try {
+      // Android 또는 iOS만 FCM 지원
+      return Platform.isAndroid || Platform.isIOS;
+    } catch (e) {
+      // Platform을 사용할 수 없는 경우 (웹 등)
+      return kIsWeb;
+    }
+  }
+
+  // ========================================
   // ✨ 1. 초기화 (Firebase + 로컬 알림)
   // ========================================
   Future<void> init({String? userId}) async {
@@ -48,6 +66,22 @@ class NotificationService {
 
     try {
       debugPrint('🔔 알림 서비스 초기화 시작...');
+
+      // ✅ 플랫폼 체크: FCM 지원 확인
+      final fcmSupported = _isFCMSupported();
+      
+      if (!fcmSupported) {
+        debugPrint('ℹ️ FCM은 현재 플랫폼(Windows/Linux/macOS)에서 지원되지 않습니다.');
+        debugPrint('ℹ️ 로컬 알림만 초기화합니다. (FCM은 Android/iOS/Web에서만 지원됩니다)');
+        
+        // 로컬 알림만 초기화
+        await _initializeLocalNotifications();
+        _isInitialized = true;
+        debugPrint('✅ 알림 서비스 초기화 완료 (로컬 알림만)');
+        return;
+      }
+
+      // ============ FCM 지원 플랫폼 (Android/iOS/Web)에서만 실행 ============
 
       // 1-1. 알림 권한 요청 (iOS)
       final settings = await _fcm.requestPermission(
@@ -101,6 +135,7 @@ class NotificationService {
       debugPrint('✅ 알림 서비스 초기화 완료!');
     } catch (e) {
       debugPrint('❌ 알림 서비스 초기화 실패: $e');
+      rethrow; // 에러를 다시 throw하여 상위에서 처리 가능하게 함
     }
   }
 
@@ -139,9 +174,18 @@ class NotificationService {
       requestSoundPermission: true,
     );
 
+    // Windows 설정 추가 (Windows에서 필수)
+    // GUID는 Windows 알림을 앱과 연결하기 위한 고유 ID입니다
+    const windowsSettings = WindowsInitializationSettings(
+      appName: 'Smart Sleep Care',
+      appUserModelId: 'com.smartsleepcare.app',
+      guid: '3F2504E0-4F89-11D3-9A0C-0305E82C3301', // 앱 고유 GUID
+    );
+
     const initSettings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
+      windows: windowsSettings, // ✅ Windows 설정 추가
     );
 
     await _flutterLocalNotificationsPlugin.initialize(
