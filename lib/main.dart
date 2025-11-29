@@ -3,15 +3,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
-import 'package:flutter/foundation.dart'; // kIsWeb 사용을 위해 필요
+import 'package:flutter/foundation.dart'; // kIsWeb 사용
 
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
 import 'screens/pillow_screen.dart';
-import 'screens/settings_screen.dart'; // ✅ "as screen" 제거!
+import 'screens/settings_screen.dart';
 
 import 'utils/app_colors.dart';
 import 'utils/app_text_styles.dart';
+import 'utils/user_id_helper.dart';
+
 import 'state/app_state.dart';
 import 'state/settings_state.dart';
 import 'state/sleep_data_state.dart';
@@ -24,7 +26,7 @@ import 'firebase_options.dart';
 // BLE
 import 'services/ble_service.dart';
 
-// ✅ 더미 알림 서비스 (에러 방지용)
+// ✅ 실제 FCM 알림 서비스
 import 'services/notification_service.dart';
 
 import 'dart:io' show Platform;
@@ -37,18 +39,29 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    debugPrint('✅ Firebase 초기화 성공!');
   } catch (e) {
-    print("⚠️ Firebase 초기화 경고: $e");
+    debugPrint('⚠️ Firebase 초기화 경고: $e');
+  }
+  String userId = 'demoUser'; // 기본값
+  try {
+    userId = await UserIdHelper.getUserId();
+    debugPrint('✅ 사용자 ID: $userId');
+  } catch (e) {
+    debugPrint('⚠️ 사용자 ID 생성 실패, demoUser 사용: $e');
   }
 
-  // 2. 초기화 설정 (웹이 아닐 때만 실행)
+  // 3. FCM 알림 서비스 초기화 (웹이 아닐 때만)
   try {
     if (!kIsWeb) {
-      // ✅ 더미 서비스 초기화 (다른 코드들이 의존하므로 호출 유지)
-      await NotificationService.instance.init();
+      // ✅ 실제 FCM 초기화 (userId는 로그인 후 업데이트 필요)
+      await NotificationService.instance.init(
+        userId: userId, // 자동 생성된 ID 사용!
+      );
+      debugPrint('✅ FCM 알림 서비스 초기화 완료!');
     }
   } catch (e) {
-    print("⚠️ 초기화 설정 중 오류 (무시 가능): $e");
+    debugPrint('⚠️ 알림 서비스 초기화 실패 (무시 가능): $e');
   }
 
   runApp(
@@ -255,7 +268,7 @@ class _MainWrapperState extends State<MainWrapper> {
     const HomeScreen(key: Key('homeScreen')),
     const data_screen.DataScreen(key: Key('dataScreen')),
     const PillowScreen(key: Key('pillowScreen')),
-    const SettingsScreen(key: Key('settingsScreen')), // ✅ "screen." 제거!
+    const SettingsScreen(key: Key('settingsScreen')),
   ];
 
   @override

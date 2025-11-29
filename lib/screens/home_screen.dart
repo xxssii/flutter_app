@@ -188,7 +188,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ========================================
-  // ✨ 수면 점수 계산 테스트
+  // ✨ 테스트: raw_data에서 직접 수면 점수 계산
   // ========================================
   Future<void> _testCalculateSleepScore(BuildContext context) async {
     final now = DateTime.now();
@@ -207,22 +207,162 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('수면 점수 계산 중...'),
+            Text('수면 데이터 분석 중...'),
           ],
         ),
       ),
     );
 
     try {
-      final functions =
-          FirebaseFunctions.instanceFor(region: 'asia-northeast3');
-      final callable = functions.httpsCallable('calculate_sleep_score');
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('raw_data')
+          .where('sessionId', isEqualTo: sessionId)
+          .get();
 
-      final result = await callable.call({
-        'session_id': sessionId,
-      });
+      final sortedDocs = querySnapshot.docs.toList()
+        ..sort((a, b) {
+          final aTime = (a['ts'] as Timestamp).toDate();
+          final bTime = (b['ts'] as Timestamp).toDate();
+          return aTime.compareTo(bTime);
+        });
 
-      final data = result.data;
+      if (sortedDocs.isEmpty) {
+        if (!context.mounted) return;
+        Navigator.of(context).pop();
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('❌ 데이터 없음'),
+            content: Text(
+                '세션 $sessionId의 데이터가 없습니다.\n\n먼저 "7일치 테스트 데이터 생성" 버튼을 눌러주세요!'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
+      print('✅ ${sortedDocs.length}개 데이터 발견!');
+
+      final firstDoc = sortedDocs.first;
+      final lastDoc = sortedDocs.last;
+
+      final firstTime = (firstDoc['ts'] as Timestamp).toDate();
+      final lastTime = (lastDoc['ts'] as Timestamp).toDate();
+
+      final totalSeconds = lastTime.difference(firstTime).inSeconds;
+      final totalHours = totalSeconds / 3600;
+
+      Map<String, int> stageDurations = {
+        'Deep': 0,
+        'Light': 0,
+        'REM': 0,
+        'Awake': 0,
+      };
+
+      int totalMinutes = 0;
+
+      for (var doc in sortedDocs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final hr = (data['hr'] as num).toDouble();
+        final spo2 = (data['spo2'] as num).toDouble();
+        final micLevel = (data['mic_level'] as num).toDouble();
+        final pressureLevel = (data['pressure_level'] as num).toDouble();
+
+        String stage;
+        if (hr <= 59.5) {
+          stage = 'Deep';
+        } else if (spo2 <= 91.9) {
+          stage = 'Awake';
+        } else if (pressureLevel > 1493.5) {
+          stage = 'Awake';
+        } else if (micLevel > 109.5) {
+          stage = 'Light';
+        } else if (pressureLevel <= 505.0) {
+          stage = 'REM';
+        } else {
+          stage = 'Light';
+        }
+
+        stageDurations[stage] = stageDurations[stage]! + 60;
+        totalMinutes++;
+      }
+
+      final actualTotalSeconds = totalMinutes * 60;
+
+      final deepRatio = (stageDurations['Deep']! / actualTotalSeconds * 100);
+      final remRatio = (stageDurations['REM']! / actualTotalSeconds * 100);
+      final awakeRatio = (stageDurations['Awake']! / actualTotalSeconds * 100);
+
+      int durationScore = 40;
+      if (totalHours >= 7 && totalHours <= 9) {
+        durationScore = 40;
+      } else if (totalHours >= 6 && totalHours < 7) {
+        durationScore = 30;
+      } else if (totalHours < 6) {
+        durationScore = 20;
+      } else {
+        durationScore = 30;
+      }
+
+      int deepScore = 25;
+      if (deepRatio >= 15 && deepRatio <= 25) {
+        deepScore = 25;
+      } else if (deepRatio >= 10 && deepRatio < 15) {
+        deepScore = 20;
+      } else if (deepRatio >= 25 && deepRatio <= 30) {
+        deepScore = 20;
+      } else {
+        deepScore = 10;
+      }
+
+      int remScore = 20;
+      if (remRatio >= 20 && remRatio <= 25) {
+        remScore = 20;
+      } else if (remRatio >= 15 && remRatio < 20) {
+        remScore = 15;
+      } else if (remRatio >= 10 && remRatio < 15) {
+        remScore = 10;
+      } else {
+        remScore = 8;
+      }
+
+      int efficiencyScore = 15;
+      if (awakeRatio < 5) {
+        efficiencyScore = 15;
+      } else if (awakeRatio < 10) {
+        efficiencyScore = 12;
+      } else if (awakeRatio < 15) {
+        efficiencyScore = 8;
+      } else {
+        efficiencyScore = 5;
+      }
+
+      final totalScore = durationScore + deepScore + remScore + efficiencyScore;
+
+      String grade;
+      String message;
+      if (totalScore >= 90) {
+        grade = 'S';
+        message = '훌륭한 수면! 🌟';
+      } else if (totalScore >= 80) {
+        grade = 'A';
+        message = '좋은 수면 😊';
+      } else if (totalScore >= 70) {
+        grade = 'B';
+        message = '양호한 수면 👍';
+      } else if (totalScore >= 60) {
+        grade = 'C';
+        message = '개선 필요 😐';
+      } else {
+        grade = 'D';
+        message = '수면 개선 필요 ⚠️';
+      }
 
       if (!context.mounted) return;
       Navigator.of(context).pop();
@@ -230,7 +370,7 @@ class HomeScreen extends StatelessWidget {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('📊 수면 점수'),
+          title: const Text('📊 수면 점수 (raw_data 분석)'),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,19 +379,34 @@ class HomeScreen extends StatelessWidget {
                 Text('세션: $sessionId', style: const TextStyle(fontSize: 12)),
                 const Divider(),
                 Text(
-                  '총점: ${data['total_score']}점',
+                  '총점: $totalScore점',
                   style: const TextStyle(
                       fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-                Text('등급: ${data['grade']}'),
-                Text('평가: ${data['message']}'),
+                Text('등급: $grade'),
+                Text('평가: $message'),
                 const SizedBox(height: 16),
                 const Text('수면 요약:',
                     style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('총 수면: ${data['summary']['total_duration_hours']}시간'),
-                Text('깊은 수면: ${data['summary']['deep_sleep_hours']}시간'),
-                Text('REM 수면: ${data['summary']['rem_sleep_hours']}시간'),
-                Text('얕은 수면: ${data['summary']['light_sleep_hours']}시간'),
+                Text('총 수면: ${totalHours.toStringAsFixed(2)}시간'),
+                Text(
+                    '깊은 수면: ${(stageDurations['Deep']! / 3600).toStringAsFixed(2)}시간 (${deepRatio.toStringAsFixed(1)}%)'),
+                Text(
+                    'REM 수면: ${(stageDurations['REM']! / 3600).toStringAsFixed(2)}시간 (${remRatio.toStringAsFixed(1)}%)'),
+                Text(
+                    '얕은 수면: ${(stageDurations['Light']! / 3600).toStringAsFixed(2)}시간'),
+                Text(
+                    '깨어있음: ${(stageDurations['Awake']! / 3600).toStringAsFixed(2)}시간 (${awakeRatio.toStringAsFixed(1)}%)'),
+                const SizedBox(height: 16),
+                const Text('세부 점수:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('수면 시간: $durationScore/40'),
+                Text('깊은 수면: $deepScore/25'),
+                Text('REM 수면: $remScore/20'),
+                Text('수면 효율: $efficiencyScore/15'),
+                const SizedBox(height: 16),
+                Text('데이터: ${sortedDocs.length}개',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
             ),
           ),
@@ -264,9 +419,119 @@ class HomeScreen extends StatelessWidget {
         ),
       );
 
-      print('✅ 테스트 성공!');
-      print('점수: ${data['total_score']}');
-      print('총 수면 시간: ${data['summary']['total_duration_hours']}시간');
+      print('✅ 직접 계산 성공!');
+      print('점수: $totalScore');
+      print('총 수면 시간: ${totalHours.toStringAsFixed(2)}시간');
+      print('데이터 포인트: ${sortedDocs.length}개');
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.of(context).pop();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 오류 발생: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      print('❌ 직접 계산 실패: $e');
+    }
+  }
+
+  // ========================================
+  // 🔧 Cloud Functions 트리거 테스트
+  // ========================================
+  Future<void> _testOnNewDataTrigger(BuildContext context) async {
+    print('🔧 트리거 테스트 시작...');
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('트리거 테스트 중...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final now = DateTime.now();
+      final testSessionId = 'test-trigger-${now.millisecondsSinceEpoch}';
+
+      print('📝 raw_data에 테스트 데이터 추가 중...');
+
+      final docRef =
+          await FirebaseFirestore.instance.collection('raw_data').add({
+        'hr': 65,
+        'spo2': 97.5,
+        'mic_level': 20,
+        'pressure_level': 300,
+        'userId': 'test_user',
+        'sessionId': testSessionId,
+        'ts': Timestamp.now(),
+      });
+
+      print('✅ raw_data 추가 완료! docId: ${docRef.id}');
+
+      print('⏳ 5초 대기 중 (트리거 실행 시간)...');
+      await Future.delayed(const Duration(seconds: 5));
+
+      print('🔍 processed_data 확인 중...');
+
+      final processedQuery = await FirebaseFirestore.instance
+          .collection('processed_data')
+          .where('sessionId', isEqualTo: testSessionId)
+          .get();
+
+      if (!context.mounted) return;
+      Navigator.of(context).pop();
+
+      if (processedQuery.docs.isEmpty) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('❌ 트리거 작동 안 함'),
+            content: const Text('5초를 기다렸지만 processed_data에 데이터가 생성되지 않았습니다.\n\n'
+                'Cloud Functions의 on_new_data 트리거가 작동하지 않고 있습니다.\n\n'
+                '원인:\n'
+                '1. Functions 배포 안 됨\n'
+                '2. 트리거 설정 오류\n'
+                '3. 코드 오류'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+        print('❌ 트리거 작동 안 함!');
+      } else {
+        final processedDoc = processedQuery.docs.first;
+        final stage = processedDoc['stage'];
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('✅ 트리거 작동함!'),
+            content: Text('Cloud Functions가 정상 작동합니다!\n\n'
+                '분류된 단계: $stage\n\n'
+                'processed_data에 데이터가 생성되었습니다.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
+            ],
+          ),
+        );
+        print('✅ 트리거 작동함! stage: $stage');
+      }
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
@@ -521,6 +786,32 @@ class HomeScreen extends StatelessWidget {
                           color: Colors.grey,
                         ),
                       ),
+
+                      // ========================================
+                      // ✨ 새로 추가: 트리거 테스트 버튼
+                      // ========================================
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => _testOnNewDataTrigger(context),
+                        icon: const Icon(Icons.bug_report),
+                        label: const Text('🔧 Cloud Functions 트리거 테스트'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'raw_data에 1개 테스트 데이터 추가 (트리거 확인용)',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -752,7 +1043,6 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // ✅ 측정 버튼 (BleService 연동)
   Widget _buildMeasurementButton(BuildContext context, AppState appState) {
     final bool isMeasuring = appState.isMeasuring;
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
@@ -768,7 +1058,6 @@ class HomeScreen extends StatelessWidget {
             final bleService = Provider.of<BleService>(context, listen: false);
 
             if (isMeasuring) {
-              // 측정 중지
               showDialog(
                 context: context,
                 builder: (BuildContext dialogContext) {
@@ -807,7 +1096,6 @@ class HomeScreen extends StatelessWidget {
                 },
               );
             } else {
-              // 측정 시작
               if (!bleService.isPillowConnected &&
                   !bleService.isWatchConnected) {
                 ScaffoldMessenger.of(context).showSnackBar(

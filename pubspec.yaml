@@ -37,6 +37,10 @@ dependencies:
   # 유틸리티
   intl: ^0.20.2 
   permission_handler: ^11.3.1
+  firebase_messaging: ^15.2.10
+  flutter_local_notifications: ^19.5.0
+  device_info_plus: ^12.3.0
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:

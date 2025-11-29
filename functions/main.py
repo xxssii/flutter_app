@@ -227,6 +227,11 @@ from firebase_admin import firestore
 
 # google-cloud-firestore(v2) 타입/트랜잭션 데코레이터는 여기서 가져오는 것이 안전하다
 from google.cloud import firestore as gcf  # gcf.Transaction, gcf.DocumentReference, gcf.transactional
+from notifications import (
+    send_sleep_report_notification,
+    send_sleep_efficiency_notification,
+    send_snoring_notification,
+)
 
 
 # ---------- lazy init ----------
@@ -246,6 +251,7 @@ def get_db() -> gcf.Client:
 
 # ---------- utility ----------
 DEFAULT_MIN_STAGE_DURATION_SEC = 30
+
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -697,7 +703,30 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
         })
         
         print(f"[수면 점수 계산 완료] session: {session_id}, score: {total_score}")
+    # ✨ 점수 계산 완료 후 푸시 알림 보내기
+        send_sleep_report_notification(
+            db=db,
+            user_id=user_id,
+            score=total_score,
+            message=message
+        )
         
+        # ✨ 수면 효율이 낮으면 추가 알림
+        send_sleep_efficiency_notification(
+            db=db,
+            user_id=user_id,
+            efficiency=efficiency_score  # 이 값도 계산해서 넣어야 함
+        )
+        
+        # ✨ 코골이가 심하면 알림
+        if snoring_duration > 30:
+            send_snoring_notification(
+                db=db,
+                user_id=user_id,
+                duration_min=snoring_duration
+            )
+
+
         # ✅ 8. 반환 (ISO 문자열 포함)
         return report_data
         
