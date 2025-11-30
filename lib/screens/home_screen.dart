@@ -17,6 +17,7 @@ import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
 // 🔔 알림 서비스 import 추가
 import '../services/notification_service.dart';
+import 'hardware_test_screen.dart'; // ✅ 하드웨어 테스트 화면 import
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -731,11 +732,15 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 // 🔔 [신규] 알림 시뮬레이션 버튼 추가
+                // ===============================================
+                // ✨✨✨ 새로 추가된 하드웨어 테스트 섹션 ✨✨✨
+                // ===============================================
                 const SizedBox(height: 24),
                 Center(
                   child: Column(
                     children: [
                       Text(
+
                         "--- [2단계] 알림 시뮬레이션 (즉시 발송) ---",
                         style: AppTextStyles.secondaryBodyText.copyWith(
                           fontWeight: FontWeight.bold,
@@ -823,6 +828,45 @@ class HomeScreen extends StatelessWidget {
                           foregroundColor: Colors.white,
                         ),
                       ),
+                            // ===============================================
+                      // [하드웨어] 기기 제어 및 테스트
+                      // ===============================================
+                      Text(
+                        "--- [하드웨어] 기기 제어 및 테스트 ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 15, horizontal: 20),
+                        ),
+                        icon: const Icon(Icons.build),
+                        label: const Text(
+                          "🛠️ 하드웨어 테스트 화면으로 이동",
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const HardwareTestScreen()),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '펌프, 밸브, 진동 모터 개별 제어',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         "-----------------------------------------",
@@ -831,11 +875,6 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                _buildRealTimeMetricsCard(context, appState),
-                const SizedBox(height: 16),
-                // ✅ 수정됨: 도넛 그래프가 포함된 카드로 교체
-                _buildPlaceholderInfoCards(),
                 const SizedBox(height: 24),
                 _buildDeviceCards(context),
                 const SizedBox(height: 24),
@@ -924,7 +963,7 @@ class HomeScreen extends StatelessWidget {
                 builder: (BuildContext dialogContext) {
                   return AlertDialog(
                     title: const Text('수면 측정 종료'),
-                    content: const Text('측정을 종료하고 기기 연결을 해제하시겠습니까?'),
+                    content: const Text('수면 측정을 종료하시겠습니까?\n(기기 연결은 유지됩니다)'),
                     actions: [
                       TextButton(
                         onPressed: () {
@@ -1002,7 +1041,8 @@ class HomeScreen extends StatelessWidget {
             ),
             child: isMeasuring
                 ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
+                : Icon(Icons.nights_stay_rounded,
+                    color: buttonColor, size: 80),
           ),
         ),
         const SizedBox(height: 16),
@@ -1239,7 +1279,6 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
-
   // ✅ 도넛 그래프 위젯 (애니메이션 복원 및 테마 적용됨)
   Widget _buildAnimatedDonutContent({
     required String title,
