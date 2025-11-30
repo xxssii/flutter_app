@@ -1,57 +1,66 @@
-// lib/services/ble_service.dart
-// ✅ 최종 완벽 버전: 측정 종료 + 각 센서 10초 평균 저장
-
+import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/sleep_apnea_detector.dart';
+import '../utils/sleep_score_analyzer.dart';
 
-// --- 베개 UUID ---
 const String PILLOW_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c7c9c331914b";
 const String PRESSURE_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 const String SNORING_CHAR_UUID = "a3c4287c-c51d-4054-9f7a-85d7065f4900";
 const String PILLOW_BATTERY_CHAR_UUID = "c0839e0b-226f-40f4-8a49-9c5957b98d30";
 const String COMMAND_CHAR_UUID = "f00b462c-8822-4809-b620-835697621c17";
 
-// --- 팔찌 UUID ---
 const String WRISTBAND_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const String WATCH_DATA_CHAR_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 
 class BleService extends ChangeNotifier {
-  // ==========================================
-  // 1. 변수 선언
-  // ==========================================
-
-  // 장치
   BluetoothDevice? _pillowDevice;
   BluetoothDevice? _watchDevice;
 
-  // 특성
   BluetoothCharacteristic? _pressureChar;
   BluetoothCharacteristic? _snoringChar;
   BluetoothCharacteristic? _pillowBatteryChar;
   BluetoothCharacteristic? _commandChar;
   BluetoothCharacteristic? _watchDataChar;
 
-  // 상태
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+
   String _pillowStatus = "베개 연결 끊김";
   String _watchStatus = "팔찌 연결 끊김";
   bool _isPillowConnected = false;
   bool _isWatchConnected = false;
-  bool _isCollectingData = false;  // ✅✅✅ 핵심!
-  bool _isScanning = false; // ✅ 스캔 상태 추가
+  bool _isCollectingData = false;
+  bool _isScanning = false;
   bool _autoHeightControl = false;
   DateTime? _lastAdjustmentTime;
 
-  // ✅ 센서 데이터 (아두이노가 보내는 10초 평균값)
-  double pressure1_avg = 0.0;  // 센서 1의 10초 평균
-  double pressure2_avg = 0.0;  // 센서 2의 10초 평균
-  double pressure3_avg = 0.0;  // 센서 3의 10초 평균
-  double pressureAvg = 0.0;    // 3개 센서 평균
+  late final SleepApneaDetector _apneaDetector;
 
-  double mic1_avg = 0.0;       // 마이크 1의 10초 평균
-  double mic2_avg = 0.0;       // 마이크 2의 10초 평균
-  double micAvg = 0.0;         // 2개 마이크 평균
+  double _prevHeartRate = 0.0;
+  DateTime? _lastBreathingTime;
+
+  final SleepScoreAnalyzer _scoreAnalyzer = SleepScoreAnalyzer();
+  DateTime? _collectionStartTime;
+  int _totalSnoringSeconds = 0;
+
+  BleService() {
+    _apneaDetector = SleepApneaDetector(
+      onAdjustPillow: (cellIndex, height) {
+        adjustCell(cellIndex, height);
+      },
+    );
+  }
+
+  double pressure1_avg = 0.0;
+  double pressure2_avg = 0.0;
+  double pressure3_avg = 0.0;
+  double pressureAvg = 0.0;
+
+  double mic1_avg = 0.0;
+  double mic2_avg = 0.0;
+  double micAvg = 0.0;
   bool isSnoring = false;
 
   double heartRate = 0.0;
@@ -64,35 +73,30 @@ class BleService extends ChangeNotifier {
   int _lowSpo2Count = 0;
   int _highMovementCount = 0;
 
-  // Firebase
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   String userId = "demoUser";
   String sessionId = "";
 
-  // Getters
   String get pillowConnectionStatus => _pillowStatus;
   String get watchConnectionStatus => _watchStatus;
   bool get isPillowConnected => _isPillowConnected;
   bool get isWatchConnected => _isWatchConnected;
   bool get isCollectingData => _isCollectingData;
-  bool get isScanning => _isScanning; // ✅ Getter 추가
+  bool get isScanning => _isScanning;
   bool get autoHeightControl => _autoHeightControl;
 
   void toggleAutoHeightControl(bool value) {
     _autoHeightControl = value;
-    print("\n${'='*50}");
+    print("\n${'=' * 50}");
     if (value) {
       print("🤖 자동 베개 높이 제어 활성화");
     } else {
       print("🔴 자동 베개 높이 제어 비활성화");
     }
-    print('='*50 + "\n");
+    print('=' * 50 + "\n");
     notifyListeners();
   }
 
-  // ==========================================
-  // 2. 스캔
-  // ==========================================
   Future<void> startScan() async {
     if (kIsWeb) {
       _pillowStatus = "웹 환경: BLE 비활성화";
@@ -102,80 +106,55 @@ class BleService extends ChangeNotifier {
       return;
     }
 
+    await stopScan();
+
+    if (!_isPillowConnected) _pillowDevice = null;
+    if (!_isWatchConnected) _watchDevice = null;
+
     _pillowStatus = "베개 스캔 중...";
     _watchStatus = "팔찌 스캔 중...";
-    _isScanning = true; // ✅ 스캔 시작 상태 설정
+    _isScanning = true;
     notifyListeners();
 
-    // ✅ 내부 try-catch로 감싸서, 스캔 명령이 실패해도(예: 윈도우) 
-    //    UI 상으로는 '스캔 중' 상태가 유지되도록 함 (15초 대기)
     try {
-      try {
-        await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-      } catch (e) {
-        print("⚠️ BLE 스캔 시작 실패 (플랫폼 미지원 등): $e");
-        _pillowStatus = "스캔 오류 (기기 확인 필요)";
-        _watchStatus = "스캔 오류 (기기 확인 필요)";
-        notifyListeners();
-        // 여기서 return 하지 않고 아래 로직(리스너 등록, 15초 대기)을 계속 진행
-      }
-
-      FlutterBluePlus.scanResults.listen((results) {
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
+      
+      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
-          print(
-            "📡 발견: 이름='${r.device.platformName}' ID='${r.device.remoteId}'",
-          );
-          print("   서비스 UUID: ${r.advertisementData.serviceUuids}");
-          print("   신호 세기: ${r.rssi} dBm");
-          print("---");
-
           String deviceName = r.device.platformName.toLowerCase();
 
-          if (deviceName.contains("smartpillow") && _pillowDevice == null) {
-            print("✅✅✅ 베개 발견: ${r.device.platformName}");
-            _pillowDevice = r.device;
-            connectToPillow();
+          if (_pillowDevice == null) {
+             if (deviceName.contains("smartpillow") || 
+                 r.advertisementData.serviceUuids.contains(Guid(PILLOW_SERVICE_UUID))) {
+               print("✅✅✅ 베개 발견: ${r.device.platformName}");
+               _pillowDevice = r.device;
+               connectToPillow();
+             }
           }
 
-          if ((deviceName.contains("watch") ||
-                  deviceName.contains("band") ||
-                  deviceName.contains("wristband")) &&
-              _watchDevice == null) {
-            print("✅✅✅ 팔찌 발견: ${r.device.platformName}");
-            _watchDevice = r.device;
-            connectToWatch();
-          }
-          
-          if (r.advertisementData.serviceUuids
-                  .contains(Guid(PILLOW_SERVICE_UUID)) &&
-              _pillowDevice == null) {
-            print("✅ 베개 발견 (UUID): ${r.device.platformName}");
-            _pillowDevice = r.device;
-            connectToPillow();
-          }
-
-          if (r.advertisementData.serviceUuids.contains(
-                Guid(WRISTBAND_SERVICE_UUID),
-              ) &&
-              _watchDevice == null) {
-            print("✅ 팔찌 발견 (UUID): ${r.device.platformName}");
-            _watchDevice = r.device;
-            connectToWatch();
+          if (_watchDevice == null) {
+            if (deviceName.contains("watch") ||
+                deviceName.contains("band") ||
+                deviceName.contains("wristband") ||
+                r.advertisementData.serviceUuids.contains(Guid(WRISTBAND_SERVICE_UUID))) {
+              print("✅✅✅ 팔찌 발견: ${r.device.platformName}");
+              _watchDevice = r.device;
+              connectToWatch();
+            }
           }
         }
       });
 
       await Future.delayed(const Duration(seconds: 15));
-      // 스캔이 이미 중지되었을 수도 있으므로 체크
       if (_isScanning) {
         await stopScan();
       }
 
-      if (_pillowDevice == null) {
+      if (_pillowDevice == null && !_isPillowConnected) {
         _pillowStatus = "베개 없음";
         print("❌ 베개를 찾지 못했습니다");
       }
-      if (_watchDevice == null) {
+      if (_watchDevice == null && !_isWatchConnected) {
         _watchStatus = "팔찌 없음";
         print("❌ 팔찌를 찾지 못했습니다");
       }
@@ -184,7 +163,6 @@ class BleService extends ChangeNotifier {
       _pillowStatus = "스캔 실패";
       _watchStatus = "스캔 실패";
     } finally {
-      // ✅ 예외 발생 여부와 상관없이 스캔 종료 상태로 확실하게 변경
       if (_isScanning) {
         _isScanning = false;
         notifyListeners();
@@ -192,35 +170,32 @@ class BleService extends ChangeNotifier {
     }
   }
 
-  // ✅ 스캔 중지 메서드 추가
   Future<void> stopScan() async {
-    // ✅ UI 즉각 반응을 위해 상태 먼저 변경
     _isScanning = false;
     notifyListeners();
-    print("🛑 BLE 스캔 중지 요청됨 (UI 즉시 반영)");
+    print("🛑 BLE 스캔 중지 요청됨");
 
     try {
+      await _scanSubscription?.cancel();
+      _scanSubscription = null;
+      
       await FlutterBluePlus.stopScan();
       
-      // 기기를 못 찾았을 경우 상태 업데이트
-      if (_pillowDevice == null && _pillowStatus == "베개 스캔 중...") {
+      if (!_isPillowConnected && _pillowStatus.contains("스캔 중")) {
         _pillowStatus = "스캔 중지됨";
       }
-      if (_watchDevice == null && _watchStatus == "팔찌 스캔 중...") {
+      if (!_isWatchConnected && _watchStatus.contains("스캔 중")) {
         _watchStatus = "스캔 중지됨";
       }
       
       print("🛑 BLE 스캔 완전히 중지됨");
-      notifyListeners(); // 상태 메시지 업데이트를 위해 한 번 더 알림
+      notifyListeners();
     } catch (e) {
       print("⚠️ 스캔 중지 오류: $e");
       notifyListeners();
     }
   }
 
-  // ==========================================
-  // 3. 연결
-  // ==========================================
   Future<void> connectToPillow() async {
     if (kIsWeb) return;
     if (_pillowDevice == null) return;
@@ -232,10 +207,10 @@ class BleService extends ChangeNotifier {
       await _pillowDevice!.connect(timeout: const Duration(seconds: 10));
       _isPillowConnected = true;
       _pillowStatus = "베개 연결 성공 ✅";
-      print("\n${'='*50}");
+      print("\n${'=' * 50}");
       print("✅ 베개 연결 성공!");
       print("⚠️ _isCollectingData = $_isCollectingData");
-      print('='*50 + "\n");
+      print('=' * 50 + "\n");
       await _discoverPillowServices();
     } catch (e) {
       _isPillowConnected = false;
@@ -256,10 +231,10 @@ class BleService extends ChangeNotifier {
       await _watchDevice!.connect(timeout: const Duration(seconds: 10));
       _isWatchConnected = true;
       _watchStatus = "팔찌 연결 성공 ✅";
-      print("\n${'='*50}");
+      print("\n${'=' * 50}");
       print("✅ 팔찌 연결 성공!");
       print("⚠️ _isCollectingData = $_isCollectingData");
-      print('='*50 + "\n");
+      print('=' * 50 + "\n");
       await _discoverWatchServices();
     } catch (e) {
       _isWatchConnected = false;
@@ -269,9 +244,6 @@ class BleService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ==========================================
-  // 4. 특성 구독
-  // ==========================================
   Future<void> _subscribeToCharacteristic(
     BluetoothCharacteristic char,
     Function(List<int>) onData,
@@ -285,9 +257,6 @@ class BleService extends ChangeNotifier {
     }
   }
 
-  // ==========================================
-  // 5. 베개 서비스 검색
-  // ==========================================
   Future<void> _discoverPillowServices() async {
     try {
       List<BluetoothService> services = await _pillowDevice!.discoverServices();
@@ -308,18 +277,16 @@ class BleService extends ChangeNotifier {
                   List<String> values = rawData.split('/');
 
                   if (values.length >= 3) {
-                    // ✅ 아두이노가 이미 10초 평균을 계산해서 보냄!
                     pressure1_avg = double.parse(values[0]);
                     pressure2_avg = double.parse(values[1]);
                     pressure3_avg = double.parse(values[2]);
                     pressureAvg = (pressure1_avg + pressure2_avg + pressure3_avg) / 3;
 
-                    // ✅ 수집 중일 때만 로그 + Firebase
                     if (_isCollectingData) {
-                      print("📊 [수집 중] 압력 10초 평균: ${pressure1_avg.toStringAsFixed(0)} / ${pressure2_avg.toStringAsFixed(0)} / ${pressure3_avg.toStringAsFixed(0)} (전체 평균: ${pressureAvg.toStringAsFixed(0)})");
+                      print("📊 [수집 중] 압력: ${pressure1_avg.toStringAsFixed(0)} / ${pressure2_avg.toStringAsFixed(0)} / ${pressure3_avg.toStringAsFixed(0)}");
                       _sendToFirebase();
                     }
-                    
+
                     _checkAndAdjustHeight();
                   }
                 } catch (e) {
@@ -339,17 +306,15 @@ class BleService extends ChangeNotifier {
                   List<String> values = rawData.split('/');
 
                   if (values.length >= 2) {
-                    // ✅ 아두이노가 이미 10초 평균을 계산해서 보냄!
                     mic1_avg = double.parse(values[0]);
                     mic2_avg = double.parse(values[1]);
                     micAvg = (mic1_avg + mic2_avg) / 2;
                     isSnoring = micAvg > 100;
 
-                    // ✅ 수집 중일 때만 로그
                     if (_isCollectingData) {
-                      print("🎤 [수집 중] 마이크 10초 평균: ${mic1_avg.toStringAsFixed(0)} / ${mic2_avg.toStringAsFixed(0)} (전체 평균: ${micAvg.toStringAsFixed(0)}, 코골이: $isSnoring)");
+                      print("🎤 [수집 중] 마이크: ${mic1_avg.toStringAsFixed(0)} / ${mic2_avg.toStringAsFixed(0)} (코골이: $isSnoring)");
                     }
-                    
+
                     _checkAndAdjustHeight();
                   }
                 } catch (e) {
@@ -395,9 +360,6 @@ class BleService extends ChangeNotifier {
     }
   }
 
-  // ==========================================
-  // 6. 팔찌 서비스 검색
-  // ==========================================
   Future<void> _discoverWatchServices() async {
     try {
       List<BluetoothService> services = await _watchDevice!.discoverServices();
@@ -434,12 +396,8 @@ class BleService extends ChangeNotifier {
                     watchBattery = int.parse(batMatch.group(1)!);
                   }
 
-                  // ✅ 수집 중일 때만 로그 + Firebase
                   if (_isCollectingData) {
-                    print("📱 [수집 중] 받은 데이터: $rawData");
-                    print("💓 [수집 중] 심박수: ${heartRate.toStringAsFixed(0)} bpm");
-                    print("🩸 [수집 중] 산소포화도: ${spo2.toStringAsFixed(0)} %");
-                    print("🔋 [수집 중] 팔찌 배터리: $watchBattery%");
+                    print("📱 [수집 중] 팔찌 데이터: $rawData");
                     _sendToFirebase();
                   }
 
@@ -457,10 +415,6 @@ class BleService extends ChangeNotifier {
       print("⚠️ 팔찌 서비스 검색 오류: $e");
     }
   }
-
-  // ==========================================
-  // ✅ 자동 베개 높이 제어 로직
-  // ==========================================
   
   void _checkAndAdjustHeight() {
     if (!_autoHeightControl) return;
@@ -473,146 +427,149 @@ class BleService extends ChangeNotifier {
         return;
       }
     }
+    
+    double hrChange = 0.0;
+    if (_prevHeartRate > 0 && heartRate > 0) {
+      hrChange = (heartRate - _prevHeartRate).abs();
+    }
+    _prevHeartRate = heartRate;
+    
+    double respirationDuration = 0.0;
+    if (pressureAvg > 100) {
+      _lastBreathingTime = DateTime.now();
+    } else if (_lastBreathingTime != null) {
+      respirationDuration = DateTime.now().difference(_lastBreathingTime!).inSeconds.toDouble();
+    }
+
+    double movementScore = (pressureAvg / 4095.0) * 10.0;
+
+    String? feedback = _apneaDetector.detectApnea(
+      respirationDuration: respirationDuration,
+      heartRateChange: hrChange,
+      spo2Level: spo2,
+      chestAbdomenMovement: movementScore,
+      isSnoringStopped: !isSnoring,
+      isSuddenInhalation: micAvg > 2000,
+    );
+
+    if (feedback != null) {
+      print("🚨 [수면 무호흡 감지] $feedback");
+      _lastAdjustmentTime = DateTime.now();
+    }
 
     if (isSnoring) {
       _snoringCount++;
-      print("😴 코골이 감지 카운트: $_snoringCount");
-      
+      _totalSnoringSeconds += 1; 
+
       if (_snoringCount >= 3) {
-        print("🚨 연속 코골이 감지! 베개 높이 올립니다 (셀 1)");
+        print("😴 연속 코골이 감지 -> 베개 높이 조절");
         adjustHeight(1);
         _lastAdjustmentTime = DateTime.now();
         _snoringCount = 0;
-        return;
       }
     } else {
       _snoringCount = 0;
     }
-
-    if (spo2 > 0 && spo2 < 92) {
-      _lowSpo2Count++;
-      print("⚠️ 낮은 산소포화도 감지: $spo2% (카운트: $_lowSpo2Count)");
-      
-      if (_lowSpo2Count >= 2) {
-        print("🚨 저산소 상태! 베개 높이 올립니다 (셀 1)");
-        adjustHeight(1);
-        _lastAdjustmentTime = DateTime.now();
-        _lowSpo2Count = 0;
-        return;
-      }
-    } else {
-      _lowSpo2Count = 0;
-    }
-
-    if (pressureAvg > 2000) {
-      _highMovementCount++;
-      print("🔄 뒤척임 감지 (압력: ${pressureAvg.toStringAsFixed(0)}, 카운트: $_highMovementCount)");
-      
-      if (_highMovementCount >= 5) {
-        print("🚨 과도한 뒤척임! 베개 높이 재조정 (셀 2)");
-        adjustHeight(2);
-        _lastAdjustmentTime = DateTime.now();
-        _highMovementCount = 0;
-        return;
-      }
-    } else {
-      _highMovementCount = 0;
-    }
   }
 
-  // ==========================================
-  // ✅✅✅ 데이터 수집 제어 (핵심!)
-  // ==========================================
-
-  /// ✅ 데이터 수집 시작
   void startDataCollection() {
-    print("\n${'='*60}");
+    print("\n${'=' * 60}");
     print("✅✅✅ [startDataCollection() 호출됨]");
-    print("✅✅✅ _isCollectingData: false → true");
     
     _isCollectingData = true;
     sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
-    
+
     _snoringCount = 0;
     _lowSpo2Count = 0;
     _highMovementCount = 0;
     _lastAdjustmentTime = null;
-    
+
+    _collectionStartTime = DateTime.now();
+    _totalSnoringSeconds = 0;
+
     print("✅✅✅ 데이터 수집 시작! (sessionId: $sessionId)");
     if (_autoHeightControl) {
       print("🤖 자동 베개 높이 제어 활성화됨");
     }
-    print('='*60 + "\n");
+    print('=' * 60 + "\n");
     notifyListeners();
   }
 
-  /// ✅ 데이터 수집 종료
   void stopDataCollection() {
-    print("\n${'='*60}");
+    print("\n${'=' * 60}");
     print("⏹️⏹️⏹️ [stopDataCollection() 호출됨]");
-    print("⏹️⏹️⏹️ _isCollectingData: true → false");
     
     _isCollectingData = false;
-    
+
+    if (_collectionStartTime != null) {
+      final duration = DateTime.now().difference(_collectionStartTime!);
+      final totalMinutes = duration.inMinutes.toDouble();
+      final snoringMinutes = _totalSnoringSeconds / 60.0;
+
+      print("\n📊 [수면 분석 결과]");
+      print("   - 총 수면 시간: ${totalMinutes.toStringAsFixed(1)}분");
+      print("   - 총 코골이 시간: ${snoringMinutes.toStringAsFixed(1)}분");
+
+      double snoringScore = _scoreAnalyzer.getSnoringScore(snoringMinutes, totalMinutes);
+      print("   - 코골이 점수: ${snoringScore.toStringAsFixed(1)} / 10.0");
+
+      String? snoringWarning = _scoreAnalyzer.getSnoringWarning(snoringMinutes);
+      if (snoringWarning != null) {
+        print("   ⚠️ $snoringWarning");
+      } else {
+        print("   ✅ 코골이 상태 양호");
+      }
+
+      double efficiency = 100.0;
+      if (totalMinutes > 0) {
+        double lostMinutes = _highMovementCount * 1.0;
+        efficiency = ((totalMinutes - lostMinutes) / totalMinutes) * 100.0;
+        efficiency = efficiency.clamp(0.0, 100.0);
+      }
+      print("   - 추정 수면 효율: ${efficiency.toStringAsFixed(1)}%");
+
+      int totalScore = _scoreAnalyzer.getSleepScore(efficiency, 20.0, 20.0);
+      print("   🏆 종합 수면 점수: $totalScore점");
+      print("   📝 ${_scoreAnalyzer.generateDailyReport(totalScore)}");
+    }
+
     print("⏹️⏹️⏹️ 데이터 수집 종료! (sessionId: $sessionId)");
     print("✅ 하드웨어 연결 유지, Firebase 전송 중지");
-    print('='*60 + "\n");
+    print('=' * 60 + "\n");
     notifyListeners();
   }
 
-  // ==========================================
-  // 7. ✅ Firebase 전송 (각 센서 10초 평균값 저장)
-  // ==========================================
-  
   Future<void> _sendToFirebase() async {
-    // ✅✅✅ 핵심 체크!
     if (!_isCollectingData) {
       print("⏸️ [Firebase 전송 차단] _isCollectingData = false");
       return;
     }
 
     try {
-      // ✅ 각 센서의 10초 평균값을 Firebase에 저장
       await _db.collection('raw_data').add({
         'userId': userId,
         'sessionId': sessionId,
         'ts': FieldValue.serverTimestamp(),
-
-        // ✅ 팔찌 센서 데이터
         'hr': heartRate.toInt(),
         'spo2': spo2.toInt(),
-
-        // ✅ 압력 센서 10초 평균 (각각 저장!)
         'pressure_1_avg_10s': pressure1_avg,
         'pressure_2_avg_10s': pressure2_avg,
         'pressure_3_avg_10s': pressure3_avg,
-        'pressure_avg': pressureAvg,  // 3개 센서 전체 평균
-
-        // ✅ 마이크 센서 10초 평균 (각각 저장!)
+        'pressure_avg': pressureAvg,
         'mic_1_avg_10s': mic1_avg,
         'mic_2_avg_10s': mic2_avg,
-        'mic_avg': micAvg,  // 2개 마이크 전체 평균
+        'mic_avg': micAvg,
         'is_snoring': isSnoring,
-
-        // 배터리
         'pillow_battery': pillowBattery,
         'watch_battery': watchBattery,
-        // 자동 제어 상태
         'auto_control_active': _autoHeightControl,
       });
 
       print("✅ [Firebase 저장 완료] raw_data");
-      print("   - 압력: ${pressure1_avg.toStringAsFixed(0)} / ${pressure2_avg.toStringAsFixed(0)} / ${pressure3_avg.toStringAsFixed(0)} (10초 평균)");
-      print("   - 마이크: ${mic1_avg.toStringAsFixed(0)} / ${mic2_avg.toStringAsFixed(0)} (10초 평균)");
-      print("   - 심박: $heartRate, 산소: $spo2");
     } catch (e) {
       print("⚠️ Firebase 전송 실패: $e");
     }
   }
-
-  // ==========================================
-  // 8. 명령 전송
-  // ==========================================
 
   Future<void> sendVibrateStrong() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
@@ -664,7 +621,6 @@ class BleService extends ChangeNotifier {
     }
   }
 
-  // ✅ 특정 셀의 높이를 직접 조절하는 메서드 추가
   Future<void> adjustCell(int cellIndex, int height) async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -672,8 +628,6 @@ class BleService extends ChangeNotifier {
     }
 
     try {
-      // 프로토콜: "C{cell}:{height}" (예: "C1:5")
-      // 아두이노에서 이를 파싱하여 처리하도록 구현 필요
       String command = "C$cellIndex:$height";
       await _commandChar!.write(command.codeUnits, withoutResponse: true);
       print("📤 셀 높이 조절 명령 전송: $command");
@@ -695,21 +649,15 @@ class BleService extends ChangeNotifier {
       print("⚠️ 명령 전송 실패: $e");
     }
   }
-// ==========================================
-  // [추가] 하드웨어 테스트용 원시 명령 전송 함수
-  // ==========================================
+
   Future<void> sendRawCommand(String cmd) async {
-    // 1. 연결 체크
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
       return;
     }
 
-    // 2. 명령 전송
     try {
-      // 아두이노는 문자 하나(char)를 기다리므로 문자열을 바이트로 변환해서 전송
-      // 예: "1" -> [0x31]
-      List<int> bytes = cmd.codeUnits; 
+      List<int> bytes = cmd.codeUnits;
       await _commandChar!.write(bytes, withoutResponse: false);
       print("🚀 명령 전송 성공: $cmd");
     } catch (e) {
@@ -717,18 +665,12 @@ class BleService extends ChangeNotifier {
     }
   }
 
-
-
-
-  // ==========================================
-  // 9. 연결 해제
-  // ==========================================
   Future<void> disconnectAll() async {
     if (kIsWeb) return;
 
-    print("\n${'='*50}");
+    print("\n${'=' * 50}");
     print("🔌 [disconnectAll() 호출됨]");
-    
+
     try {
       if (_pillowDevice != null && _isPillowConnected) {
         await _pillowDevice!.disconnect();
@@ -744,13 +686,12 @@ class BleService extends ChangeNotifier {
         print("✅ 팔찌 연결 해제");
       }
 
-      // ✅ 연결 해제 시 데이터 수집도 자동 중지
       if (_isCollectingData) {
         _isCollectingData = false;
         print("✅ _isCollectingData = false (자동 중지)");
       }
 
-      print('='*50 + "\n");
+      print('=' * 50 + "\n");
       notifyListeners();
     } catch (e) {
       print("⚠️ 연결 해제 오류: $e");
@@ -763,5 +704,3 @@ class BleService extends ChangeNotifier {
     super.dispose();
   }
 }
-
-

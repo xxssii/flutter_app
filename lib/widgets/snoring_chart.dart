@@ -142,13 +142,13 @@ class SnoringChartSection extends StatelessWidget {
                 ),
               ),
               minX: 0,
-              maxX: 48, // 49개 데이터 포인트 (0-48)
+              maxX: (spots.length > 48) ? spots.length.toDouble() : 48.0, // 49개 데이터 포인트 (0-48)
               minY: minDecibel,
               maxY: maxDecibel,
               lineBarsData: [
                 LineChartBarData(
                   spots: spots,
-                  isCurved: true,
+                  isCurved: spots.length > 1,
                   gradient: LinearGradient(
                     colors: [
                       AppColors.warningOrange, // 노란색 계열 시작
@@ -159,7 +159,7 @@ class SnoringChartSection extends StatelessWidget {
                   ),
                   barWidth: 3,
                   isStrokeCapRound: true,
-                  dotData: const FlDotData(show: false),
+                  dotData: FlDotData(show: spots.length == 1),
                   belowBarData: BarAreaData(
                     show: true,
                     gradient: LinearGradient(

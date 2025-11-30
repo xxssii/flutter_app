@@ -99,20 +99,22 @@ class HeartRateChartSection extends StatelessWidget {
                 ),
               ),
               minX: 0,
-              maxX: 8, // 8시간 수면 가정
+              maxX: (sleepMetrics.heartRateData.length > 8) 
+                  ? sleepMetrics.heartRateData.length.toDouble() 
+                  : 8.0, // 데이터 길이에 따라 X축 확장
               minY: 40, // 최소 심박수
-              maxY: 100, // 최대 심박수
+              maxY: 120, // 최대 심박수 (여유 있게)
               lineBarsData: [
                 LineChartBarData(
                   // ✅ 실제 심박수 데이터 사용
                   spots: sleepMetrics.heartRateData.asMap().entries.map((entry) {
                     return FlSpot(entry.key.toDouble(), entry.value);
                   }).toList(),
-                  isCurved: true, // ✨ 부드러운 곡선 효과
+                  isCurved: sleepMetrics.heartRateData.length > 1, // 데이터가 1개면 곡선 불가
                   color: AppColors.errorRed, // ✨ 선 색상도 빨간색 계열로 변경
                   barWidth: 3,
                   isStrokeCapRound: true,
-                  dotData: const FlDotData(show: false), // 점 숨기기 (깔끔하게)
+                  dotData: FlDotData(show: sleepMetrics.heartRateData.length == 1), // 데이터 1개면 점 표시
                   belowBarData: BarAreaData(
                     show: true, // ✨ 그래프 아래 색칠하기
                     gradient: LinearGradient(

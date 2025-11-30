@@ -66,12 +66,19 @@ class _SleepReportScreenState extends State<SleepReportScreen> {
     }
 
     final analyzer = SleepScoreAnalyzer();
-    final int score = analyzer.getSleepScore(
-      metrics.sleepEfficiency,
-      metrics.remRatio,
-      metrics.deepSleepRatio,
-    );
-    final String reportMessage = analyzer.generateDailyReport(score);
+    int score = 0;
+    String reportMessage = "데이터가 부족하여 분석할 수 없습니다.";
+
+    try {
+      score = analyzer.getSleepScore(
+        metrics.sleepEfficiency,
+        metrics.remRatio,
+        metrics.deepSleepRatio,
+      );
+      reportMessage = analyzer.generateDailyReport(score);
+    } catch (e) {
+      print("⚠️ 수면 점수 계산 오류: $e");
+    }
 
     return Scaffold(
       appBar: AppBar(

@@ -876,6 +876,9 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                const SizedBox(height: 24),
+                _buildPlaceholderInfoCards(), // ✅ 도넛 그래프 카드 복구
+                const SizedBox(height: 24),
                 _buildDeviceCards(context),
                 const SizedBox(height: 24),
                 _buildSummaryCard(context),

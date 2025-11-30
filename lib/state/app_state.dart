@@ -92,9 +92,9 @@ class AppState extends ChangeNotifier {
 
     final timestamp = DateTime.now();
 
-    // ✅ 10초 스로틀링: 마지막 갱신 후 10초가 지나지 않았으면 무시
+    // ✅ 1초 스로틀링: 마지막 갱신 후 1초가 지나지 않았으면 무시 (실시간성 향상)
     if (_lastUiUpdateTime != null &&
-        timestamp.difference(_lastUiUpdateTime!).inSeconds < 10) {
+        timestamp.difference(_lastUiUpdateTime!).inSeconds < 1) {
       return;
     }
     _lastUiUpdateTime = timestamp;
@@ -147,6 +147,8 @@ class AppState extends ChangeNotifier {
 
       // BLE 스캔 시작
       Provider.of<BleService>(context, listen: false).startScan();
+      // ✅ 데이터 수집 시작 (명시적 호출)
+      Provider.of<BleService>(context, listen: false).startDataCollection();
 
       // "새 뇌" (서버 뇌) 리스너 시작
       // ✅ 유니크한 세션 ID 생성 (현재 시간 기반)
@@ -155,6 +157,9 @@ class AppState extends ChangeNotifier {
     } else {
       // --- 측정 종료 ---
       _stopMockDataStream(); // 1초 타이머 중지
+
+      // ✅ 데이터 수집 중단 (명시적 호출)
+      Provider.of<BleService>(context, listen: false).stopDataCollection();
 
       // 리스너 종료
       _commandSubscription?.cancel();
