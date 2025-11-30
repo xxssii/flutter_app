@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart'; // ✅ Cloud Functions 임포트
 
 import '../utils/sleep_apnea_detector.dart';
 import '../utils/sleep_score_analyzer.dart';
@@ -148,7 +149,8 @@ class AppState extends ChangeNotifier {
       Provider.of<BleService>(context, listen: false).startScan();
 
       // "새 뇌" (서버 뇌) 리스너 시작
-      _currentSessionId = "s4_test";
+      // ✅ 유니크한 세션 ID 생성 (현재 시간 기반)
+      _currentSessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
       _startCommandListener(_currentUserId, _currentSessionId);
     } else {
       // --- 측정 종료 ---
@@ -192,7 +194,7 @@ class AppState extends ChangeNotifier {
     _sensorDataTimer?.cancel();
   }
 
-  void _generatePostSleepReport(BuildContext context) {
+  void _generatePostSleepReport(BuildContext context) async {
     // (리포트 생성 로직 생략 - 기존 코드 유지 필요)
     final apneaDetector = SleepApneaDetector();
     final analyzer = SleepScoreAnalyzer();
@@ -235,7 +237,23 @@ class AppState extends ChangeNotifier {
 
     // ✅ Firestore에 자동 저장 (비동기 실행)
     // 주의: context가 유효하지 않을 수 있으므로 예외 처리 필요할 수 있음
-    sleepDataState.saveSleepData(context, _currentUserId, todayMetrics);
+    // sleepDataState.saveSleepData(context, _currentUserId, todayMetrics); // ❌ 로컬 저장 주석 처리 (백엔드가 수행함)
+
+    // ✅ [추가] 백엔드에 수면 분석 요청 (Cloud Functions)
+    try {
+      print("☁️ 백엔드에 수면 분석 요청 중... (세션: $_currentSessionId)");
+      final result = await FirebaseFunctions.instance
+          .httpsCallable('calculate_sleep_score')
+          .call({
+        'session_id': _currentSessionId,
+        'user_id': _currentUserId,
+      });
+      print("✅ 수면 분석 완료! 점수: ${result.data['total_score']}");
+    } catch (e) {
+      print("❌ 수면 분석 요청 실패: $e");
+      // 에러 발생 시 로컬 저장으로 폴백 (선택 사항)
+      // sleepDataState.saveSleepData(context, _currentUserId, todayMetrics);
+    }
 
     // 2. 점수 및 리포트 생성
     int score = analyzer.getSleepScore(

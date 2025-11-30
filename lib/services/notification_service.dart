@@ -45,7 +45,7 @@ class NotificationService {
   /// FCM은 Android, iOS, Web에서만 지원됩니다
   bool _isFCMSupported() {
     if (kIsWeb) return true; // 웹은 지원
-    
+
     try {
       // Android 또는 iOS만 FCM 지원
       return Platform.isAndroid || Platform.isIOS;
@@ -69,11 +69,11 @@ class NotificationService {
 
       // ✅ 플랫폼 체크: FCM 지원 확인
       final fcmSupported = _isFCMSupported();
-      
+
       if (!fcmSupported) {
         debugPrint('ℹ️ FCM은 현재 플랫폼(Windows/Linux/macOS)에서 지원되지 않습니다.');
         debugPrint('ℹ️ 로컬 알림만 초기화합니다. (FCM은 Android/iOS/Web에서만 지원됩니다)');
-        
+
         // 로컬 알림만 초기화
         await _initializeLocalNotifications();
         _isInitialized = true;
@@ -321,8 +321,8 @@ class NotificationService {
 
     await _flutterLocalNotificationsPlugin.show(
       0, // 알림 ID
-      '🔔 테스트 알림',
-      '알림이 정상적으로 작동합니다!',
+      '🔔 테스트 푸시 알림',
+      '딩동! 알림이 잘 도착하네요. 앞으로도 꿀잠 소식 전해드릴게요! 🔔',
       platformDetails,
     );
 
@@ -408,7 +408,8 @@ class NotificationService {
       );
 
       // 🔹 2차 방어선: 실제 플러그인 호출 감싸기
-      await _flutterLocalNotificationsPlugin.show(id, title, body, platformDetails);
+      await _flutterLocalNotificationsPlugin.show(
+          id, title, body, platformDetails);
       debugPrint("✅ 알림 발송 성공: $title");
     } catch (e) {
       // 🔹 여기가 핵심: 플러그인 내부 오류를 잡아서 앱 죽음 방지

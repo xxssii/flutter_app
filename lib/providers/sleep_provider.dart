@@ -41,4 +41,33 @@ class SleepProvider with ChangeNotifier {
       notifyListeners();
     }
   }
+
+  // ✅ [추가] 사용자의 가장 최근 수면 리포트 가져오기
+  Future<void> fetchMostRecentSleepReport(String userId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      QuerySnapshot snapshot = await FirebaseFirestore.instance
+          .collection('sleep_reports')
+          .where('userId', isEqualTo: userId)
+          .orderBy('created_at', descending: true)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        _latestSleepReport = SleepReport.fromFirestore(snapshot.docs.first);
+      } else {
+        _latestSleepReport = null;
+        _errorMessage = '아직 수면 기록이 없습니다.';
+      }
+    } catch (e) {
+      _errorMessage = '최신 수면 리포트를 불러오는 중 오류가 발생했습니다: $e';
+      print('Error fetching most recent sleep report: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

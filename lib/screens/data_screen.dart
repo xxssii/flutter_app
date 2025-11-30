@@ -9,6 +9,7 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../providers/sleep_provider.dart';
 import '../models/sleep_report_model.dart';
+import '../state/app_state.dart'; // ✅ AppState 임포트
 import 'sleep_history_screen.dart';
 
 class DataScreen extends StatefulWidget {
@@ -98,6 +99,12 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
 
+    // ✅ 화면 진입 시 최신 데이터 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userId = Provider.of<AppState>(context, listen: false).currentUserId;
+      Provider.of<SleepProvider>(context, listen: false).fetchMostRecentSleepReport(userId);
+    });
+
     _barChartAnimationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -158,6 +165,14 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final sleepProvider = Provider.of<SleepProvider>(context);
+
+    // ✅ 로딩 중 처리
+    if (sleepProvider.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final report = sleepProvider.latestSleepReport ?? _getMockSleepReport();
 
     return Scaffold(
