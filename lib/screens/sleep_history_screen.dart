@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../state/app_state.dart'; // ✅ AppState 임포트 추가
 import '../state/sleep_data_state.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
@@ -19,9 +20,10 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
   void initState() {
     super.initState();
     // 화면이 열릴 때 데이터를 불러옵니다.
-    // (로그인 구현 후에는 실제 사용자 ID를 사용해야 합니다.)
-    final String userId = 'test_user_id_123';
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // ✅ AppState에서 현재 사용자 ID 가져오기
+      final userId = Provider.of<AppState>(context, listen: false).currentUserId;
+      
       Provider.of<SleepDataState>(
         context,
         listen: false,

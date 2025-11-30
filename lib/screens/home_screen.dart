@@ -11,6 +11,8 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/app_state.dart';
 import '../state/settings_state.dart';
+import '../state/sleep_data_state.dart';
+import '../utils/sleep_score_analyzer.dart';
 import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
 // 🔔 알림 서비스 import 추가
@@ -389,7 +391,6 @@ class HomeScreen extends StatelessWidget {
             content: Text('❌ 오류 발생: $e'),
             backgroundColor: Colors.red,
           ),
-
         );
       }
       print('❌ 테스트 실패: $e');
@@ -532,55 +533,61 @@ class HomeScreen extends StatelessWidget {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
-          appBar: AppBar(
-            toolbarHeight: 80,
-            title: Padding(
-              padding: const EdgeInsets.only(left: 8.0, top: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '오늘 밤은 어떨까요?',
-                    style: AppTextStyles.heading2.copyWith(fontSize: 22),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '수면 측정을 시작해 주세요.',
-                    style: AppTextStyles.secondaryBodyText.copyWith(
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              Consumer<SettingsState>(
-                builder: (context, settingsState, _) {
-                  final iconColor = settingsState.isDarkMode
-                      ? AppColors.darkPrimaryText
-                      : AppColors.primaryText;
-                  return IconButton(
-                    icon: Icon(
-                      settingsState.isDarkMode
-                          ? Icons.wb_sunny_outlined
-                          : Icons.mode_night_outlined,
-                      color: iconColor,
-                      size: 28,
-                    ),
-                    onPressed: () {
-                      settingsState.toggleDarkMode(!settingsState.isDarkMode);
-                    },
-                  );
-                },
-              ),
-              const SizedBox(width: 16),
-            ],
-          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ✅ PillowScreen 스타일의 헤더 (SafeArea + Padding)
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '오늘 밤은 어떨까요?',
+                              style:
+                                  AppTextStyles.heading2.copyWith(fontSize: 22),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '수면 측정을 시작해 주세요.',
+                              style: AppTextStyles.secondaryBodyText.copyWith(
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // 다크모드 토글 버튼
+                        Consumer<SettingsState>(
+                          builder: (context, settingsState, _) {
+                            final iconColor = settingsState.isDarkMode
+                                ? AppColors.darkPrimaryText
+                                : AppColors.primaryText;
+                            return IconButton(
+                              icon: Icon(
+                                settingsState.isDarkMode
+                                    ? Icons.wb_sunny_outlined
+                                    : Icons.mode_night_outlined,
+                                color: iconColor,
+                                size: 28,
+                              ),
+                              onPressed: () {
+                                settingsState
+                                    .toggleDarkMode(!settingsState.isDarkMode);
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 Center(child: _buildMeasurementButton(context, appState)),
                 const SizedBox(height: 24),
                 Center(
@@ -897,11 +904,11 @@ class HomeScreen extends StatelessWidget {
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
     final descriptionText =
         isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
-    
+
     // 다크모드 감지하여 아이콘 색상 변경
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final buttonColor = isMeasuring 
-        ? AppColors.errorRed 
+    final buttonColor = isMeasuring
+        ? AppColors.errorRed
         : (isDarkMode ? const Color(0xFF6292BE) : AppColors.primaryNavy);
 
     return Column(
@@ -1138,27 +1145,83 @@ class HomeScreen extends StatelessWidget {
   }
 
   Widget _buildSummaryCard(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('최근 수면 요약', style: AppTextStyles.heading3),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+    return Consumer<SleepDataState>(
+      builder: (context, sleepDataState, _) {
+        final history = sleepDataState.sleepHistory;
+
+        String avgSleepStr = '-';
+        String avgSnoringStr = '-';
+        String avgEfficiencyStr = '-';
+        String avgRemStr = '-';
+
+        if (history.isNotEmpty) {
+          // 최근 7개 데이터만 사용
+          final recentHistory = history.take(7).toList();
+          final analyzer = SleepScoreAnalyzer();
+
+          double totalSleep = 0;
+          double totalSnoringScore = 0;
+          double totalEfficiency = 0;
+          double totalRem = 0;
+
+          for (var metric in recentHistory) {
+            totalSleep += metric.totalSleepDuration;
+
+            // ✅ 코골이 점수 계산 (10점 만점)
+            double score = analyzer.getSnoringScore(
+              metric.avgSnoringDuration, // 분 단위
+              metric.totalSleepDuration * 60, // 분 단위로 변환
+            );
+            totalSnoringScore += score;
+
+            totalEfficiency += metric.sleepEfficiency;
+            totalRem += metric.remRatio;
+          }
+
+          final count = recentHistory.length;
+
+          // 평균 수면 시간 포맷팅
+          final avgSleep = totalSleep / count;
+          final hours = avgSleep.floor();
+          final minutes = ((avgSleep - hours) * 60).round();
+          avgSleepStr = '${hours}시간 ${minutes}분';
+
+          // 평균 코골이 점수
+          final avgSnoringScore = totalSnoringScore / count;
+          avgSnoringStr = '${avgSnoringScore.toStringAsFixed(1)}점';
+
+          // 수면 효율
+          final avgEfficiency = totalEfficiency / count;
+          avgEfficiencyStr = '${avgEfficiency.toStringAsFixed(0)}%';
+
+          // REM 비율
+          final avgRem = totalRem / count;
+          avgRemStr = '${avgRem.toStringAsFixed(0)}%';
+        }
+
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSummaryItem('8시간 17.5분', '평균 수면', context),
-                _buildSummaryItem('3.3점', '평균 코골이', context),
-                _buildSummaryItem('92%', '수면 효율', context),
-                _buildSummaryItem('20%', 'REM 비율', context),
+                Text('최근 7일 수면 요약', style: AppTextStyles.heading3),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSummaryItem(avgSleepStr, '평균 수면', context),
+                    _buildSummaryItem(avgSnoringStr, '평균 코골이', context),
+                    _buildSummaryItem(avgEfficiencyStr, '수면 효율', context),
+                    _buildSummaryItem(avgRemStr, 'REM 비율', context),
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

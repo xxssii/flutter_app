@@ -8,13 +8,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/sleep_apnea_detector.dart';
 import '../utils/sleep_score_analyzer.dart';
 import '../services/notification_service.dart';
-import '../widgets/apnea_warning_dialog.dart';
 import '../widgets/apnea_report_dialog.dart';
 // import '../utils/app_colors.dart'; // 사용되지 않음
 // import '../utils/app_text_styles.dart'; // 사용되지 않음
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
-import '../screens/sleep_report_screen.dart';
+import '../state/sleep_data_state.dart'; // SleepDataState 및 SnoringDataPoint 임포트
+import '../screens/sleep_report_screen.dart'; // ✅ SleepReportScreen 임포트 추가
 
 // ✅ 시연용으로 사용할 고정 ID 정의
 const String DEMO_USER_ID = "capstone_demo_session_01";
@@ -39,6 +39,12 @@ class AppState extends ChangeNotifier {
   bool _isMeasuring = false;
   final List<String> _apneaEvents = [];
 
+  // ✅ 그래프용 히스토리 데이터
+  final List<double> _heartRateHistory = [];
+  final List<SnoringDataPoint> _snoringHistory = [];
+  DateTime? _lastHistoryUpdateTime; // 데이터 샘플링을 위한 시간 기록
+  DateTime? _lastUiUpdateTime; // ✅ UI 갱신 스로틀링을 위한 시간 기록
+
   BleService? _bleService;
   SettingsState? _settingsState;
   Timer? _sensorDataTimer; // 1초 타이머 (알람 확인용)
@@ -59,6 +65,7 @@ class AppState extends ChangeNotifier {
 
   /// 현재 유저 ID (테스트용)
   final String _currentUserId = DEMO_USER_ID; // DEMO_USER_ID로 통일
+  String get currentUserId => _currentUserId; // ✅ 외부 접근을 위한 getter 추가
 
   bool get isMeasuring => _isMeasuring;
   List<String> get apneaEvents => _apneaEvents;
@@ -82,10 +89,18 @@ class AppState extends ChangeNotifier {
   void _onBleDataReceived() {
     if (!_isMeasuring) return;
 
+    final timestamp = DateTime.now();
+
+    // ✅ 10초 스로틀링: 마지막 갱신 후 10초가 지나지 않았으면 무시
+    if (_lastUiUpdateTime != null &&
+        timestamp.difference(_lastUiUpdateTime!).inSeconds < 10) {
+      return;
+    }
+    _lastUiUpdateTime = timestamp;
+
     // ✅ 수정됨: BleService에는 pressureValue라는 게터가 없습니다. pressureAvg 변수를 직접 사용합니다.
     final pressure = _bleService!.pressureAvg;
     final snoring = _bleService!.isSnoring;
-    final timestamp = DateTime.now();
 
     saveFakeSensorData(
       pressure: pressure,
@@ -97,6 +112,19 @@ class AppState extends ChangeNotifier {
     _currentHeartRate = _bleService!.heartRate;
     _currentSpo2 = _bleService!.spo2;
     // _currentMovementScore = ... // 움직임 데이터 처리 로직 추가 필요
+
+    // ✅ 그래프용 데이터 누적 (1분 간격 샘플링)
+    if (_lastHistoryUpdateTime == null ||
+        timestamp.difference(_lastHistoryUpdateTime!).inMinutes >= 1) {
+      _heartRateHistory.add(_currentHeartRate);
+      // 코골이 데시벨은 현재 BLE에서 직접 주지 않으므로, snoring bool 값에 따라 임의의 값 저장 (추후 실제 데시벨로 교체 필요)
+      // 코골이 중이면 60~80dB, 아니면 30~40dB 랜덤
+      double decibel = snoring ? (60.0 + (timestamp.second % 20)) : (30.0 + (timestamp.second % 10));
+      _snoringHistory.add(SnoringDataPoint(timestamp, decibel));
+      
+      _lastHistoryUpdateTime = timestamp;
+      print('📊 그래프 데이터 저장됨: HR=$_currentHeartRate, dB=$decibel');
+    }
 
     // 알람 트리거 확인 (context 없이 호출)
     _checkAlarmTrigger();
@@ -110,6 +138,11 @@ class AppState extends ChangeNotifier {
     if (_isMeasuring) {
       // --- 측정 시작 ---
       _apneaEvents.clear();
+      // ✅ 히스토리 데이터 초기화
+      _heartRateHistory.clear();
+      _snoringHistory.clear();
+      _lastHistoryUpdateTime = null;
+      _lastUiUpdateTime = null; // ✅ UI 갱신 시간 초기화
 
       // BLE 스캔 시작
       Provider.of<BleService>(context, listen: false).startScan();
@@ -159,8 +192,6 @@ class AppState extends ChangeNotifier {
     _sensorDataTimer?.cancel();
   }
 
-  // (무호흡 감지 로직 생략 - 코드가 너무 길어져서 생략했지만 기존 코드 유지 필요)
-
   void _generatePostSleepReport(BuildContext context) {
     // (리포트 생성 로직 생략 - 기존 코드 유지 필요)
     final apneaDetector = SleepApneaDetector();
@@ -179,6 +210,32 @@ class AppState extends ChangeNotifier {
     double finalRemRatio = 22.0;
     double finalDeepSleepRatio = 18.0;
     double finalSnoringDuration = 30.0;
+
+    // ✅ 실제 수집된 데이터로 SleepMetrics 생성
+    final now = DateTime.now();
+    final todayMetrics = SleepMetrics(
+      reportDate: "${now.year}년 ${now.month}월 ${now.day}일",
+      totalSleepDuration: 7.5, // TODO: 실제 측정 시간으로 계산 필요
+      timeInBed: 8.0, // TODO: 실제 측정 시간으로 계산 필요
+      sleepEfficiency: finalSleepEfficiency,
+      remRatio: finalRemRatio,
+      deepSleepRatio: finalDeepSleepRatio,
+      tossingAndTurning: 12, // TODO: 실제 뒤척임 횟수
+      avgSnoringDuration: finalSnoringDuration,
+      avgHrv: 55.0, // TODO: 실제 HRV 평균
+      avgHeartRate: _heartRateHistory.isEmpty ? 0 : (_heartRateHistory.reduce((a, b) => a + b) / _heartRateHistory.length),
+      apneaCount: _apneaEvents.length,
+      heartRateData: List.from(_heartRateHistory), // 복사해서 전달
+      snoringDecibelData: List.from(_snoringHistory), // 복사해서 전달
+    );
+
+    // ✅ SleepDataState에 데이터 전달
+    final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
+    sleepDataState.setTodayMetrics(todayMetrics);
+
+    // ✅ Firestore에 자동 저장 (비동기 실행)
+    // 주의: context가 유효하지 않을 수 있으므로 예외 처리 필요할 수 있음
+    sleepDataState.saveSleepData(context, _currentUserId, todayMetrics);
 
     // 2. 점수 및 리포트 생성
     int score = analyzer.getSleepScore(

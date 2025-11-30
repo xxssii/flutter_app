@@ -30,7 +30,7 @@ import 'services/ble_service.dart';
 // ✅ 실제 FCM 알림 서비스
 import 'services/notification_service.dart';
 
-import 'dart:io' show Platform;
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

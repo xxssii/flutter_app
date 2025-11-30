@@ -161,47 +161,53 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     final report = sleepProvider.latestSleepReport ?? _getMockSleepReport();
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 100,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('수면 데이터 분석', style: AppTextStyles.heading1),
-            const SizedBox(height: 4),
-            Text(
-              '상세한 수면 패턴과 효율성을 확인해보세요',
-              style: AppTextStyles.secondaryBodyText,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('현재 최근 7일간의 데이터를 보여주고 있습니다.'),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+      body: Column(
+        children: [
+          // ✅ PillowScreen 스타일의 헤더 (SafeArea + Padding)
+          SafeArea(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 35.0, horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('수면 데이터 분석', style: AppTextStyles.heading1),
+                      const SizedBox(height: 4),
+                      Text(
+                        '상세한 수면 패턴과 효율성을 확인해보세요',
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
                   ),
-                ),
-              );
-            },
-            child: Text(
-              '최근 7일',
-              style: AppTextStyles.bodyText.copyWith(
-                color: AppColors.primaryNavy,
-                fontWeight: FontWeight.bold,
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('현재 최근 7일간의 데이터를 보여주고 있습니다.'),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      '최근 7일',
+                      style: AppTextStyles.bodyText.copyWith(
+                        color: AppColors.primaryNavy,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Column(
-        children: [
           _buildTopSummaryCards(report),
           const SizedBox(height: 16),
           TabBar(

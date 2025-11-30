@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
+import '../state/sleep_data_state.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
@@ -10,6 +12,19 @@ class HeartRateChartSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Provider로 데이터 가져오기
+    final sleepDataState = Provider.of<SleepDataState>(context);
+    final sleepMetrics = sleepDataState.todayMetrics;
+
+    // 데이터가 없거나 비어있을 경우 처리
+    if (sleepMetrics == null || sleepMetrics.heartRateData.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        alignment: Alignment.center,
+        child: Text('심박수 데이터가 없습니다.', style: AppTextStyles.bodyText),
+      );
+    }
+
     // 그래프에 사용할 그라데이션 색상 (네이비 -> 연한 네이비 -> 투명)
     final List<Color> gradientColors = [
       AppColors.errorRed.withOpacity(0.5), // AppColors.errorRed는 빨간색 계열일 거야
@@ -89,18 +104,10 @@ class HeartRateChartSection extends StatelessWidget {
               maxY: 100, // 최대 심박수
               lineBarsData: [
                 LineChartBarData(
-                  // 임시 심박수 데이터 (Mock) - 부드러운 곡선을 위해 데이터 배치
-                  spots: const [
-                    FlSpot(0, 75), // 잠들기 시작
-                    FlSpot(1, 68), // 얕은 잠
-                    FlSpot(2, 58), // 깊은 잠 (심박수 하락)
-                    FlSpot(3, 55), // 깊은 잠 유지
-                    FlSpot(4, 65), // REM 수면 (상승)
-                    FlSpot(5, 60), // 다시 잠
-                    FlSpot(6, 70), // REM 수면
-                    FlSpot(7, 62), // 얕은 잠
-                    FlSpot(8, 78), // 기상 직전
-                  ],
+                  // ✅ 실제 심박수 데이터 사용
+                  spots: sleepMetrics.heartRateData.asMap().entries.map((entry) {
+                    return FlSpot(entry.key.toDouble(), entry.value);
+                  }).toList(),
                   isCurved: true, // ✨ 부드러운 곡선 효과
                   color: AppColors.errorRed, // ✨ 선 색상도 빨간색 계열로 변경
                   barWidth: 3,
