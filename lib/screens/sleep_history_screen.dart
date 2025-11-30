@@ -36,11 +36,11 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('지난 수면 기록', style: AppTextStyles.heading2),
-        backgroundColor: AppColors.background,
+        // backgroundColor 제거: Theme 사용
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.primaryText),
       ),
-      backgroundColor: AppColors.background,
+      // backgroundColor 제거: Theme의 배경색 사용
       body: sleepDataState.isLoading
           ? const Center(child: CircularProgressIndicator())
           : sleepDataState.sleepHistory.isEmpty

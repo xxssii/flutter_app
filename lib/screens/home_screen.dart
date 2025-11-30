@@ -19,12 +19,7 @@ import '../services/notification_service.dart';
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  // ✅ [테마 적용] 색상 팔레트 정의 (배경색 제외)
-  final Color _mainDeepColor = const Color(0xFF011F25);
-  final Color _lightSleepColor = const Color(0xFF1B4561);
-  final Color _remSleepColor = const Color(0xFF6292BE);
-  final Color _awakeColor = const Color(0xFFBD9A8E);
-  final Color _themeLightGray = const Color(0xFFB5C1D4);
+  // 사용하지 않는 색상 변수 제거됨
   static final _random = Random();
   static double _randRange(double min, double max) {
     return min + _random.nextDouble() * (max - min);
@@ -537,8 +532,6 @@ class HomeScreen extends StatelessWidget {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
-          // ✅ 배경색을 원래대로 AppColors.background로 복원
-          backgroundColor: AppColors.background,
           appBar: AppBar(
             toolbarHeight: 80,
             title: Padding(
@@ -837,7 +830,7 @@ class HomeScreen extends StatelessWidget {
                 // ✅ 수정됨: 도넛 그래프가 포함된 카드로 교체
                 _buildPlaceholderInfoCards(),
                 const SizedBox(height: 24),
-                _buildDeviceCards(),
+                _buildDeviceCards(context),
                 const SizedBox(height: 24),
                 _buildSummaryCard(context),
               ],
@@ -904,8 +897,12 @@ class HomeScreen extends StatelessWidget {
     final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
     final descriptionText =
         isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
-    final buttonColor =
-        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
+    
+    // 다크모드 감지하여 아이콘 색상 변경
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final buttonColor = isMeasuring 
+        ? AppColors.errorRed 
+        : (isDarkMode ? const Color(0xFF6292BE) : AppColors.primaryNavy);
 
     return Column(
       children: [
@@ -963,7 +960,7 @@ class HomeScreen extends StatelessWidget {
                     // ✅ const 제거함
                     content: const Text('먼저 기기를 연결해주세요!'),
                     // ✅ 배경색을 테마 색상 변수로 변경
-                    backgroundColor: _mainDeepColor,
+                    backgroundColor: AppColors.primaryNavy,
                   ),
                 );
                 return;
@@ -1022,8 +1019,8 @@ class HomeScreen extends StatelessWidget {
               centerValue: '6시간 48분',
               footerLabel: '오늘의 수면 달성률',
               progress: 0.85,
-              // ✅ [테마 적용] 도넛 차트 색상 (REM 수면 색상 사용)
-              color: _remSleepColor,
+              // 팔레트 색상: #6292BE
+              color: const Color(0xFF6292BE),
             ),
           ),
         ),
@@ -1037,8 +1034,8 @@ class HomeScreen extends StatelessWidget {
               centerValue: '12cm',
               footerLabel: '현재 높이 상태',
               progress: 0.6,
-              // ✅ [테마 적용] 도넛 차트 색상 (얕은 수면 색상 사용)
-              color: _lightSleepColor,
+              // 팔레트 색상: #B5C1D4
+              color: const Color(0xFFB5C1D4),
             ),
           ),
         ),
@@ -1046,27 +1043,29 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDeviceCards() {
-    return Column(
-      children: [
-        // ✅ 수정됨: context 전달 제거
-        _buildDeviceCard(
-          deviceName: '스마트 베개 Pro',
-          deviceType: '스마트 베개',
-          isConnected: false,
-          batteryPercentage: 87,
-          version: 'v1.0.0',
-        ),
-        const SizedBox(height: 16),
-        // ✅ 수정됨: context 전달 제거
-        _buildDeviceCard(
-          deviceName: '수면 팔찌 Plus',
-          deviceType: '스마트 팔찌',
-          isConnected: false,
-          batteryPercentage: 73,
-          version: 'v1.0.0',
-        ),
-      ],
+  Widget _buildDeviceCards(BuildContext context) {
+    return Consumer<BleService>(
+      builder: (context, bleService, child) {
+        return Column(
+          children: [
+            _buildDeviceCard(
+              deviceName: '스마트 베개 Pro',
+              deviceType: '스마트 베개',
+              isConnected: bleService.isPillowConnected,
+              batteryPercentage: bleService.pillowBattery,
+              version: 'v1.0.0',
+            ),
+            const SizedBox(height: 16),
+            _buildDeviceCard(
+              deviceName: '수면 팔찌 Plus',
+              deviceType: '스마트 팔찌',
+              isConnected: bleService.isWatchConnected,
+              batteryPercentage: bleService.watchBattery,
+              version: 'v1.0.0',
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1222,7 +1221,7 @@ class HomeScreen extends StatelessWidget {
                         value: 1.0,
                         // ✅ [테마 적용] 배경색 투명도 조절
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          _themeLightGray.withOpacity(0.3),
+                          Colors.grey.shade300.withOpacity(0.3),
                         ),
                         strokeWidth: 12,
                       ),

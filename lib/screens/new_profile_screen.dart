@@ -70,7 +70,7 @@ class _AddProfileScreenState extends State<AddProfileScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('프로필 추가', style: AppTextStyles.appBarTitle),
-        backgroundColor: AppColors.background,
+        // backgroundColor 제거: Theme 사용
         elevation: 0,
       ),
       body: SingleChildScrollView(
