@@ -12,6 +12,7 @@ import '../state/app_state.dart';
 import '../state/settings_state.dart';
 import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
+import 'hardware_test_screen.dart'; // ✅ 파일 경로 확인 필요 (같은 폴더면 import 'hardware_test_screen.dart';)
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -875,6 +876,60 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+
+                // ===============================================
+                // ✨✨✨ 새로 추가된 하드웨어 테스트 섹션 ✨✨✨
+                // ===============================================
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "--- [하드웨어] 기기 제어 및 테스트 ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 15, horizontal: 20),
+                        ),
+                        icon: const Icon(Icons.build),
+                        label: const Text(
+                          "🛠️ 하드웨어 테스트 화면으로 이동",
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const HardwareTestScreen()),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '펌프, 밸브, 진동 모터 개별 제어',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                ),
+                // ===============================================
+
                 const SizedBox(height: 24),
                 _buildRealTimeMetricsCard(context, appState),
                 const SizedBox(height: 16),
@@ -1063,7 +1118,7 @@ class HomeScreen extends StatelessWidget {
                 builder: (BuildContext dialogContext) {
                   return AlertDialog(
                     title: const Text('수면 측정 종료'),
-                    content: const Text('측정을 종료하고 기기 연결을 해제하시겠습니까?'),
+                    content: const Text('수면 측정을 종료하시겠습니까?\n(기기 연결은 유지됩니다)'),
                     actions: [
                       TextButton(
                         onPressed: () {
@@ -1072,15 +1127,15 @@ class HomeScreen extends StatelessWidget {
                         child: const Text('취소'),
                       ),
                       TextButton(
-                        onPressed: () async {
-                          await bleService.stopDataCollectionAndDisconnect();
+                        onPressed: () {
+                          bleService.stopDataCollection(); // ← 데이터 수집만 중지!
                           appState.toggleMeasurement(context);
                           Navigator.of(dialogContext).pop();
 
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('수면 측정 종료 및 기기 연결 해제 완료'),
+                                content: Text('수면 측정 종료 (기기 연결 유지)'),
                                 backgroundColor: Colors.blue,
                               ),
                             );
@@ -1136,7 +1191,8 @@ class HomeScreen extends StatelessWidget {
             ),
             child: isMeasuring
                 ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
+                : Icon(Icons.nights_stay_rounded,
+                    color: buttonColor, size: 80),
           ),
         ),
         const SizedBox(height: 16),
