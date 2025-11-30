@@ -99,58 +99,69 @@ class _PillowScreenState extends State<PillowScreen> {
     );
   }
 
-  // 권한 요청 (기존 동일)
+  // ✅ 권한 요청 (안드로이드 11 태블릿 호환성 강화 버전)
   Future<bool> _requestPermissions() async {
-    // ... (권한 요청 로직 유지)
-    print("\n" + "=" * 50);
-    print("📱 권한 요청 시작...");
-    print("=" * 50);
+    // 1. [Android 12 이상] 블루투스 스캔/연결 권한 요청
+    // Android 11 이하에서는 이 권한들이 의미가 없거나 자동으로 거절됩니다.
+    PermissionStatus scanStatus = await Permission.bluetoothScan.request();
+    PermissionStatus connectStatus = await Permission.bluetoothConnect.request();
+    
+    // 2. [Android 11 이하] 위치 권한 요청 (태블릿 S5e 필수)
+    PermissionStatus locationStatus = await Permission.location.request();
 
-    PermissionStatus bluetoothScan = await Permission.bluetoothScan.request();
-    PermissionStatus bluetoothConnect =
-        await Permission.bluetoothConnect.request();
-    PermissionStatus location = await Permission.location.request();
+    print("📋 권한 상태 확인:");
+    print("   🔹 근처 기기 스캔 (Android 12+): $scanStatus");
+    print("   🔹 근처 기기 연결 (Android 12+): $connectStatus");
+    print("   📍 위치 권한 (Android 11 이하 필수): $locationStatus");
 
-    print("\n📋 권한 상태:");
-    print("   🔵 bluetoothScan: $bluetoothScan");
-    print("   🔵 bluetoothConnect: $bluetoothConnect");
-    print("   📍 location: $location (선택사항)");
-    print("");
-
-    List<String> deniedPermissions = [];
-    if (!bluetoothScan.isGranted) deniedPermissions.add("블루투스 스캔");
-    if (!bluetoothConnect.isGranted) deniedPermissions.add("블루투스 연결");
-
-    if (deniedPermissions.isNotEmpty) {
-      print("\n💥 거부된 필수 권한: ${deniedPermissions.join(', ')}");
+    // 3. 권한 판단 로직 (버전별 분기)
+    
+    // CASE A: Android 12 이상 (최신 폰)
+    if (scanStatus.isGranted && connectStatus.isGranted) {
+      print("✅ [Android 12+] 필수 권한 확보 완료!");
       print("=" * 50 + "\n");
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('권한이 필요합니다'),
-            content: const Text('필수 권한이 거부되었습니다.\n설정에서 권한을 허용해주세요.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('취소'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  openAppSettings();
-                },
-                child: const Text('설정 열기'),
-              ),
-            ],
-          ),
-        );
-      }
-      return false;
+      return true;
     }
-    print("✅ 필수 권한 허용됨! 스캔 가능!");
+    
+    // CASE B: Android 11 이하 (태블릿 S5e)
+    // 블루투스 권한은 Manifest에 있으면 자동 허용되므로, '위치' 권한만 확인하면 됨
+    if (locationStatus.isGranted) {
+      print("✅ [Android 11 이하] 필수 권한(위치) 확보 완료!");
+      print("=" * 50 + "\n");
+      return true;
+    }
+
+    // 4. 권한 거부 시 안내 팝업
+    print("💥 필수 권한 부족: 스캔 실패");
     print("=" * 50 + "\n");
-    return true;
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('권한 필요'),
+          content: const Text(
+            '이 기기(Android 11)에서 블루투스 스캔을 하려면\n'
+            '[위치] 권한이 반드시 필요합니다.\n\n'
+            '설정에서 위치 권한을 "앱 사용 중에만 허용"으로 변경해주세요.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                openAppSettings(); // 설정 화면으로 이동
+              },
+              child: const Text('설정 열기'),
+            ),
+          ],
+        ),
+      );
+    }
+    return false;
   }
 
   @override
