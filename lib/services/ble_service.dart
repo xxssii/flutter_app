@@ -39,6 +39,7 @@ class BleService extends ChangeNotifier {
   bool _isPillowConnected = false;
   bool _isWatchConnected = false;
   bool _isCollectingData = false;  // ✅✅✅ 핵심!
+  bool _isScanning = false; // ✅ 스캔 상태 추가
   bool _autoHeightControl = false;
   DateTime? _lastAdjustmentTime;
 
@@ -74,6 +75,7 @@ class BleService extends ChangeNotifier {
   bool get isPillowConnected => _isPillowConnected;
   bool get isWatchConnected => _isWatchConnected;
   bool get isCollectingData => _isCollectingData;
+  bool get isScanning => _isScanning; // ✅ Getter 추가
   bool get autoHeightControl => _autoHeightControl;
 
   void toggleAutoHeightControl(bool value) {
@@ -102,6 +104,7 @@ class BleService extends ChangeNotifier {
 
     _pillowStatus = "베개 스캔 중...";
     _watchStatus = "팔찌 스캔 중...";
+    _isScanning = true; // ✅ 스캔 시작 상태 설정
     notifyListeners();
 
     try {
@@ -153,7 +156,10 @@ class BleService extends ChangeNotifier {
       });
 
       await Future.delayed(const Duration(seconds: 15));
-      FlutterBluePlus.stopScan();
+      // 스캔이 이미 중지되었을 수도 있으므로 체크
+      if (_isScanning) {
+        await stopScan();
+      }
 
       if (_pillowDevice == null) {
         _pillowStatus = "베개 없음";
@@ -167,9 +173,39 @@ class BleService extends ChangeNotifier {
       print("⚠️ BLE 스캔 오류: $e");
       _pillowStatus = "스캔 실패";
       _watchStatus = "스캔 실패";
+    } finally {
+      // ✅ 예외 발생 여부와 상관없이 스캔 종료 상태로 확실하게 변경
+      if (_isScanning) {
+        _isScanning = false;
+        notifyListeners();
+      }
     }
+  }
 
+  // ✅ 스캔 중지 메서드 추가
+  Future<void> stopScan() async {
+    // ✅ UI 즉각 반응을 위해 상태 먼저 변경
+    _isScanning = false;
     notifyListeners();
+    print("🛑 BLE 스캔 중지 요청됨 (UI 즉시 반영)");
+
+    try {
+      await FlutterBluePlus.stopScan();
+      
+      // 기기를 못 찾았을 경우 상태 업데이트
+      if (_pillowDevice == null && _pillowStatus == "베개 스캔 중...") {
+        _pillowStatus = "스캔 중지됨";
+      }
+      if (_watchDevice == null && _watchStatus == "팔찌 스캔 중...") {
+        _watchStatus = "스캔 중지됨";
+      }
+      
+      print("🛑 BLE 스캔 완전히 중지됨");
+      notifyListeners(); // 상태 메시지 업데이트를 위해 한 번 더 알림
+    } catch (e) {
+      print("⚠️ 스캔 중지 오류: $e");
+      notifyListeners();
+    }
   }
 
   // ==========================================

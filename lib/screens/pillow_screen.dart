@@ -203,8 +203,7 @@ class _PillowScreenState extends State<PillowScreen> {
                 const SizedBox(height: 16),
                 _buildAutoAdjustmentCard(context, settingsState),
                 const SizedBox(height: 16),
-                _buildSleepModeSettings(context),
-                const SizedBox(height: 16),
+                // _buildSleepModeSettings(context) 제거됨
                 _buildGuideCard(context),
               ],
             ),
@@ -317,7 +316,10 @@ class _PillowScreenState extends State<PillowScreen> {
             Center(
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  if (bleService.isPillowConnected ||
+                  if (bleService.isScanning) {
+                    // ✅ 스캔 중이면 중지
+                    await bleService.stopScan();
+                  } else if (bleService.isPillowConnected ||
                       bleService.isWatchConnected) {
                     bool? confirm = await showDialog<bool>(
                       context: context,
@@ -342,7 +344,7 @@ class _PillowScreenState extends State<PillowScreen> {
 
                     if (confirm == true) {
                       await bleService.disconnectAll();
-                      if (mounted) {
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('기기 연결이 해제되었습니다'),
@@ -359,21 +361,29 @@ class _PillowScreenState extends State<PillowScreen> {
                   }
                 },
                 icon: Icon(
-                  (bleService.isPillowConnected || bleService.isWatchConnected)
-                      ? Icons.link_off
-                      : Icons.bluetooth_searching,
+                  bleService.isScanning
+                      ? Icons.stop_circle_outlined
+                      : (bleService.isPillowConnected ||
+                              bleService.isWatchConnected)
+                          ? Icons.link_off
+                          : Icons.bluetooth_searching,
                 ),
                 label: Text(
-                  (bleService.isPillowConnected || bleService.isWatchConnected)
-                      ? '스캔 종료 (연결 해제)'
-                      : '기기 스캔하기',
+                  bleService.isScanning
+                      ? '스캔 중지'
+                      : (bleService.isPillowConnected ||
+                              bleService.isWatchConnected)
+                          ? '스캔 종료 (연결 해제)'
+                          : '기기 스캔하기',
                 ),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 44),
-                  backgroundColor: (bleService.isPillowConnected ||
-                          bleService.isWatchConnected)
-                      ? Colors.red
-                      : _mainDeepColor,
+                  backgroundColor: bleService.isScanning
+                      ? _mainDeepColor // ✅ 스캔 중 색상: 테마 색상 사용
+                      : (bleService.isPillowConnected ||
+                              bleService.isWatchConnected)
+                          ? Colors.red
+                          : _mainDeepColor,
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -465,10 +475,10 @@ class _PillowScreenState extends State<PillowScreen> {
 
             const SizedBox(height: 24),
 
-            // ✅ 설명 텍스트 수정 (연결 여부와 상관없이 항상 표시)
+            // ✅ 설명 텍스트 수정
             Center(
               child: Text(
-                '각 부위별 버튼을 눌러 높이를 조절해보세요. (UI 테스트 중)',
+                '베개를 연결하여 버튼을 눌러 높이를 조절해보세요.',
                 style: AppTextStyles.secondaryBodyText.copyWith(
                   color: isDarkMode
                       ? AppColors.darkSecondaryText
@@ -631,10 +641,11 @@ class _PillowScreenState extends State<PillowScreen> {
         ),
         Row(
           children: [
-            // 낮추기 버튼 (isConnected 조건 제거)
+            // 낮추기 버튼 (isConnected 조건 추가)
             ElevatedButton(
-              onPressed:
-                  currentHeight > 1 ? () => onChanged(currentHeight - 1) : null,
+              onPressed: (isConnected && currentHeight > 1)
+                  ? () => onChanged(currentHeight - 1)
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _lightSleepColor,
                 foregroundColor: Colors.white,
@@ -645,10 +656,11 @@ class _PillowScreenState extends State<PillowScreen> {
               child: const Icon(Icons.remove, size: 20),
             ),
             const SizedBox(width: 8),
-            // 높이기 버튼 (isConnected 조건 제거)
+            // 높이기 버튼 (isConnected 조건 추가)
             ElevatedButton(
-              onPressed:
-                  currentHeight < 3 ? () => onChanged(currentHeight + 1) : null,
+              onPressed: (isConnected && currentHeight < 3)
+                  ? () => onChanged(currentHeight + 1)
+                  : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: _mainDeepColor,
                 foregroundColor: Colors.white,
@@ -729,78 +741,69 @@ class _PillowScreenState extends State<PillowScreen> {
                 ),
               ],
             ),
+            if (settingsState.isAutoAdjustOn) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16.0),
+                child: Divider(height: 1),
+              ),
+              _buildSleepStageInfo(
+                context,
+                title: 'REM 수면 단계',
+                description: '꿈을 꾸는 단계에서 베개를 약간 낮춤',
+                icon: Icons.waves,
+              ),
+              const SizedBox(height: 12),
+              _buildSleepStageInfo(
+                context,
+                title: '깊은 수면 단계',
+                description: '깊은 잠에서 최적의 높이 유지',
+                icon: Icons.nightlight_round,
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSleepModeSettings(BuildContext context) {
+  // ✅ 수면 단계 정보 행 빌더 (새로 추가됨)
+  Widget _buildSleepStageInfo(
+    BuildContext context, {
+    required String title,
+    required String description,
+    required IconData icon,
+  }) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    // ... (기존 코드 내용 유지)
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Icon(icon, size: 20, color: AppColors.secondaryText),
+        const SizedBox(width: 12),
         Expanded(
-          child: Card(
-            color: isDarkMode
-                ? AppColors.darkCardBackground
-                : AppColors.cardBackground,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('REM 수면 단계',
-                      style: AppTextStyles.bodyText.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode
-                            ? AppColors.darkPrimaryText
-                            : AppColors.primaryText,
-                      )),
-                  const SizedBox(height: 4),
-                  Text(
-                    '꿈을 꾸는 단계에서 베개를 약간 낮춤',
-                    style: AppTextStyles.secondaryBodyText.copyWith(
-                      color: isDarkMode
-                          ? AppColors.darkSecondaryText
-                          : AppColors.secondaryText,
-                    ),
-                  ),
-                ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode
+                      ? AppColors.darkPrimaryText
+                      : AppColors.primaryText,
+                  fontSize: 14,
+                ),
               ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Card(
-            color: isDarkMode
-                ? AppColors.darkCardBackground
-                : AppColors.cardBackground,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('깊은 수면 단계',
-                      style: AppTextStyles.bodyText.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode
-                            ? AppColors.darkPrimaryText
-                            : AppColors.primaryText,
-                      )),
-                  const SizedBox(height: 4),
-                  Text(
-                    '깊은 잠에서 최적의 높이 유지',
-                    style: AppTextStyles.secondaryBodyText.copyWith(
-                      color: isDarkMode
-                          ? AppColors.darkSecondaryText
-                          : AppColors.secondaryText,
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: AppTextStyles.secondaryBodyText.copyWith(
+                  color: isDarkMode
+                      ? AppColors.darkSecondaryText
+                      : AppColors.secondaryText,
+                  fontSize: 13,
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ],
@@ -838,7 +841,8 @@ class _PillowScreenState extends State<PillowScreen> {
                       style: AppTextStyles.secondaryBodyText.copyWith(
                         color: isDarkMode
                             ? AppColors.darkSecondaryText
-                            : AppColors.secondaryText,
+                            : AppColors.primaryText
+                                .withOpacity(0.8), // ✅ 가독성 개선: 더 진한 색상 사용
                       )),
                 ],
               ),
