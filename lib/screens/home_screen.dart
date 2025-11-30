@@ -740,7 +740,6 @@ class HomeScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       Text(
-
                         "--- [2단계] 알림 시뮬레이션 (즉시 발송) ---",
                         style: AppTextStyles.secondaryBodyText.copyWith(
                           fontWeight: FontWeight.bold,
@@ -828,7 +827,7 @@ class HomeScreen extends StatelessWidget {
                           foregroundColor: Colors.white,
                         ),
                       ),
-                            // ===============================================
+                      // ===============================================
                       // [하드웨어] 기기 제어 및 테스트
                       // ===============================================
                       Text(
@@ -856,7 +855,8 @@ class HomeScreen extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => const HardwareTestScreen()),
+                                builder: (context) =>
+                                    const HardwareTestScreen()),
                           );
                         },
                       ),
@@ -1041,8 +1041,7 @@ class HomeScreen extends StatelessWidget {
             ),
             child: isMeasuring
                 ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded,
-                    color: buttonColor, size: 80),
+                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
           ),
         ),
         const SizedBox(height: 16),
@@ -1153,25 +1152,25 @@ class HomeScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                if (isConnected)
-                  Row(
-                    children: [
-                      Icon(
-                        batteryPercentage > 20
-                            ? Icons.battery_full
-                            : Icons.battery_alert,
-                        color: batteryPercentage > 20
-                            ? AppColors.successGreen
-                            : AppColors.errorRed,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$batteryPercentage%',
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
-                    ],
-                  ),
+                // if (isConnected)
+                Row(
+                  children: [
+                    Icon(
+                      batteryPercentage > 20
+                          ? Icons.battery_full
+                          : Icons.battery_alert,
+                      color: batteryPercentage > 20
+                          ? AppColors.successGreen
+                          : AppColors.errorRed,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$batteryPercentage%',
+                      style: AppTextStyles.secondaryBodyText,
+                    ),
+                  ],
+                ),
                 Text(
                   isConnected ? version : '미연결',
                   style: AppTextStyles.smallText,
@@ -1279,6 +1278,7 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
+
   // ✅ 도넛 그래프 위젯 (애니메이션 복원 및 테마 적용됨)
   Widget _buildAnimatedDonutContent({
     required String title,

@@ -588,7 +588,7 @@ class _PillowScreenState extends State<PillowScreen> {
           onChanged: (newHeight) {
             _updateAircellHeight(1, newHeight);
             _showHeightChangeSnackBar(context, '머리', newHeight);
-            // TODO: bleService.adjustCell(1, newHeight);
+            bleService.adjustCell(1, newHeight);
           },
         ),
         const Divider(height: 24),
@@ -600,7 +600,7 @@ class _PillowScreenState extends State<PillowScreen> {
           onChanged: (newHeight) {
             _updateAircellHeight(2, newHeight);
             _showHeightChangeSnackBar(context, '목', newHeight);
-            // TODO: bleService.adjustCell(2, newHeight);
+            bleService.adjustCell(2, newHeight);
           },
         ),
         const Divider(height: 24),
@@ -612,7 +612,7 @@ class _PillowScreenState extends State<PillowScreen> {
           onChanged: (newHeight) {
             _updateAircellHeight(3, newHeight);
             _showHeightChangeSnackBar(context, '어깨', newHeight);
-            // TODO: bleService.adjustCell(3, newHeight);
+            bleService.adjustCell(3, newHeight);
           },
         ),
       ],

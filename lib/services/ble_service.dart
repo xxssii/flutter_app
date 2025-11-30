@@ -107,8 +107,18 @@ class BleService extends ChangeNotifier {
     _isScanning = true; // ✅ 스캔 시작 상태 설정
     notifyListeners();
 
+    // ✅ 내부 try-catch로 감싸서, 스캔 명령이 실패해도(예: 윈도우) 
+    //    UI 상으로는 '스캔 중' 상태가 유지되도록 함 (15초 대기)
     try {
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
+      try {
+        await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
+      } catch (e) {
+        print("⚠️ BLE 스캔 시작 실패 (플랫폼 미지원 등): $e");
+        _pillowStatus = "스캔 오류 (기기 확인 필요)";
+        _watchStatus = "스캔 오류 (기기 확인 필요)";
+        notifyListeners();
+        // 여기서 return 하지 않고 아래 로직(리스너 등록, 15초 대기)을 계속 진행
+      }
 
       FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
@@ -170,7 +180,7 @@ class BleService extends ChangeNotifier {
         print("❌ 팔찌를 찾지 못했습니다");
       }
     } catch (e) {
-      print("⚠️ BLE 스캔 오류: $e");
+      print("⚠️ BLE 스캔 로직 오류: $e");
       _pillowStatus = "스캔 실패";
       _watchStatus = "스캔 실패";
     } finally {
@@ -649,6 +659,24 @@ class BleService extends ChangeNotifier {
       int command = 0x30 + cellNumber;
       await _commandChar!.write([command], withoutResponse: true);
       print("📤 셀 $cellNumber 높이 조절 명령 전송");
+    } catch (e) {
+      print("⚠️ 명령 전송 실패: $e");
+    }
+  }
+
+  // ✅ 특정 셀의 높이를 직접 조절하는 메서드 추가
+  Future<void> adjustCell(int cellIndex, int height) async {
+    if (kIsWeb || _commandChar == null || !_isPillowConnected) {
+      print("⚠️ 명령 실패: 특성 없음 또는 미연결");
+      return;
+    }
+
+    try {
+      // 프로토콜: "C{cell}:{height}" (예: "C1:5")
+      // 아두이노에서 이를 파싱하여 처리하도록 구현 필요
+      String command = "C$cellIndex:$height";
+      await _commandChar!.write(command.codeUnits, withoutResponse: true);
+      print("📤 셀 높이 조절 명령 전송: $command");
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");
     }
