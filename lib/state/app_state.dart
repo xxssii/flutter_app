@@ -16,7 +16,6 @@ import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
 import '../screens/alarm_screen.dart'; // ✅ AlarmScreen 임포트
 import '../state/sleep_data_state.dart'; // ✅ SleepDataState 및 모델 임포트
-import '../services/sleep_api_service.dart'; // ✅ SleepApiService 임포트
 import 'package:intl/intl.dart'; // 날짜 포맷용
 
 // ✅ 시연용으로 사용할 고정 ID 정의
@@ -475,95 +474,13 @@ class AppState extends ChangeNotifier {
             Navigator.of(dialogContext).pop();
             Navigator.of(context).pop();
           },
-          onViewDetails: () async {
+          onViewDetails: () {
             Navigator.of(dialogContext).pop();
-            
-            // ✅ 백엔드 API 호출하여 실제 데이터 가져오기
-            try {
-              // 로딩 표시
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-              
-              // SleepApiService를 사용하여 백엔드 API 호출
-              final sleepApiService = SleepApiService();
-              final sessionId = _currentSessionId.isNotEmpty ? _currentSessionId : "s4_test";
-              
-              print("📡 백엔드 API 호출 시작: sessionId=$sessionId");
-              final sleepReport = await sleepApiService.fetchSleepScore(sessionId, userId: _currentUserId);
-              
-              print("✅ 백엔드 API 호출 성공!");
-              print("   - 총점: ${sleepReport.totalScore}");
-              print("   - 총 수면 시간: ${sleepReport.summary.totalDurationHours}시간");
-              print("   - 깊은 수면: ${sleepReport.summary.deepSleepHours}시간");
-              print("   - REM 수면: ${sleepReport.summary.remSleepHours}시간");
-              
-              // SleepReport를 SleepMetrics로 변환
-              final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
-              
-              // 백엔드에서 받은 데이터로 SleepMetrics 생성
-              final backendMetrics = SleepMetrics(
-                reportDate: DateFormat('yyyy년 MM월 dd일').format(sleepReport.createdAt),
-                totalSleepDuration: sleepReport.summary.totalDurationHours,
-                timeInBed: sleepReport.summary.totalDurationHours + sleepReport.summary.awakeHours,
-                sleepEfficiency: 100.0 - sleepReport.summary.awakeRatio,
-                remRatio: sleepReport.summary.remRatio,
-                deepSleepRatio: sleepReport.summary.deepRatio,
-                tossingAndTurning: 0, // 백엔드에서 제공하지 않으면 0
-                avgSnoringDuration: sleepReport.summary.snoringDuration,
-                avgHrv: 50.0, // 백엔드에서 제공하지 않으면 기본값
-                avgHeartRate: 60.0, // 백엔드에서 제공하지 않으면 기본값
-                apneaCount: sleepReport.summary.apneaCount,
-                heartRateData: _sessionHeartRates.isNotEmpty 
-                    ? List.from(_sessionHeartRates) 
-                    : List.generate(49, (i) => 60.0 + (i % 10)), // 기본 데이터
-                snoringDecibelData: _sessionSnoringData.isNotEmpty
-                    ? List.from(_sessionSnoringData)
-                    : List.generate(49, (i) => SnoringDataPoint(
-                        DateTime.now().subtract(Duration(minutes: 49 - i)),
-                        30.0 + (i % 20),
-                      )), // 기본 데이터
-              );
-              
-              // SleepDataState에 설정
-              sleepDataState.setTodayMetrics(backendMetrics);
-              
-              // 로딩 닫기
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
-              
-              // 리포트 화면으로 이동
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(
-                    builder: (context) => const SleepReportScreen(key: Key('sleepReportScreen')),
-                  ),
-                );
-              }
-            } catch (e) {
-              // 에러 처리
-              print("❌ 백엔드 API 호출 실패: $e");
-              
-              // 로딩 닫기
-              if (context.mounted) {
-                Navigator.of(context).pop();
-              }
-              
-              // 에러 메시지 표시
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('리포트 데이터를 불러오는데 실패했습니다: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => const SleepReportScreen(key: Key('sleepReportScreen')),
+              ),
+            );
           },
         );
       },
