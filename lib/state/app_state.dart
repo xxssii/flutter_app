@@ -1,5 +1,5 @@
 // lib/state/app_state.dart
-// ✅ [수정 완료] NotificationService 호출 에러 해결 및 테스트 코드 포함 버전
+// ✅ [수정 완료] NotificationService 호출 에러 해결 버전
 
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -14,7 +14,6 @@ import '../widgets/apnea_report_dialog.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
-import '../screens/alarm_screen.dart'; // ✅ AlarmScreen 임포트
 
 // ✅ 시연용으로 사용할 고정 ID 정의
 const String DEMO_USER_ID = "capstone_demo_session_01";
@@ -37,16 +36,17 @@ class AppState extends ChangeNotifier {
   // ----------------------------------------------------
   StreamSubscription? _commandSubscription;
   String _currentSessionId = "";
-  final String _currentUserId = "v4_test";
+  final String _currentUserId = "demoUser";
 
   bool get isMeasuring => _isMeasuring;
   List<String> get apneaEvents => _apneaEvents;
   double get currentHeartRate => _currentHeartRate;
   double get currentSpo2 => _currentSpo2;
   double get currentMovementScore => _currentMovementScore;
-  String get currentUserId => _currentUserId;
   double get currentPressure => _bleService?.pressureAvg ?? 0.0;
   bool get isSnoringNow => _bleService?.isSnoring ?? false;
+  StreamSubscription? _stageSubscription; 
+  bool _hasSmartAlarmTriggered = false; // 오늘 이미 깨웠는지 체크
 
   void updateStates(BleService bleService, SettingsState settingsState) {
     if (_bleService != bleService) {
@@ -101,6 +101,10 @@ class AppState extends ChangeNotifier {
       _currentSessionId = "s4_test";
       _startCommandListener(_currentUserId, _currentSessionId);
 
+      // 5. ✅ [추가] 스마트 알람용 수면 단계 감시 리스너
+      _startSmartAlarmListener(context, _currentUserId, _currentSessionId);
+      _hasSmartAlarmTriggered = false; // 초기화
+
       // ✅ [태블릿 디버깅용] 화면 하단에 초록색 알림 띄우기
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,6 +128,8 @@ class AppState extends ChangeNotifier {
       _stopMockDataStream(); 
       _commandSubscription?.cancel();
       _commandSubscription = null;
+      _stageSubscription?.cancel(); // ✅ 스마트 알람 리스너 해제
+      _stageSubscription = null;
 
       // ✅ [태블릿 디버깅용] 화면 하단에 빨간색 알림 띄우기
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -162,9 +168,6 @@ class AppState extends ChangeNotifier {
     });
   }
 
-  // ✅ 알람이 이미 울렸는지 확인하는 플래그 (날짜별 관리 필요하지만 간단히 메모리 변수로)
-  DateTime? _lastAlarmTriggeredDate;
-
   void _checkAlarmTrigger(BuildContext context) {
     if (_settingsState == null ||
         !_settingsState!.isAlarmOn ||
@@ -175,48 +178,91 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     final alarmTime = _settingsState!.alarmTime!;
 
-    // 1. 오늘 이미 알람이 울렸는지 확인
-    if (_lastAlarmTriggeredDate != null &&
-        _lastAlarmTriggeredDate!.year == now.year &&
-        _lastAlarmTriggeredDate!.month == now.month &&
-        _lastAlarmTriggeredDate!.day == now.day) {
-      return;
-    }
-
-    // 2. 시간 비교 (분 단위까지)
-    if (now.hour == alarmTime.hour && now.minute == alarmTime.minute) {
-      print("⏰ [알람 트리거] 시간이 되었습니다! (${alarmTime.format(context)})");
+    // ✅ 정각 알람 (스마트 알람이 울린 후에도 확인 차원에서 강하게 진동)
+    if (_settingsState!.isExactTimeAlarmOn &&
+        now.hour == alarmTime.hour &&
+        now.minute == alarmTime.minute &&
+        now.second == 0) {
+      print("⏰ 정각 알람! 강한 진동!");
+      final bleService = Provider.of<BleService>(context, listen: false);
       
-      // 3. 알람 실행
-      _triggerAlarm(context);
+      // 정각에는 무조건 쎄게!
+      bleService.sendVibrateStrong();
       
-      // 4. 플래그 업데이트
-      _lastAlarmTriggeredDate = now;
+      // 베개도 최대로!
+      bleService.adjustCell(1, 3);
     }
   }
 
-  void _triggerAlarm(BuildContext context) async {
-    // 1. 진동 명령 전송 (설정된 세기에 따라)
-    if (_bleService != null && _bleService!.isPillowConnected) {
-      print("📳 [알람] 베개 진동 시작 (세기: ${_settingsState!.vibrationStrength})");
-      if (_settingsState!.vibrationStrength == 1) {
-        await _bleService!.sendVibrateStrong();
-      } else {
-        await _bleService!.sendVibrateGently();
-      }
-    } else {
-      print("⚠️ [알람] 베개 미연결 (진동 명령 건너뜀)");
-    }
+  // ✅ [새로 추가] 스마트 알람 로직
+  void _startSmartAlarmListener(BuildContext context, String userId, String sessionId) {
+    print("⏰ 스마트 알람 모니터링 시작...");
+    
+    // processed_data의 최신 문서를 실시간 구독
+    _stageSubscription = FirebaseFirestore.instance
+        .collection('processed_data')
+        .where('sessionId', isEqualTo: sessionId)
+        .orderBy('ts', descending: true)
+        .limit(1)
+        .snapshots()
+        .listen((snapshot) {
+      
+      if (snapshot.docs.isEmpty) return;
+      
+      final data = snapshot.docs.first.data();
+      final String currentStage = data['stage'] ?? 'Unknown';
+      
+      // 스마트 알람 체크
+      _checkSmartWakeUp(context, currentStage);
+      
+    });
+  }
 
-    // 2. 알람 화면 띄우기
-    if (context.mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const AlarmScreen(),
-          fullscreenDialog: true, // 전체 화면 모달 느낌
-        ),
-      );
+  void _checkSmartWakeUp(BuildContext context, String currentStage) {
+    if (_hasSmartAlarmTriggered) return; // 이미 울렸으면 패스
+    if (_settingsState == null || !_settingsState!.isSmartAlarmOn) return; // 기능 꺼져있으면 패스
+    if (_settingsState!.alarmTime == null) return;
+
+    final now = DateTime.now();
+    final alarmTime = _settingsState!.alarmTime!;
+    
+    // 알람 시간 기준 30분 전부터 ~ 알람 시간까지가 스마트 알람 윈도우
+    bool isInWindow = _isTimeInWindow(now, alarmTime, 30);
+
+    if (isInWindow) {
+       print("⏰ [스마트 알람 감지 중] 현재 단계: $currentStage");
+       
+       // 얕은 수면(Light) 또는 깸(Awake) 상태라면 -> 지금 깨워야 함!
+       if (currentStage == 'Light' || currentStage == 'Awake') {
+          print("🔔 [스마트 알람 발동!] 얕은 수면 감지됨 -> 기상 유도!");
+          _triggerWakeUpRoutine(context);
+       }
     }
+  }
+  
+  // 시간 비교 헬퍼
+  bool _isTimeInWindow(DateTime now, TimeOfDay alarm, int windowMinutes) {
+      final alarmDateTime = DateTime(now.year, now.month, now.day, alarm.hour, alarm.minute);
+      final diff = alarmDateTime.difference(now).inMinutes;
+      // 알람 시간까지 남은 시간이 0~30분 사이면 True
+      return diff >= 0 && diff <= windowMinutes;
+  }
+
+  // 🚨 기상 유도 루틴 (진동 + 베개 높이기)
+  void _triggerWakeUpRoutine(BuildContext context) {
+     _hasSmartAlarmTriggered = true;
+     final bleService = Provider.of<BleService>(context, listen: false);
+     
+     // 1. 진동 (약하게 -> 강하게)
+     bleService.sendVibrateGently();
+     
+     // 2. 베개 높이 조절 (기상 유도: 상체 일으키기)
+     // 1번 셀(머리)을 최대 높이로
+     bleService.adjustCell(1, 3); // Level 3
+     
+     ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("🌅 스마트 알람: 기상 시간입니다! (Light Sleep 감지)"), backgroundColor: Colors.orange),
+     );
   }
 
   void _stopMockDataStream() {
@@ -265,21 +311,10 @@ class AppState extends ChangeNotifier {
     final settings = _settingsState!;
     final List<String> reportDetails = [];
 
-    // ✅ [수정됨] BleService의 실제 측정 데이터 사용
-    double finalSleepEfficiency = _bleService?.lastEfficiency ?? 0.0;
-    double finalRemRatio = 22.0; 
+    double finalSleepEfficiency = 80.0;
+    double finalRemRatio = 22.0;
     double finalDeepSleepRatio = 18.0;
-    double finalSnoringDuration = _bleService?.lastSnoringMinutes ?? 0.0;
-
-    // 🧪 [테스트 모드] 강제 경고 값 설정
-    if (finalSleepEfficiency >= 85.0 || finalSleepEfficiency == 0.0) {
-      print("🧪 [테스트] 수면 효율 강제 조정 (100 -> 80)");
-      finalSleepEfficiency = 80.0; 
-    }
-    if (finalSnoringDuration == 0.0) {
-      print("🧪 [테스트] 코골이 시간 강제 조정 (0 -> 30)");
-      finalSnoringDuration = 30.0; 
-    }
+    double finalSnoringDuration = 30.0;
 
     int score = analyzer.getSleepScore(
       finalSleepEfficiency,
@@ -290,34 +325,21 @@ class AppState extends ChangeNotifier {
     String reportTitle = "어젯밤 수면 점수는 ${score}점입니다.";
 
     if (settings.isReportOn) {
+      // ✅ [오류 수정 부분] getBody: 매개변수 제거하고 순서대로 전달
       NotificationService.instance.scheduleDailyReportNotification(
         reportTitle,
-        reportBody,
+        reportBody, 
       );
     }
 
     if (settings.isEfficiencyOn) {
       String? efficiencyWarning = analyzer.getEfficiencyWarning(finalSleepEfficiency);
-      if (efficiencyWarning != null) {
-        reportDetails.add("경고: $efficiencyWarning");
-        NotificationService.instance.showImmediateWarning(
-          2,
-          '⚠️ 수면 효율 저하',
-          efficiencyWarning,
-        );
-      }
+      if (efficiencyWarning != null) reportDetails.add("경고: $efficiencyWarning");
     }
 
     if (settings.isSnoringOn) {
       String? snoringWarning = analyzer.getSnoringWarning(finalSnoringDuration);
-      if (snoringWarning != null) {
-        reportDetails.add("경고: $snoringWarning");
-        NotificationService.instance.showImmediateWarning(
-          3,
-          '💤 코골이 감지',
-          snoringWarning,
-        );
-      }
+      if (snoringWarning != null) reportDetails.add("경고: $snoringWarning");
     }
 
     if (_apneaEvents.isNotEmpty) {
@@ -399,9 +421,9 @@ class AppState extends ChangeNotifier {
         success = true;
       } else if (type == 'SET_HEIGHT') {
         int cellIndex = payload['cellIndex'] ?? 1;
-        // int height = payload['height'] ?? 2;
+        int targetLevel = payload['height'] ?? 2;// targetLevel로 받음
         // BleService의 adjustHeight 사용 (친구 코드와 통합된 부분)
-        await _bleService!.adjustHeight(cellIndex);
+        await _bleService!.adjustCell(cellIndex, targetLevel);
         success = true;
       }
     } else {
