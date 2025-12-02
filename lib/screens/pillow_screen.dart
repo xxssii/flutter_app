@@ -457,7 +457,7 @@ class _PillowScreenState extends State<PillowScreen> {
                         
                         // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
                         if (val == 1) {
-                          bleService.adjustHeight(1);
+                          bleService.adjustCell(1, 1);
                         }
                         
                         bleService.adjustCell(1, val);
@@ -478,7 +478,7 @@ class _PillowScreenState extends State<PillowScreen> {
 
                         // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
                         if (val == 1) {
-                          bleService.adjustHeight(2);
+                          bleService.adjustCell(2, 1);
                         }
 
                         bleService.adjustCell(2, val);
@@ -499,7 +499,7 @@ class _PillowScreenState extends State<PillowScreen> {
 
                         // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
                         if (val == 1) {
-                          bleService.adjustHeight(3);
+                          bleService.adjustCell(3, 1);
                         }
 
                         bleService.adjustCell(3, val);

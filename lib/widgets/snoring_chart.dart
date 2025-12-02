@@ -78,35 +78,26 @@ class SnoringChartSection extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 30,
-                    interval: 12, // 2시간 간격으로 레이블 표시 (10분*12 = 120분)
+                    interval: 12, // 12개 데이터 = 60초 (1분)
                     getTitlesWidget: (value, meta) {
-                      String hourText;
-                      // 22시부터 6시까지
-                      if (value == 0)
-                        hourText = '22시';
-                      else if (value == 6)
-                        hourText = '23시';
-                      else if (value == 12)
-                        hourText = '0시';
-                      else if (value == 18)
-                        hourText = '1시';
-                      else if (value == 24)
-                        hourText = '2시';
-                      else if (value == 30)
-                        hourText = '3시';
-                      else if (value == 36)
-                        hourText = '4시';
-                      else if (value == 42)
-                        hourText = '5시';
-                      else if (value == 48)
-                        hourText = '6시';
-                      else
-                        return const SizedBox.shrink(); // 나머지 숨김
-
+                      // 시연용: 5초 단위로 데이터가 들어옴
+                      // value는 인덱스 (0, 1, 2...)
+                      int seconds = value.toInt() * 5;
+                      
+                      // 60초 이상이면 분:초로 표시
+                      String timeText;
+                      if (seconds >= 60) {
+                        int min = seconds ~/ 60;
+                        int sec = seconds % 60;
+                        timeText = '$min분${sec > 0 ? " $sec초" : ""}';
+                      } else {
+                        timeText = '${seconds}초';
+                      }
+                      
                       return SideTitleWidget(
                         meta: meta,
                         space: 8.0,
-                        child: Text(hourText, style: AppTextStyles.smallText),
+                        child: Text(timeText, style: AppTextStyles.smallText),
                       );
                     },
                   ),

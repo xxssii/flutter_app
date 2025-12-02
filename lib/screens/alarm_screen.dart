@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'package:intl/intl.dart';
 import '../services/ble_service.dart';
+import '../state/settings_state.dart';
 import '../utils/app_text_styles.dart';
 import '../utils/app_colors.dart';
 
@@ -31,6 +32,21 @@ class _AlarmScreenState extends State<AlarmScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: false);
+    
+    // ✅ 알람 진동 시작
+    _startAlarmVibration();
+  }
+  
+  void _startAlarmVibration() {
+    final bleService = Provider.of<BleService>(context, listen: false);
+    final settingsState = Provider.of<SettingsState>(context, listen: false);
+    
+    // 진동 세기에 따라 다른 진동 실행
+    if (settingsState.vibrationStrength == 1) {
+      bleService.sendVibrateStrong();
+    } else {
+      bleService.sendVibrateGently();
+    }
   }
 
   void _updateTime() {
@@ -50,7 +66,7 @@ class _AlarmScreenState extends State<AlarmScreen>
 
   void _stopAlarm() {
     final bleService = Provider.of<BleService>(context, listen: false);
-    bleService.stopVibration();
+    bleService.stopAll();
     Navigator.of(context).pop();
   }
 

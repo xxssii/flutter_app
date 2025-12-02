@@ -63,14 +63,25 @@ class HeartRateChartSection extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 30,
-                    interval: 2, // 2시간 간격
+                    interval: 12, // 12개 데이터 = 60초 (1분)
                     getTitlesWidget: (value, meta) {
-                      // X축 시간 표시 (임시 데이터 기준 0~8시간)
-                      // 실제로는 시작 시간(예: 23:00)을 더해서 표시해야 함
-                      int time = (22 + value.toInt()) % 24;
+                      // 시연용: 5초 단위로 데이터가 들어옴
+                      // value는 인덱스 (0, 1, 2...)
+                      int seconds = value.toInt() * 5;
+                      
+                      // 60초 이상이면 분:초로 표시
+                      String timeText;
+                      if (seconds >= 60) {
+                        int min = seconds ~/ 60;
+                        int sec = seconds % 60;
+                        timeText = '$min분${sec > 0 ? " $sec초" : ""}';
+                      } else {
+                        timeText = '${seconds}초';
+                      }
+                      
                       return SideTitleWidget(
                         meta: meta,
-                        child: Text('${time}시', style: AppTextStyles.smallText),
+                        child: Text(timeText, style: AppTextStyles.smallText),
                       );
                     },
                   ),

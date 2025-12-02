@@ -226,8 +226,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ],
                                 selected: {settingsState.vibrationStrength},
                                 onSelectionChanged: (Set<int> newSelection) {
-                                  settingsState
-                                      .setVibrationStrength(newSelection.first);
+                                  settingsState.setVibrationStrength(newSelection.first);
                                 },
                                 style: ButtonStyle(
                                   backgroundColor:

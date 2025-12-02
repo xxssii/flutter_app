@@ -14,6 +14,8 @@ import '../widgets/apnea_report_dialog.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
+import '../state/sleep_data_state.dart'; // ✅ SleepDataState 및 모델 임포트
+import 'package:intl/intl.dart'; // 날짜 포맷용
 
 // ✅ 시연용으로 사용할 고정 ID 정의
 const String DEMO_USER_ID = "capstone_demo_session_01";
@@ -31,6 +33,12 @@ class AppState extends ChangeNotifier {
   double _currentSpo2 = 97.0;
   double _currentMovementScore = 0.5;
 
+  // ✅ [실제 데이터 수집용 변수]
+  final List<double> _sessionHeartRates = [];
+  final List<SnoringDataPoint> _sessionSnoringData = [];
+  DateTime? _sleepStartTime;
+  int _dataCollectionCounter = 0; // 1분 간격 저장을 위한 카운터
+
   // ----------------------------------------------------
   // ✅ "새 뇌" (서버 뇌)를 위한 상태 변수
   // ----------------------------------------------------
@@ -43,6 +51,7 @@ class AppState extends ChangeNotifier {
   double get currentHeartRate => _currentHeartRate;
   double get currentSpo2 => _currentSpo2;
   double get currentMovementScore => _currentMovementScore;
+  String get currentUserId => _currentUserId;
   double get currentPressure => _bleService?.pressureAvg ?? 0.0;
   bool get isSnoringNow => _bleService?.isSnoring ?? false;
   StreamSubscription? _stageSubscription; 
@@ -164,6 +173,28 @@ class AppState extends ChangeNotifier {
       _currentMovementScore = (0.5 + (DateTime.now().second % 3)).toDouble();
 
       _checkAlarmTrigger(context);
+      
+      // ✅ [추가] 1분마다 데이터 수집 (60초)
+      _dataCollectionCounter++;
+      if (_dataCollectionCounter >= 5) {
+        _dataCollectionCounter = 0;
+        if (_isMeasuring) {
+          // 심박수 저장
+          _sessionHeartRates.add(_currentHeartRate);
+          
+          // 코골이 데이터 저장
+          double decibel = 40.0; 
+          if (_bleService != null) {
+             // BleService의 micLevel 사용
+             decibel = _bleService!.micLevel;
+             // 만약 0이면 기본값
+             if (decibel < 30) decibel = 30 + (DateTime.now().millisecond % 10).toDouble();
+          }
+          
+          _sessionSnoringData.add(SnoringDataPoint(DateTime.now(), decibel));
+          print("📝 [DataCollection] 1분 데이터 저장: HR=$_currentHeartRate, dB=$decibel");
+        }
+      }
       notifyListeners();
     });
   }
@@ -347,6 +378,37 @@ class AppState extends ChangeNotifier {
       reportDetails.addAll(_apneaEvents);
     } else {
       reportDetails.add('수면 중 무호흡 증상이 감지되지 않았습니다.');
+    }
+
+    // ✅ [추가] 실제 데이터로 SleepMetrics 생성 및 전달
+    if (_sleepStartTime != null) {
+      final now = DateTime.now();
+      final durationMinutes = now.difference(_sleepStartTime!).inMinutes;
+      final durationHours = durationMinutes / 60.0;
+      
+      // 데이터가 너무 적으면(예: 1분 미만) 기본값 사용하거나 현재 데이터라도 사용
+      
+      final realMetrics = SleepMetrics(
+        reportDate: DateFormat('yyyy년 MM월 dd일').format(_sleepStartTime!),
+        totalSleepDuration: durationHours,
+        timeInBed: durationHours + 0.1, // 약간 더 누워있었다고 가정
+        sleepEfficiency: 85.0, // 임시 계산
+        remRatio: 20.0,
+        deepSleepRatio: 15.0,
+        tossingAndTurning: 5, // 임시 값
+        avgSnoringDuration: _sessionSnoringData.where((d) => d.decibel > 50).length * 1.0, // 1분 단위
+        avgHrv: 50.0,
+        avgHeartRate: _sessionHeartRates.isEmpty 
+            ? 60.0 
+            : _sessionHeartRates.reduce((a, b) => a + b) / _sessionHeartRates.length,
+        apneaCount: _apneaEvents.length,
+        heartRateData: List.from(_sessionHeartRates), // 복사해서 전달
+        snoringDecibelData: List.from(_sessionSnoringData),
+      );
+      
+      // SleepDataState에 설정
+      Provider.of<SleepDataState>(context, listen: false).setTodayMetrics(realMetrics);
+      print("✅ [Report] 실제 측정 데이터 리포트 생성 완료 (${_sessionHeartRates.length}분 데이터)");
     }
 
     showDialog(
