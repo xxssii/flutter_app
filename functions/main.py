@@ -90,8 +90,16 @@ def predict_stage_hybrid(hr: float, spo2: float, mic_avg: float, pressure_avg: f
         return "Tossing"
 
     # 🚨 Rule 4: 코골이
-    if mic_avg > 50: 
+    if mic_avg > 150: 
         return "Snoring"
+    
+      # Rule 4: REM 구분 추가! ⭐
+    if hr >= 70 and hr <= 85 and pressure_avg < 1000 and mic_avg < 30:
+        return "REM"
+    
+    # Rule 5: 깊은 잠
+    if hr < 60:
+        return "Deep"
 
     # --- 🧠 나머지는 AI 판단 (Deep/Light/REM) ---
     return predict_stage_ai(hr, spo2, mic_avg, pressure_avg)

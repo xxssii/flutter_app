@@ -30,8 +30,14 @@ class HomeScreen extends StatelessWidget {
 
     // 평균값 중심으로 퍼뜨리기
     double mean = (min + max) / 2;
-    double stdDev = (max - min) / 11; // 표준편차 설정
+    
+    // 🚨 [수정] 표준편차를 키워서 데이터를 더 지저분하게 만듦
+    // 기존: / 12 (너무 깔끔) -> 변경: / 5 (적당히 지저분함)
+    double stdDev = (max - min) / 5;
     double result = mean + num * stdDev;
+
+    // 가끔은 범위 밖으로 튀는 데이터(이상치)도 허용 (약간의 확률로 clamp 안 함)
+    if (_random.nextDouble() < 0.05) return result;
 
     // 그래도 최소/최대 범위는 넘지 않게 자르기 (안전장치)
     return result.clamp(min, max);
@@ -275,14 +281,14 @@ class HomeScreen extends StatelessWidget {
         break;
 
       case 'Apnea': // 수면 무호흡: 소리 없음 + 산소포화도 위험 수준
-        hrMin = 50;
-        hrMax = 90; // 숨 멈춰서 느려졌다가, 헐떡이며 빨라짐 (변동성)
+        hrMin = 75;
+        hrMax = 95; // 숨 멈춰서 느려졌다가, 헐떡이며 빨라짐 (변동성)
         spo2Min = 80;
-        spo2Max = 91; // 💡 핵심: 위험 수준으로 떨어짐 (저산소증)
+        spo2Max = 88; // 💡 핵심: 위험 수준으로 떨어짐 (저산소증)
         micMin = 0;
-        micMax = 10; // 💡 핵심: 숨을 안 쉬어서 소리가 '0'에 가까움
-        pressureMin = 800;
-        pressureMax = 1300; // 몸부림 치기 직전 정지 상태
+        micMax = 5; // 💡 핵심: 숨을 안 쉬어서 소리가 '0'에 가까움
+        pressureMin = 500;
+        pressureMax = 900; // 몸부림 치기 직전 정지 상태
         break;
 
       default:
@@ -615,126 +621,34 @@ class HomeScreen extends StatelessWidget {
     final String userId = "demoUser";
     final String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
 
-    for (int i = 0; i < 100; i++) {
-      double hrMin = 60,
-          hrMax = 70,
-          spo2Min = 96,
-          spo2Max = 99,
-          micMin = 10,
-          micMax = 30,
-          pressureMin = 500,
-          pressureMax = 1000;
+    // 🚨 [수정] 개수를 랜덤하게! (80 ~ 150개 사이)
+    // 이렇게 하면 그래프에서 막대 높이가 들쭉날쭉해서 리얼해 보임
+    int count = 80 + _random.nextInt(71); 
 
-      switch (label) {
-        case 'Awake':
-          hrMin = 70;
-          hrMax = 90;
-          spo2Min = 97;
-          spo2Max = 99;
-          micMin = 100;
-          micMax = 160;
-          pressureMin = 1500;
-          pressureMax = 2500;
-          break;
-        case 'Light':
-          hrMin = 60;
-          hrMax = 70;
-          spo2Min = 96;
-          spo2Max = 98;
-          micMin = 10;
-          micMax = 40;
-          pressureMin = 500;
-          pressureMax = 1500;
-          break;
-        case 'Deep':
-          hrMin = 50;
-          hrMax = 60;
-          spo2Min = 96;
-          spo2Max = 98;
-          micMin = 5;
-          micMax = 20;
-          pressureMin = 100;
-          pressureMax = 500;
-          break;
-        case 'REM':
-          hrMin = 65;
-          hrMax = 75;
-          spo2Min = 96;
-          spo2Max = 98;
-          micMin = 5;
-          micMax = 20;
-          pressureMin = 100;
-          pressureMax = 500;
-          break;
-        case 'Snoring':
-          hrMin = 65;
-          hrMax = 80;
-          spo2Min = 94;
-          spo2Max = 97;
-          micMin = 180;
-          micMax = 250;
-          pressureMin = 200;
-          pressureMax = 800;
-          break;
-        case 'Tossing':
-          hrMin = 70;
-          hrMax = 85;
-          spo2Min = 97;
-          spo2Max = 99;
-          micMin = 20;
-          micMax = 70;
-          pressureMin = 3000;
-          pressureMax = 4095;
-          break;
-        case 'Apnea':
-          hrMin = 75;
-          hrMax = 90;
-          spo2Min = 80;
-          spo2Max = 90;
-          micMin = 0;
-          micMax = 10;
-          pressureMin = 100;
-          pressureMax = 500;
-          break;
-      }
-
-      final Map<String, dynamic> data = {
-        'hr': _randRange(hrMin, hrMax).toInt(),
-        'spo2': _randRange(spo2Min, spo2Max),
-        'mic_avg': _randRange(micMin, micMax).toInt(),
-        'pressure_avg': _randRange(pressureMin, pressureMax).toInt(),
-        'mic_1_avg_10s': 0,
-        'mic_2_avg_10s': 0,
-        'pressure_1_avg_10s': 0,
-        'pressure_2_avg_10s': 0,
-        'pressure_3_avg_10s': 0,
-        'pillow_battery': 100,
-        'watch_battery': 100,
-        'auto_control_active': false,
-        'is_snoring': label == 'Snoring',
-        'label': label,
-        'userId': userId,
-        'sessionId': sessionId,
-        'ts': FieldValue.serverTimestamp(),
-        'auto_control_active': true,
-      };
+    for (int i = 0; i < count; i++) {
+      final data = _generateDataForStage(
+          stage: label, 
+          userId: userId, 
+          sessionId: sessionId, 
+          timestamp: DateTime.now()
+      );
+      
+      data['auto_control_active'] = true;
+      data['ts'] = FieldValue.serverTimestamp();
 
       try {
         await FirebaseFirestore.instance.collection('raw_data').add(data);
-        if (i < 9) await Future.delayed(const Duration(milliseconds: 100));
+        // 속도를 위해 딜레이 최소화
+        if (i % 10 == 0) await Future.delayed(const Duration(milliseconds: 10)); 
       } catch (e) {
-        if (i == 0 && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('❌ 저장 실패: $e'), backgroundColor: Colors.red));
-        }
         break;
       }
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('✅ $label 훈련 데이터 (100건) 전송 완료'),
-          backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('✅ $label 데이터 ($count개) 생성 완료'), backgroundColor: Colors.green)
+      );
     }
   }
 
