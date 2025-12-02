@@ -87,7 +87,8 @@ class _SleepModeScreenState extends State<SleepModeScreen>
         final spo2 = appState.currentSpo2.toStringAsFixed(0);
 
         return Scaffold(
-          backgroundColor: AppColors.primaryNavy, // 측정 중 배경색
+          backgroundColor:
+              const Color(0xFF011F25), // AppColors. 를 지웁니다., // 측정 중 배경색
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             elevation: 0,
