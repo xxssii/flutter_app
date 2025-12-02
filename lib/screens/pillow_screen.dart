@@ -461,11 +461,12 @@ class _PillowScreenState extends State<PillowScreen> {
                               activeColor: _colHead,
                               textColor: textColor,
                               onChanged: (val) {
+                                final prevLevel = _cell1Height;
                                 _updateAircellHeight(1, val);
                                 _showHeightChangeSnackBar(context, '오른쪽', val);
                                 
-                                // ✅ 실제 하드웨어 제어 (하드웨어 테스트 화면의 에어셀 작동 테스트 로직과 동일)
-                                bleService.adjustCell(1, val);
+                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
+                                bleService.adjustCell(1, val, currentLevel: prevLevel);
                               },
                             ),
                           ),
@@ -478,11 +479,12 @@ class _PillowScreenState extends State<PillowScreen> {
                               activeColor: _colNeck,
                               textColor: textColor,
                               onChanged: (val) {
+                                final prevLevel = _cell2Height;
                                 _updateAircellHeight(2, val);
                                 _showHeightChangeSnackBar(context, '가운데', val);
 
-                                // ✅ 실제 하드웨어 제어 (하드웨어 테스트 화면의 에어셀 작동 테스트 로직과 동일)
-                                bleService.adjustCell(2, val);
+                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
+                                bleService.adjustCell(2, val, currentLevel: prevLevel);
                               },
                             ),
                           ),
@@ -495,11 +497,12 @@ class _PillowScreenState extends State<PillowScreen> {
                               activeColor: _colShoulder,
                               textColor: textColor,
                               onChanged: (val) {
+                                final prevLevel = _cell3Height;
                                 _updateAircellHeight(3, val);
                                 _showHeightChangeSnackBar(context, '왼쪽', val);
 
-                                // ✅ 실제 하드웨어 제어 (하드웨어 테스트 화면의 에어셀 작동 테스트 로직과 동일)
-                                bleService.adjustCell(3, val);
+                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
+                                bleService.adjustCell(3, val, currentLevel: prevLevel);
                               },
                             ),
                           ),
