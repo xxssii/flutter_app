@@ -454,6 +454,12 @@ class _PillowScreenState extends State<PillowScreen> {
                       onChanged: (val) {
                         _updateAircellHeight(1, val);
                         _showHeightChangeSnackBar(context, '오른쪽', val);
+                        
+                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
+                        if (val == 1) {
+                          bleService.adjustHeight(1);
+                        }
+                        
                         bleService.adjustCell(1, val);
                       },
                     ),
@@ -469,6 +475,12 @@ class _PillowScreenState extends State<PillowScreen> {
                       onChanged: (val) {
                         _updateAircellHeight(2, val);
                         _showHeightChangeSnackBar(context, '가운데', val);
+
+                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
+                        if (val == 1) {
+                          bleService.adjustHeight(2);
+                        }
+
                         bleService.adjustCell(2, val);
                       },
                     ),
@@ -484,6 +496,12 @@ class _PillowScreenState extends State<PillowScreen> {
                       onChanged: (val) {
                         _updateAircellHeight(3, val);
                         _showHeightChangeSnackBar(context, '왼쪽', val);
+
+                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
+                        if (val == 1) {
+                          bleService.adjustHeight(3);
+                        }
+
                         bleService.adjustCell(3, val);
                       },
                     ),

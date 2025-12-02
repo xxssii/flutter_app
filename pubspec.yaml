@@ -67,16 +67,8 @@ flutter_native_splash:
   
   # ✅ 배경 이미지를 전체 화면으로 설정
   background_image: "assets/logo.png"
-  background_image_dark: "assets/logo_dark.png"
   
   android: true
   ios: true
   web: true
   fullscreen: true # ✅ 전체 화면 모드 (상단바 숨김)
-
-  # ✅ Android 12+ 지원 설정 (필수!)
-  android_12:
-    image: "assets/logo.png"
-    icon_background_color: "#1A237E"
-    image_dark: "assets/logo_dark.png"
-    icon_background_color_dark: "#1A237E"

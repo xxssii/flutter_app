@@ -226,20 +226,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ],
                                 selected: {settingsState.vibrationStrength},
                                 onSelectionChanged: (Set<int> newSelection) {
-                                  settingsState.setVibrationStrength(newSelection.first);
+                                  settingsState
+                                      .setVibrationStrength(newSelection.first);
                                 },
                                 style: ButtonStyle(
-                                  backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                                  backgroundColor:
+                                      MaterialStateProperty.resolveWith<Color>(
                                     (Set<MaterialState> states) {
-                                      if (states.contains(MaterialState.selected)) {
+                                      if (states
+                                          .contains(MaterialState.selected)) {
                                         return const Color(0xFF011F25);
                                       }
                                       return Colors.transparent;
                                     },
                                   ),
-                                  foregroundColor: MaterialStateProperty.resolveWith<Color>(
+                                  foregroundColor:
+                                      MaterialStateProperty.resolveWith<Color>(
                                     (Set<MaterialState> states) {
-                                      if (states.contains(MaterialState.selected)) {
+                                      if (states
+                                          .contains(MaterialState.selected)) {
                                         return Colors.white;
                                       }
                                       return const Color(0xFF011F25);
@@ -257,11 +262,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(builder: (context) => const AlarmScreen()),
+                              MaterialPageRoute(
+                                  builder: (context) => const AlarmScreen()),
                             );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.redAccent,
+                            backgroundColor: Color(0xFF011F25),
                             foregroundColor: Colors.white,
                           ),
                           child: const Text("알람 화면 테스트 (개발용)"),
@@ -335,7 +341,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       label: const Text('지금 테스트 알림 받기'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF011F25).withOpacity(0.1),
+                        backgroundColor:
+                            const Color(0xFF011F25).withOpacity(0.1),
                         foregroundColor: const Color(0xFF011F25),
                         elevation: 0,
                       ),

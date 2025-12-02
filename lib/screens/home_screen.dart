@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -940,118 +941,115 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  // ✅ 측정 버튼 (BleService 연동)
+  // ✅ [수정됨] 수면 측정 버튼 UI (베개 모양 아이콘 적용)
   Widget _buildMeasurementButton(BuildContext context, AppState appState) {
     final bool isMeasuring = appState.isMeasuring;
-    final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
-    final descriptionText =
-        isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
 
-    // 다크모드 감지하여 아이콘 색상 변경
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final buttonColor = isMeasuring
-        ? AppColors.errorRed
-        : (isDarkMode ? const Color(0xFF6292BE) : AppColors.primaryNavy);
+    // 🎨 디자인 팔레트
+    final Color colDeep = const Color(0xFF011F25);
+    final Color colMoon = const Color(0xFFF2E6E6);
 
     return Column(
       children: [
         GestureDetector(
           onTap: () {
+            // (기존 측정 시작/종료 로직 - 그대로 유지)
             final bleService = Provider.of<BleService>(context, listen: false);
-
             if (isMeasuring) {
-              // 측정 중지
               showDialog(
                 context: context,
-                builder: (BuildContext dialogContext) {
-                  return AlertDialog(
-                    title: const Text('수면 측정 종료'),
-                    content: const Text('수면 측정을 종료하시겠습니까?\n(기기 연결은 유지됩니다)'),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: const Text('취소'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          // ✅ 수정됨: 데이터 수집만 중지하는 함수 호출
-                          bleService.stopDataCollection();
-                          appState.toggleMeasurement(context);
-                          Navigator.of(dialogContext).pop();
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                // ✅ 메시지 수정
-                                content: Text('수면 측정이 종료되었습니다. (기기 연결 유지됨)'),
-                                backgroundColor: Colors.blue,
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text(
-                          '종료',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              );
-            } else {
-              // 측정 시작
-              if (!bleService.isPillowConnected &&
-                  !bleService.isWatchConnected) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    // ✅ const 제거함
-                    content: const Text('먼저 기기를 연결해주세요!'),
-                    // ✅ 배경색을 테마 색상 변수로 변경
-                    backgroundColor: AppColors.primaryNavy,
-                  ),
-                );
-                return;
-              }
-
-              bleService.startDataCollection();
-              appState.toggleMeasurement(context);
-
-              if (appState.isMeasuring) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const SleepModeScreen(key: Key('sleepModeScreen')),
-                  ),
-                );
-              }
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('수면 측정을 시작합니다 ✨'),
-                  backgroundColor: Colors.green,
+                builder: (context) => AlertDialog(
+                  backgroundColor: Colors.white,
+                  title: Text('수면 종료',
+                      style: TextStyle(
+                          color: colDeep, fontWeight: FontWeight.bold)),
+                  content: const Text('측정을 종료하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('취소',
+                            style: TextStyle(color: Colors.grey))),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: colDeep,
+                          foregroundColor: Colors.white),
+                      onPressed: () {
+                        bleService.stopDataCollection();
+                        appState.toggleMeasurement(context);
+                        Navigator.pop(context);
+                      },
+                      child: const Text('종료'),
+                    ),
+                  ],
                 ),
               );
+            } else {
+              if (!bleService.isPillowConnected &&
+                  !bleService.isWatchConnected) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('기기를 연결해주세요.')));
+                return;
+              }
+              bleService.startDataCollection();
+              appState.toggleMeasurement(context);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const SleepModeScreen(key: Key('sleepModeScreen'))));
             }
           },
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: buttonColor.withOpacity(0.1),
-            ),
+          // ✨ [UI 핵심] 측정 대기 중일 때 '베개 아이콘' 표시
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
             child: isMeasuring
-                ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
+                ? _buildMeasuringState(colDeep) // 측정 중 UI
+                : const SleepStartJellyIcon(), // 대기 중 UI (베개 아이콘)
           ),
         ),
-        const SizedBox(height: 16),
-        Text(buttonText, style: AppTextStyles.heading2),
-        const SizedBox(height: 8),
-        Text(descriptionText, style: AppTextStyles.secondaryBodyText),
+        const SizedBox(height: 24),
+
+        // 하단 텍스트
+        Column(
+          children: [
+            Text(
+              isMeasuring ? "편안한 밤 되세요" : "수면 시작",
+              style: AppTextStyles.heading2.copyWith(
+                  color: Color(0xFF6292BE), fontSize: 22, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isMeasuring ? "수면 데이터를 분석하고 있습니다" : "베개를 톡 눌러 꿈나라로 떠나보세요",
+              style: AppTextStyles.secondaryBodyText
+                  .copyWith(color: Color(0xFFBD9A8E), fontSize: 14),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  // 측정 중일 때 보여줄 심플한 UI (파동)
+  Widget _buildMeasuringState(Color colDeep) {
+    return Container(
+      width: 180,
+      height: 140,
+      decoration: BoxDecoration(
+        color: colDeep.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(40),
+        border: Border.all(color: colDeep.withOpacity(0.1)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SpinKitRipple(
+            color: const Color(0xFF6292BE),
+            size: 120.0,
+            borderWidth: 4.0,
+          ),
+          Icon(Icons.stop_rounded, size: 48, color: colDeep),
+        ],
+      ),
     );
   }
 
@@ -1355,4 +1353,255 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
+}
+
+// ✨ [ART] 풍부한 입체감의 레이어드 베개 아이콘 (이미지 참고)
+class SleepStartJellyIcon extends StatelessWidget {
+  const SleepStartJellyIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 아이콘 크기
+    const double width = 200;
+    const double height = 150;
+
+    // 팔레트
+    const Color colRose = Color(0xFFBD9A8E); // 로즈 브라운
+    const Color colBlue = Color(0xFF6292BE); // 블루
+    const Color colMoon = Color(0xFFF2E6E6); // 달빛
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 1. 베개 모양 그림자 & 테두리 (Glow)
+        CustomPaint(
+          size: const Size(width, height),
+          painter: _SoftPillowPainter(), // ✅ 이제 정의된 클래스를 사용합니다
+        ),
+
+        // 2. 베개 모양으로 내용물 자르기
+        ClipPath(
+          clipper: _SoftPillowClipper(), // ✅ 이제 정의된 클래스를 사용합니다
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              // 배경 그라데이션
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colBlue.withOpacity(0.4),
+                  colRose.withOpacity(0.3),
+                ],
+              ),
+            ),
+            // ☁️ 내부 콘텐츠
+            child: Stack(
+              children: [
+                // Layer 1: 뒤쪽 물결
+                Positioned(
+                  bottom: 40,
+                  left: -20,
+                  right: -20,
+                  height: 80,
+                  child: _buildWave(colBlue.withOpacity(0.5), 0.1),
+                ),
+                // Layer 2: 중간 물결
+                Positioned(
+                  bottom: 20,
+                  left: -30,
+                  right: -30,
+                  height: 90,
+                  child: _buildWave(colRose.withOpacity(0.6), -0.15),
+                ),
+                // Layer 3: 앞쪽 물결
+                Positioned(
+                  bottom: -10,
+                  left: -20,
+                  right: -20,
+                  height: 100,
+                  child: _buildWave(colMoon.withOpacity(0.8), 0.05),
+                ),
+
+                // 반짝이는 별
+                ..._buildSparkles(),
+
+                // 🌙 중앙 달 아이콘
+                Positioned(
+                  top: 30,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Transform.rotate(
+                      angle: -math.pi / 8,
+                      child: Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: colMoon,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colRose.withOpacity(0.5),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                              offset: const Offset(2, 4),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withOpacity(0.8),
+                              blurRadius: 10,
+                              spreadRadius: -2,
+                              offset: const Offset(-2, -2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.nightlight_round,
+                          size: 45,
+                          color: colRose.withOpacity(0.8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 상단 유리 광택
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: height / 2,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withOpacity(0.5),
+                          Colors.white.withOpacity(0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWave(Color color, double angle) {
+    return Transform.rotate(
+      angle: angle,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.elliptical(200, 60)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSparkles() {
+    final random = math.Random(42);
+    final sparkles = <Widget>[];
+    final positions = [
+      const Offset(30, 40),
+      const Offset(170, 30),
+      const Offset(160, 110),
+      const Offset(40, 100),
+      const Offset(100, 20),
+      const Offset(150, 60)
+    ];
+
+    for (var pos in positions) {
+      sparkles.add(
+        Positioned(
+          top: pos.dy,
+          left: pos.dx,
+          child: Container(
+            width: random.nextDouble() * 3 + 2,
+            height: random.nextDouble() * 3 + 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: const [
+                BoxShadow(color: Colors.white, blurRadius: 3, spreadRadius: 1),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return sparkles;
+  }
+}
+
+// 📐 [Path] 부드러운 쿠션/베개 모양 정의 (누락되었던 부분!)
+Path _getSoftPillowPath(Size size) {
+  final path = Path();
+  final w = size.width;
+  final h = size.height;
+
+  const double r = 30.0;
+  const double curve = 10.0;
+
+  path.moveTo(0, r);
+  path.quadraticBezierTo(curve, h / 2, 0, h - r);
+  path.quadraticBezierTo(0, h, r, h);
+  path.quadraticBezierTo(w / 2, h - curve, w - r, h);
+  path.quadraticBezierTo(w, h, w, h - r);
+  path.quadraticBezierTo(w - curve, h / 2, w, r);
+  path.quadraticBezierTo(w, 0, w - r, 0);
+  path.quadraticBezierTo(w / 2, curve, r, 0);
+  path.quadraticBezierTo(0, 0, 0, r);
+
+  path.close();
+  return path;
+}
+
+// 🎨 [Clipper] (누락되었던 부분!)
+class _SoftPillowClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) => _getSoftPillowPath(size);
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+// 🖌️ [Painter] (누락되었던 부분!)
+class _SoftPillowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _getSoftPillowPath(size);
+
+    // 1. 부드러운 그림자 (Glow)
+    canvas.drawShadow(
+      path,
+      const Color(0xFF6292BE).withOpacity(0.3),
+      15.0,
+      true,
+    );
+
+    // 2. 흰색 테두리
+    final borderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawPath(path, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

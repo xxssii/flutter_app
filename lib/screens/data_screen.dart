@@ -101,8 +101,10 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
 
     // ✅ 화면 진입 시 최신 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userId = Provider.of<AppState>(context, listen: false).currentUserId;
-      Provider.of<SleepProvider>(context, listen: false).fetchMostRecentSleepReport(userId);
+      final userId =
+          Provider.of<AppState>(context, listen: false).currentUserId;
+      Provider.of<SleepProvider>(context, listen: false)
+          .fetchMostRecentSleepReport(userId);
     });
 
     _barChartAnimationController = AnimationController(
