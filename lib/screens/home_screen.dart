@@ -1,4 +1,6 @@
 // lib/screens/home_screen.dart
+// ✅ [수정 완료] 실시간 배터리 및 연결 상태 모니터링 UI 통합됨
+
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -12,18 +14,31 @@ import '../state/app_state.dart';
 import '../state/settings_state.dart';
 import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
-import 'hardware_test_screen.dart'; // ✅ 파일 경로 확인 필요 (같은 폴더면 import 'hardware_test_screen.dart';)
+import 'hardware_test_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
+  // ✅ [수정] 가우시안 랜덤 (자연스러운 종 모양 분포)
   static final _random = Random();
   static double _randRange(double min, double max) {
-    return min + _random.nextDouble() * (max - min);
+    // Box-Muller 변환으로 정규분포 난수 생성
+    double u = 0, v = 0;
+    while (u == 0) u = _random.nextDouble();
+    while (v == 0) v = _random.nextDouble();
+    double num = sqrt(-2.0 * log(u)) * cos(2.0 * pi * v);
+
+    // 평균값 중심으로 퍼뜨리기
+    double mean = (min + max) / 2;
+    double stdDev = (max - min) / 11; // 표준편차 설정
+    double result = mean + num * stdDev;
+
+    // 그래도 최소/최대 범위는 넘지 않게 자르기 (안전장치)
+    return result.clamp(min, max);
   }
 
   // ========================================
-  // ✨ 7일치 테스트 데이터 생성
+  // ✨ [개선] 8일치 테스트 데이터 생성 (기존 데이터 삭제 + 직장인 패턴)
   // ========================================
   Future<void> _generateWeeklyTestData(BuildContext context) async {
     if (!context.mounted) return;
@@ -36,30 +51,62 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('7일치 데이터 생성 중...'),
+            Text('기존 데이터 삭제 후\n새로 생성 중... (약 1분)'),
           ],
         ),
       ),
     );
 
     try {
+      final userId = 'demoUser'; // ID 통일
+
+      // 🧹 1. 기존 데모 데이터 청소 (중복 방지)
+      print("🧹 기존 데이터 삭제 시작...");
+      await _clearCollection(userId, 'raw_data');
+      await _clearCollection(userId, 'processed_data');
+      await _clearCollection(userId, 'sleep_reports');
+      await _clearCollection(userId, 'session_state');
+      print("🧹 기존 데이터 삭제 완료!");
+
+      // 🏭 2. 데이터 생성 시작
       final now = DateTime.now();
-      int totalDataPoints = 0;
+      int totalDocs = 0;
 
-      for (int dayOffset = 6; dayOffset >= 0; dayOffset--) {
-        final date = now.subtract(Duration(days: dayOffset));
+      // 7일 전 ~ 어제까지 (총 8일치)
+      for (int i = 7; i >= 0; i--) {
+        final targetDate = now.subtract(Duration(days: i));
+
+        // 🏢 [직장인 패턴]
+        // 취침: 23:00 ~ 00:30 랜덤
+        final int startHour = 23;
+        final int startMin = _random.nextInt(90);
+
+        // 기상: 06:30 ~ 07:30 랜덤
+        final int endHour = 6;
+        final int endMin = 30 + _random.nextInt(60);
+
+        DateTime sleepStart = DateTime(
+                targetDate.year, targetDate.month, targetDate.day, startHour, 0)
+            .add(Duration(minutes: startMin));
+
+        DateTime sleepEnd = DateTime(
+                targetDate.year, targetDate.month, targetDate.day, endHour, 0)
+            .add(Duration(days: 1, minutes: endMin));
+
         final dateString =
-            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+            '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
         final sessionId = 'session-$dateString';
-        final userId = 'demo_user';
 
-        print('📅 날짜: $dateString 데이터 생성 시작...');
+        print('📅 생성 중: $dateString ($sessionId)');
 
-        DateTime currentTime = DateTime(date.year, date.month, date.day, 22, 0);
-        final sleepCycle = _generateRealisticSleepCycle();
+        DateTime currentTime = sleepStart;
+        WriteBatch batch = FirebaseFirestore.instance.batch();
+        int batchCount = 0;
 
-        for (int minute = 0; minute < 480; minute++) {
-          final stage = sleepCycle[minute];
+        while (currentTime.isBefore(sleepEnd)) {
+          // 수면 단계 시뮬레이션
+          String stage = _simulateSleepStage(sleepStart, sleepEnd, currentTime);
+
           final data = _generateDataForStage(
             stage: stage,
             userId: userId,
@@ -67,57 +114,82 @@ class HomeScreen extends StatelessWidget {
             timestamp: currentTime,
           );
 
-          await FirebaseFirestore.instance.collection('raw_data').add(data);
-          currentTime = currentTime.add(const Duration(minutes: 1));
-          totalDataPoints++;
+          final docRef =
+              FirebaseFirestore.instance.collection('raw_data').doc();
+          batch.set(docRef, data);
+          batchCount++;
+          totalDocs++;
 
-          if (totalDataPoints % 100 == 0) {
-            print('✅ $totalDataPoints개 데이터 저장됨...');
+          if (batchCount >= 400) {
+            await batch.commit();
+            batch = FirebaseFirestore.instance.batch();
+            batchCount = 0;
           }
+
+          // 3분 간격 (데이터 절약)
+          currentTime = currentTime.add(const Duration(minutes: 3));
         }
 
-        print('✅ $dateString 완료! (480개 데이터)');
+        if (batchCount > 0) await batch.commit();
       }
 
       if (context.mounted) {
         Navigator.of(context).pop();
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ 7일치 데이터 생성 완료! (총 $totalDataPoints개)'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
+              content: Text('✅ 초기화 및 8일치 데이터 생성 완료! ($totalDocs개)'),
+              backgroundColor: Colors.green),
         );
       }
-
-      print('🎉 전체 완료! 총 $totalDataPoints개 데이터 생성됨');
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 데이터 생성 실패: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+            SnackBar(content: Text('오류: $e'), backgroundColor: Colors.red));
       }
-      print('❌ 오류 발생: $e');
     }
   }
 
-  List<String> _generateRealisticSleepCycle() {
-    final List<String> cycle = [];
-    cycle.addAll(List.filled(60, 'Light'));
-    cycle.addAll(List.filled(120, 'Deep'));
-    cycle.addAll(List.filled(90, 'Light'));
-    cycle.addAll(List.filled(30, 'REM'));
-    cycle.addAll(List.filled(90, 'Deep'));
-    cycle.addAll(List.filled(30, 'Light'));
-    cycle.addAll(List.filled(30, 'REM'));
-    cycle.addAll(List.filled(30, 'Light'));
-    return cycle;
+  // 🧹 컬렉션 청소 헬퍼 함수
+  Future<void> _clearCollection(String userId, String collection) async {
+    var collectionRef = FirebaseFirestore.instance.collection(collection);
+    var snapshots =
+        await collectionRef.where('userId', isEqualTo: userId).get();
+
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+    int count = 0;
+
+    for (var doc in snapshots.docs) {
+      batch.delete(doc.reference);
+      count++;
+      if (count >= 400) {
+        await batch.commit();
+        batch = FirebaseFirestore.instance.batch();
+        count = 0;
+      }
+    }
+    if (count > 0) await batch.commit();
+  }
+
+  String _simulateSleepStage(DateTime start, DateTime end, DateTime current) {
+    final totalMinutes = end.difference(start).inMinutes;
+    final elapsedMinutes = current.difference(start).inMinutes;
+    final progress = elapsedMinutes / totalMinutes;
+
+    if (progress < 0.3) {
+      return _random.nextDouble() < 0.6 ? 'Deep' : 'Light';
+    } else if (progress < 0.7) {
+      double r = _random.nextDouble();
+      if (r < 0.1) return 'Snoring';
+      if (r < 0.4) return 'Deep';
+      if (r < 0.6) return 'REM';
+      return 'Light';
+    } else {
+      double r = _random.nextDouble();
+      if (r < 0.05) return 'Awake';
+      if (r < 0.4) return 'REM';
+      return 'Light';
+    }
   }
 
   Map<String, dynamic> _generateDataForStage({
@@ -136,55 +208,111 @@ class HomeScreen extends StatelessWidget {
         pressureMax;
 
     switch (stage) {
-      case 'Light':
-        hrMin = 60;
-        hrMax = 70;
-        spo2Min = 96;
-        spo2Max = 98;
-        micMin = 10;
-        micMax = 40;
-        pressureMin = 500;
-        pressureMax = 1500;
-        break;
-      case 'Deep':
+      case 'Deep': // 깊은 잠: 심박수 최저, 움직임 거의 없음
         hrMin = 50;
-        hrMax = 60;
-        spo2Min = 96;
-        spo2Max = 98;
+        hrMax = 60; // 안정적인 낮은 심박수
+        spo2Min = 97;
+        spo2Max = 99; // 정상 산소포화도
         micMin = 5;
-        micMax = 20;
-        pressureMin = 100;
-        pressureMax = 500;
+        micMax = 20; // 거의 침묵 (백색소음 수준)
+        pressureMin = 800;
+        pressureMax = 1200; // 머리 무게 안정적 지지
         break;
-      case 'REM':
-        hrMin = 65;
+
+      case 'Light': // 얕은 잠: 심박수 약간 상승, 일반적인 수면 상태
+        hrMin = 60;
         hrMax = 75;
         spo2Min = 96;
-        spo2Max = 98;
-        micMin = 5;
-        micMax = 20;
-        pressureMin = 100;
-        pressureMax = 500;
+        spo2Max = 99;
+        micMin = 20;
+        micMax = 40; // 얕은 숨소리나 약한 생활 소음
+        pressureMin = 800;
+        pressureMax = 1300;
         break;
+
+      case 'REM': // 렘수면: 뇌 활발, 심박수 불규칙하게 상승 (꿈)
+        hrMin = 65;
+        hrMax = 85; // 꿈꿀 때 심박수 오름
+        spo2Min = 96;
+        spo2Max = 99;
+        micMin = 10;
+        micMax = 30; // 근육 마비로 소리는 조용함
+        pressureMin = 800;
+        pressureMax = 1200;
+        break;
+
+      case 'Awake': // 깸: 심박수 급증, 머리를 뗌 (압력 0 근처)
+        hrMin = 80;
+        hrMax = 110; // 깨어나서 활동 시작
+        spo2Min = 97;
+        spo2Max = 100;
+        micMin = 40;
+        micMax = 100; // 말하거나 움직이는 소리
+        pressureMin = 0;
+        pressureMax = 100; // 💡 핵심: 머리를 들어서 압력이 사라짐
+        break;
+
+      case 'Tossing': // 뒤척임: 베개를 짓누르거나 강한 움직임
+        hrMin = 70;
+        hrMax = 90;
+        spo2Min = 96;
+        spo2Max = 99;
+        micMin = 30;
+        micMax = 80; // 이불 부스럭거리는 소리
+        pressureMin = 3000;
+        pressureMax = 4095; // 💡 핵심: 베개를 꾹 누르는 최대 압력
+        break;
+
+      case 'Snoring': // 코골이: 소리 센서 폭발
+        hrMin = 60;
+        hrMax = 75;
+        spo2Min = 93;
+        spo2Max = 96; // 호흡 곤란으로 약간 떨어질 수 있음
+        micMin = 150;
+        micMax = 255; // 💡 핵심: 마이크 값 최대치 (코고는 소리)
+        pressureMin = 800;
+        pressureMax = 1300; // 자세는 그대로
+        break;
+
+      case 'Apnea': // 수면 무호흡: 소리 없음 + 산소포화도 위험 수준
+        hrMin = 50;
+        hrMax = 90; // 숨 멈춰서 느려졌다가, 헐떡이며 빨라짐 (변동성)
+        spo2Min = 80;
+        spo2Max = 91; // 💡 핵심: 위험 수준으로 떨어짐 (저산소증)
+        micMin = 0;
+        micMax = 10; // 💡 핵심: 숨을 안 쉬어서 소리가 '0'에 가까움
+        pressureMin = 800;
+        pressureMax = 1300; // 몸부림 치기 직전 정지 상태
+        break;
+
       default:
         hrMin = 60;
-        hrMax = 70;
+        hrMax = 75;
         spo2Min = 96;
-        spo2Max = 98;
+        spo2Max = 99;
         micMin = 10;
         micMax = 30;
-        pressureMin = 500;
-        pressureMax = 1000;
+        pressureMin = 800;
+        pressureMax = 1200;
+        break;
     }
-
     return {
       'hr': _randRange(hrMin, hrMax).toInt(),
-      'spo2': _randRange(spo2Min, spo2Max),
-      'mic_level': _randRange(micMin, micMax).toInt(),
-      'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
+      'spo2': _randRange(spo2Min, spo2Max).toInt(),
+      'mic_avg': _randRange(micMin, micMax).toInt(),
+      'pressure_avg': _randRange(pressureMin, pressureMax).toInt(),
+
+      // 더미 데이터
+      'mic_1_avg_10s': 0, 'mic_2_avg_10s': 0,
+      'pressure_1_avg_10s': 0, 'pressure_2_avg_10s': 0, 'pressure_3_avg_10s': 0,
+      'pillow_battery': 100, 'watch_battery': 100,
+      'auto_control_active': false,
+      'is_snoring': false,
+
       'userId': userId,
       'sessionId': sessionId,
       'ts': Timestamp.fromDate(timestamp),
+      'label': stage,
     };
   }
 
@@ -230,7 +358,6 @@ class HomeScreen extends StatelessWidget {
       if (sortedDocs.isEmpty) {
         if (!context.mounted) return;
         Navigator.of(context).pop();
-
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -239,9 +366,8 @@ class HomeScreen extends StatelessWidget {
                 '세션 $sessionId의 데이터가 없습니다.\n\n먼저 "7일치 테스트 데이터 생성" 버튼을 눌러주세요!'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('확인')),
             ],
           ),
         );
@@ -252,10 +378,8 @@ class HomeScreen extends StatelessWidget {
 
       final firstDoc = sortedDocs.first;
       final lastDoc = sortedDocs.last;
-
       final firstTime = (firstDoc['ts'] as Timestamp).toDate();
       final lastTime = (lastDoc['ts'] as Timestamp).toDate();
-
       final totalSeconds = lastTime.difference(firstTime).inSeconds;
       final totalHours = totalSeconds / 3600;
 
@@ -263,17 +387,17 @@ class HomeScreen extends StatelessWidget {
         'Deep': 0,
         'Light': 0,
         'REM': 0,
-        'Awake': 0,
+        'Awake': 0
       };
-
       int totalMinutes = 0;
 
       for (var doc in sortedDocs) {
         final data = doc.data() as Map<String, dynamic>;
         final hr = (data['hr'] as num).toDouble();
         final spo2 = (data['spo2'] as num).toDouble();
-        final micLevel = (data['mic_level'] as num).toDouble();
-        final pressureLevel = (data['pressure_level'] as num).toDouble();
+        final micLevel = (data['mic_avg'] ?? data['mic_level'] ?? 0).toDouble();
+        final pressureLevel =
+            (data['pressure_avg'] ?? data['pressure_level'] ?? 0).toDouble();
 
         String stage;
         if (hr <= 59.5) {
@@ -295,54 +419,36 @@ class HomeScreen extends StatelessWidget {
       }
 
       final actualTotalSeconds = totalMinutes * 60;
-
       final deepRatio = (stageDurations['Deep']! / actualTotalSeconds * 100);
       final remRatio = (stageDurations['REM']! / actualTotalSeconds * 100);
       final awakeRatio = (stageDurations['Awake']! / actualTotalSeconds * 100);
 
-      int durationScore = 40;
-      if (totalHours >= 7 && totalHours <= 9) {
+      int durationScore = 30;
+      if (totalHours >= 7 && totalHours <= 9)
         durationScore = 40;
-      } else if (totalHours >= 6 && totalHours < 7) {
+      else if (totalHours >= 6)
         durationScore = 30;
-      } else if (totalHours < 6) {
+      else
         durationScore = 20;
-      } else {
-        durationScore = 30;
-      }
 
-      int deepScore = 25;
-      if (deepRatio >= 15 && deepRatio <= 25) {
+      int deepScore = 10;
+      if (deepRatio >= 15 && deepRatio <= 25)
         deepScore = 25;
-      } else if (deepRatio >= 10 && deepRatio < 15) {
-        deepScore = 20;
-      } else if (deepRatio >= 25 && deepRatio <= 30) {
-        deepScore = 20;
-      } else {
-        deepScore = 10;
-      }
+      else if (deepRatio >= 10 || deepRatio > 25) deepScore = 20;
 
-      int remScore = 20;
-      if (remRatio >= 20 && remRatio <= 25) {
+      int remScore = 8;
+      if (remRatio >= 20 && remRatio <= 25)
         remScore = 20;
-      } else if (remRatio >= 15 && remRatio < 20) {
+      else if (remRatio >= 15)
         remScore = 15;
-      } else if (remRatio >= 10 && remRatio < 15) {
-        remScore = 10;
-      } else {
-        remScore = 8;
-      }
+      else if (remRatio >= 10) remScore = 10;
 
-      int efficiencyScore = 15;
-      if (awakeRatio < 5) {
+      int efficiencyScore = 5;
+      if (awakeRatio < 5)
         efficiencyScore = 15;
-      } else if (awakeRatio < 10) {
+      else if (awakeRatio < 10)
         efficiencyScore = 12;
-      } else if (awakeRatio < 15) {
-        efficiencyScore = 8;
-      } else {
-        efficiencyScore = 5;
-      }
+      else if (awakeRatio < 15) efficiencyScore = 8;
 
       final totalScore = durationScore + deepScore + remScore + efficiencyScore;
 
@@ -379,11 +485,9 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Text('세션: $sessionId', style: const TextStyle(fontSize: 12)),
                 const Divider(),
-                Text(
-                  '총점: $totalScore점',
-                  style: const TextStyle(
-                      fontSize: 24, fontWeight: FontWeight.bold),
-                ),
+                Text('총점: $totalScore점',
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold)),
                 Text('등급: $grade'),
                 Text('평가: $message'),
                 const SizedBox(height: 16),
@@ -399,13 +503,6 @@ class HomeScreen extends StatelessWidget {
                 Text(
                     '깨어있음: ${(stageDurations['Awake']! / 3600).toStringAsFixed(2)}시간 (${awakeRatio.toStringAsFixed(1)}%)'),
                 const SizedBox(height: 16),
-                const Text('세부 점수:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('수면 시간: $durationScore/40'),
-                Text('깊은 수면: $deepScore/25'),
-                Text('REM 수면: $remScore/20'),
-                Text('수면 효율: $efficiencyScore/15'),
-                const SizedBox(height: 16),
                 Text('데이터: ${sortedDocs.length}개',
                     style: const TextStyle(fontSize: 11, color: Colors.grey)),
               ],
@@ -413,27 +510,16 @@ class HomeScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('확인'),
-            ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인')),
           ],
         ),
       );
-
-      print('✅ 직접 계산 성공!');
-      print('점수: $totalScore');
-      print('총 수면 시간: ${totalHours.toStringAsFixed(2)}시간');
-      print('데이터 포인트: ${sortedDocs.length}개');
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 오류 발생: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('❌ 오류 발생: $e'), backgroundColor: Colors.red));
       }
       print('❌ 직접 계산 실패: $e');
     }
@@ -444,19 +530,16 @@ class HomeScreen extends StatelessWidget {
   // ========================================
   Future<void> _testOnNewDataTrigger(BuildContext context) async {
     print('🔧 트리거 테스트 시작...');
-
     if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('트리거 테스트 중...'),
-          ],
-        ),
+        content: Row(children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 20),
+          Text('트리거 테스트 중...')
+        ]),
       ),
     );
 
@@ -464,25 +547,21 @@ class HomeScreen extends StatelessWidget {
       final now = DateTime.now();
       final testSessionId = 'test-trigger-${now.millisecondsSinceEpoch}';
 
-      print('📝 raw_data에 테스트 데이터 추가 중...');
-
-      final docRef =
-          await FirebaseFirestore.instance.collection('raw_data').add({
+      await FirebaseFirestore.instance.collection('raw_data').add({
         'hr': 65,
         'spo2': 97.5,
-        'mic_level': 20,
-        'pressure_level': 300,
+        'mic_avg': 20,
+        'pressure_avg': 300,
+        'mic_1_avg_10s': 0,
+        'pressure_1_avg_10s': 0,
         'userId': 'test_user',
         'sessionId': testSessionId,
         'ts': Timestamp.now(),
+        'auto_control_active': false,
       });
 
-      print('✅ raw_data 추가 완료! docId: ${docRef.id}');
-
-      print('⏳ 5초 대기 중 (트리거 실행 시간)...');
-      await Future.delayed(const Duration(seconds: 5));
-
-      print('🔍 processed_data 확인 중...');
+      print('⏳ 5초 대기 중...');
+      await Future.delayed(const Duration(seconds: 15));
 
       final processedQuery = await FirebaseFirestore.instance
           .collection('processed_data')
@@ -497,54 +576,35 @@ class HomeScreen extends StatelessWidget {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('❌ 트리거 작동 안 함'),
-            content: const Text('5초를 기다렸지만 processed_data에 데이터가 생성되지 않았습니다.\n\n'
-                'Cloud Functions의 on_new_data 트리거가 작동하지 않고 있습니다.\n\n'
-                '원인:\n'
-                '1. Functions 배포 안 됨\n'
-                '2. 트리거 설정 오류\n'
-                '3. 코드 오류'),
+            content: const Text('processed_data가 생성되지 않았습니다. 서버 로그를 확인하세요.'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('확인'))
             ],
           ),
         );
-        print('❌ 트리거 작동 안 함!');
       } else {
-        final processedDoc = processedQuery.docs.first;
-        final stage = processedDoc['stage'];
-
+        final stage = processedQuery.docs.first['stage'];
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('✅ 트리거 작동함!'),
-            content: Text('Cloud Functions가 정상 작동합니다!\n\n'
-                '분류된 단계: $stage\n\n'
-                'processed_data에 데이터가 생성되었습니다.'),
+            content: Text('Cloud Functions 정상 작동.\n분류된 단계: $stage'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('확인'))
             ],
           ),
         );
-        print('✅ 트리거 작동함! stage: $stage');
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 오류 발생: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('❌ 테스트 실패: $e'), backgroundColor: Colors.red));
       }
-      print('❌ 테스트 실패: $e');
     }
   }
 
@@ -552,10 +612,10 @@ class HomeScreen extends StatelessWidget {
   // 훈련 데이터 생성
   // ========================================
   Future<void> _pushBurstData(BuildContext context, String label) async {
-    final String userId = "train_user_v3";
+    final String userId = "demoUser";
     final String sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 100; i++) {
       double hrMin = 60,
           hrMax = 70,
           spo2Min = 96,
@@ -641,41 +701,40 @@ class HomeScreen extends StatelessWidget {
       final Map<String, dynamic> data = {
         'hr': _randRange(hrMin, hrMax).toInt(),
         'spo2': _randRange(spo2Min, spo2Max),
-        'mic_level': _randRange(micMin, micMax).toInt(),
-        'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
+        'mic_avg': _randRange(micMin, micMax).toInt(),
+        'pressure_avg': _randRange(pressureMin, pressureMax).toInt(),
+        'mic_1_avg_10s': 0,
+        'mic_2_avg_10s': 0,
+        'pressure_1_avg_10s': 0,
+        'pressure_2_avg_10s': 0,
+        'pressure_3_avg_10s': 0,
+        'pillow_battery': 100,
+        'watch_battery': 100,
+        'auto_control_active': false,
+        'is_snoring': label == 'Snoring',
         'label': label,
         'userId': userId,
         'sessionId': sessionId,
         'ts': FieldValue.serverTimestamp(),
+        'auto_control_active': true,
       };
 
       try {
         await FirebaseFirestore.instance.collection('raw_data').add(data);
-        if (i < 9) {
-          await Future.delayed(const Duration(seconds: 1));
-        }
+        if (i < 9) await Future.delayed(const Duration(milliseconds: 100));
       } catch (e) {
-        print("❌ 데이터 저장 실패: $e");
         if (i == 0 && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Firebase 저장 실패: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('❌ 저장 실패: $e'), backgroundColor: Colors.red));
         }
         break;
       }
     }
 
-    print("✅ $label 훈련 데이터 (10건) 전송 완료 (v3 스키마)");
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ $label 훈련 데이터 (10건) 전송 완료 (v3 스키마)'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('✅ $label 훈련 데이터 (100건) 전송 완료'),
+          backgroundColor: Colors.green));
     }
   }
 
@@ -691,37 +750,30 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '오늘 밤은 어떨까요?',
-                    style: AppTextStyles.heading2.copyWith(fontSize: 22),
-                  ),
+                  Text('오늘 밤은 어떨까요?',
+                      style: AppTextStyles.heading2.copyWith(fontSize: 22)),
                   const SizedBox(height: 4),
-                  Text(
-                    '수면 측정을 시작해 주세요.',
-                    style: AppTextStyles.secondaryBodyText.copyWith(
-                      fontSize: 15,
-                    ),
-                  ),
+                  Text('수면 측정을 시작해 주세요.',
+                      style: AppTextStyles.secondaryBodyText
+                          .copyWith(fontSize: 15)),
                 ],
               ),
             ),
             actions: [
               Consumer<SettingsState>(
                 builder: (context, settingsState, _) {
-                  final iconColor = settingsState.isDarkMode
-                      ? AppColors.darkPrimaryText
-                      : AppColors.primaryText;
                   return IconButton(
                     icon: Icon(
                       settingsState.isDarkMode
                           ? Icons.wb_sunny_outlined
                           : Icons.mode_night_outlined,
-                      color: iconColor,
+                      color: settingsState.isDarkMode
+                          ? AppColors.darkPrimaryText
+                          : AppColors.primaryText,
                       size: 28,
                     ),
-                    onPressed: () {
-                      settingsState.toggleDarkMode(!settingsState.isDarkMode);
-                    },
+                    onPressed: () =>
+                        settingsState.toggleDarkMode(!settingsState.isDarkMode),
                   );
                 },
               ),
@@ -735,200 +787,103 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Center(child: _buildMeasurementButton(context, appState)),
                 const SizedBox(height: 24),
+
+                // --- 테스트 도구 섹션 ---
                 Center(
                   child: Column(
                     children: [
-                      Text(
-                        "--- [0단계] 테스트 데이터 생성 (날짜별 분리) ---",
-                        style: AppTextStyles.secondaryBodyText.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.purple,
-                        ),
-                      ),
+                      Text("--- [0단계] 테스트 데이터 생성 ---",
+                          style: AppTextStyles.secondaryBodyText.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.purple)),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _generateWeeklyTestData(context),
                         icon: const Icon(Icons.calendar_month),
-                        label: const Text('7일치 테스트 데이터 생성 (날짜별)'),
+                        label: const Text('7일치 데이터 생성'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.purple,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
+                            backgroundColor: Colors.purple,
+                            foregroundColor: Colors.white),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '각 날짜마다 다른 sessionId로 8시간 수면 데이터 생성',
-                        style: AppTextStyles.smallText.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _testCalculateSleepScore(context),
                         icon: const Icon(Icons.analytics),
-                        label: const Text('📊 수면 점수 계산 테스트'),
+                        label: const Text('📊 수면 점수 분석'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '가장 최근 세션의 수면 점수 계산',
-                        style: AppTextStyles.smallText.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-
-                      // ========================================
-                      // ✨ 새로 추가: 트리거 테스트 버튼
-                      // ========================================
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _testOnNewDataTrigger(context),
                         icon: const Icon(Icons.bug_report),
-                        label: const Text('🔧 Cloud Functions 트리거 테스트'),
+                        label: const Text('🔧 트리거 테스트'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'raw_data에 1개 테스트 데이터 추가 (트리거 확인용)',
-                        style: AppTextStyles.smallText.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-
+                      const SizedBox(height: 24),
+                      Text("--- [1단계] 훈련 데이터 (v3) ---",
+                          style: AppTextStyles.secondaryBodyText),
                       const SizedBox(height: 12),
-                      Text(
-                        "-----------------------------------------",
-                        style: AppTextStyles.secondaryBodyText,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          ElevatedButton(
+                              onPressed: () => _pushBurstData(context, 'Awake'),
+                              child: const Text('Awake')),
+                          ElevatedButton(
+                              onPressed: () => _pushBurstData(context, 'Light'),
+                              child: const Text('Light')),
+                          ElevatedButton(
+                              onPressed: () => _pushBurstData(context, 'Deep'),
+                              child: const Text('Deep')),
+                          ElevatedButton(
+                              onPressed: () => _pushBurstData(context, 'REM'),
+                              child: const Text('REM')),
+                          ElevatedButton(
+                              onPressed: () =>
+                                  _pushBurstData(context, 'Snoring'),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.teal),
+                              child: const Text('코골이')),
+                          ElevatedButton(
+                              onPressed: () =>
+                                  _pushBurstData(context, 'Tossing'),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.brown),
+                              child: const Text('뒤척임')),
+                          ElevatedButton(
+                              onPressed: () => _pushBurstData(context, 'Apnea'),
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                              child: const Text('무호흡')),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Center(
-                  child: Column(
-                    children: [
-                      Text(
-                        "--- [1단계] 훈련 데이터 생성기 (v3: 진짜 범위) ---",
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Awake'),
-                        child: const Text('Awake 훈련 데이터 (10s)'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Light'),
-                        child: const Text('Light 훈련 데이터 (10s)'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Deep'),
-                        child: const Text('Deep 훈련 데이터 (10s)'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'REM'),
-                        child: const Text('REM 훈련 데이터 (10s)'),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Snoring'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                        ),
-                        child: const Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Tossing'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.brown,
-                        ),
-                        child: const Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => _pushBurstData(context, 'Apnea'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                        child: const Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "-----------------------------------------",
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
-                    ],
-                  ),
-                ),
-
-                // ===============================================
-                // ✨✨✨ 새로 추가된 하드웨어 테스트 섹션 ✨✨✨
-                // ===============================================
-                const SizedBox(height: 24),
-                Center(
-                  child: Column(
-                    children: [
-                      Text(
-                        "--- [하드웨어] 기기 제어 및 테스트 ---",
-                        style: AppTextStyles.secondaryBodyText.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
-                        ),
-                      ),
+                      const SizedBox(height: 24),
+                      Text("--- [하드웨어] 제어 ---",
+                          style: AppTextStyles.secondaryBodyText.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo)),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 15, horizontal: 20),
-                        ),
                         icon: const Icon(Icons.build),
-                        label: const Text(
-                          "🛠️ 하드웨어 테스트 화면으로 이동",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          Navigator.push(
+                        label: const Text("🛠️ 하드웨어 테스트"),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white),
+                        onPressed: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) => const HardwareTestScreen()),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '펌프, 밸브, 진동 모터 개별 제어',
-                        style: AppTextStyles.smallText.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "-----------------------------------------",
-                        style: AppTextStyles.secondaryBodyText,
+                                builder: (context) =>
+                                    const HardwareTestScreen())),
                       ),
                     ],
                   ),
                 ),
-                // ===============================================
 
                 const SizedBox(height: 24),
                 _buildRealTimeMetricsCard(context, appState),
@@ -940,104 +895,23 @@ class HomeScreen extends StatelessWidget {
                   content: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            '8시간 38분',
-                            style: AppTextStyles.heading1.copyWith(
-                              color: AppColors.primaryNavy,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '목표: 8시간',
-                            style: AppTextStyles.secondaryBodyText,
-                          ),
-                        ],
-                      ),
+                      Text('8시간 38분',
+                          style: AppTextStyles.heading1
+                              .copyWith(color: AppColors.primaryNavy)),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(
-                        value: 0.9,
-                        backgroundColor: AppColors.progressBackground,
-                        color: AppColors.primaryNavy,
-                        minHeight: 8,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('진행률', style: AppTextStyles.secondaryBodyText),
-                          Text('100%', style: AppTextStyles.secondaryBodyText),
-                        ],
-                      ),
+                          value: 0.9,
+                          backgroundColor: AppColors.progressBackground,
+                          color: AppColors.primaryNavy,
+                          minHeight: 8),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                _buildInfoCard(
-                  context,
-                  title: '현재 베개 높이',
-                  icon: Icons.height,
-                  content: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            '12cm',
-                            style: AppTextStyles.heading1.copyWith(
-                              color: AppColors.primaryNavy,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '목표: 12cm',
-                            style: AppTextStyles.secondaryBodyText,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: (12 - 8) / (16 - 8),
-                        backgroundColor: AppColors.progressBackground,
-                        color: AppColors.primaryNavy,
-                        minHeight: 8,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('8cm', style: AppTextStyles.secondaryBodyText),
-                          Text('16cm', style: AppTextStyles.secondaryBodyText),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+
                 const SizedBox(height: 24),
-                _buildDeviceCard(
-                  context,
-                  deviceName: '스마트 베개 Pro',
-                  deviceType: '스마트 베개',
-                  isConnected: false,
-                  batteryPercentage: 87,
-                  version: 'v1.0.0',
-                ),
-                const SizedBox(height: 16),
-                _buildDeviceCard(
-                  context,
-                  deviceName: '수면 팔찌 Plus',
-                  deviceType: '스마트 팔찌',
-                  isConnected: false,
-                  batteryPercentage: 73,
-                  version: 'v1.0.0',
-                ),
+                // ✅ [수정됨] 실시간 BleService 상태를 구독하는 위젯 사용
+                _buildDeviceCards(context),
+
                 const SizedBox(height: 24),
                 _buildSummaryCard(context),
               ],
@@ -1048,44 +922,104 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildMeasurementButton(BuildContext context, AppState appState) {
+    final bool isMeasuring = appState.isMeasuring;
+    final buttonColor =
+        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () {
+            final bleService = Provider.of<BleService>(context, listen: false);
+            if (isMeasuring) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('수면 측정 종료'),
+                  content: const Text('수면 측정을 종료하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('취소')),
+                    TextButton(
+                      onPressed: () {
+                        bleService.stopDataCollection();
+                        appState.toggleMeasurement(context);
+                        Navigator.of(context).pop();
+                      },
+                      child:
+                          const Text('종료', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              if (!bleService.isPillowConnected &&
+                  !bleService.isWatchConnected) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('먼저 기기를 연결해주세요!'),
+                    backgroundColor: Colors.orange));
+                return;
+              }
+              bleService.startDataCollection();
+              appState.toggleMeasurement(context);
+              if (appState.isMeasuring) {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (context) =>
+                        const SleepModeScreen(key: Key('sleepModeScreen'))));
+              }
+            }
+          },
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+                shape: BoxShape.circle, color: buttonColor.withOpacity(0.1)),
+            child: isMeasuring
+                ? SpinKitPulse(color: buttonColor, size: 80.0)
+                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(isMeasuring ? '수면 측정 중지' : '수면 측정 시작',
+            style: AppTextStyles.heading2),
+      ],
+    );
+  }
+
   Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
-    if (!appState.isMeasuring) {
-      return const SizedBox.shrink();
-    }
+    if (!appState.isMeasuring) return const SizedBox.shrink();
     return Card(
-      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildMetricItem(
-              icon: Icons.favorite,
-              label: '심박수',
-              value: appState.currentHeartRate.toStringAsFixed(0),
-              unit: 'BPM',
-              color: AppColors.errorRed,
-            ),
+                icon: Icons.favorite,
+                label: '심박수',
+                value: appState.currentHeartRate.toStringAsFixed(0),
+                unit: 'BPM',
+                color: AppColors.errorRed),
             _buildMetricItem(
-              icon: Icons.opacity,
-              label: '산소포화도',
-              value: appState.currentSpo2.toStringAsFixed(0),
-              unit: '%',
-              color: AppColors.primaryNavy,
-            ),
+                icon: Icons.opacity,
+                label: '산소포화도',
+                value: appState.currentSpo2.toStringAsFixed(0),
+                unit: '%',
+                color: AppColors.primaryNavy),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMetricItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required String unit,
-    required Color color,
-  }) {
+  Widget _buildMetricItem(
+      {required IconData icon,
+      required String label,
+      required String value,
+      required String unit,
+      required Color color}) {
     return Column(
       children: [
         Icon(icon, color: color, size: 24),
@@ -1098,131 +1032,21 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMeasurementButton(BuildContext context, AppState appState) {
-    final bool isMeasuring = appState.isMeasuring;
-    final buttonText = isMeasuring ? '수면 측정 중지' : '수면 측정 시작';
-    final descriptionText =
-        isMeasuring ? '수면을 측정하고 있습니다.' : '버튼을 눌러 수면 측정을 시작하세요.';
-    final buttonColor =
-        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
-
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            final bleService = Provider.of<BleService>(context, listen: false);
-
-            if (isMeasuring) {
-              showDialog(
-                context: context,
-                builder: (BuildContext dialogContext) {
-                  return AlertDialog(
-                    title: const Text('수면 측정 종료'),
-                    content: const Text('수면 측정을 종료하시겠습니까?\n(기기 연결은 유지됩니다)'),
-                    actions: [
-                      TextButton(
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: const Text('취소'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          bleService.stopDataCollection(); // ← 데이터 수집만 중지!
-                          appState.toggleMeasurement(context);
-                          Navigator.of(dialogContext).pop();
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('수면 측정 종료 (기기 연결 유지)'),
-                                backgroundColor: Colors.blue,
-                              ),
-                            );
-                          }
-                        },
-                        child: const Text(
-                          '종료',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              );
-            } else {
-              if (!bleService.isPillowConnected &&
-                  !bleService.isWatchConnected) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('먼저 기기를 연결해주세요!'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-
-              bleService.startDataCollection();
-              appState.toggleMeasurement(context);
-
-              if (appState.isMeasuring) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const SleepModeScreen(key: Key('sleepModeScreen')),
-                  ),
-                );
-              }
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('수면 측정을 시작합니다 ✨'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            }
-          },
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: buttonColor.withOpacity(0.1),
-            ),
-            child: isMeasuring
-                ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded,
-                    color: buttonColor, size: 80),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(buttonText, style: AppTextStyles.heading2),
-        const SizedBox(height: 8),
-        Text(descriptionText, style: AppTextStyles.secondaryBodyText),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard(
-    BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Widget content,
-  }) {
+  Widget _buildInfoCard(BuildContext context,
+      {required String title,
+      required IconData icon,
+      required Widget content}) {
     return Card(
-      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(icon, color: AppColors.primaryNavy, size: 24),
-                const SizedBox(width: 8),
-                Text(title, style: AppTextStyles.heading3),
-              ],
-            ),
+            Row(children: [
+              Icon(icon, color: AppColors.primaryNavy, size: 24),
+              const SizedBox(width: 8),
+              Text(title, style: AppTextStyles.heading3)
+            ]),
             const SizedBox(height: 16),
             content,
           ],
@@ -1231,78 +1055,8 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDeviceCard(
-    BuildContext context, {
-    required String deviceName,
-    required String deviceType,
-    required bool isConnected,
-    required int batteryPercentage,
-    required String version,
-  }) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Row(
-          children: [
-            Icon(
-              Icons.wifi,
-              color: isConnected
-                  ? AppColors.successGreen
-                  : AppColors.secondaryText,
-              size: 24,
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  deviceName,
-                  style: AppTextStyles.bodyText.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(deviceType, style: AppTextStyles.secondaryBodyText),
-              ],
-            ),
-            const Spacer(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (isConnected)
-                  Row(
-                    children: [
-                      Icon(
-                        batteryPercentage > 20
-                            ? Icons.battery_full
-                            : Icons.battery_alert,
-                        color: batteryPercentage > 20
-                            ? AppColors.successGreen
-                            : AppColors.errorRed,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$batteryPercentage%',
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
-                    ],
-                  ),
-                Text(
-                  isConnected ? version : '미연결',
-                  style: AppTextStyles.smallText,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSummaryCard(BuildContext context) {
     return Card(
-      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
@@ -1328,15 +1082,107 @@ class HomeScreen extends StatelessWidget {
   Widget _buildSummaryItem(String value, String label, BuildContext context) {
     return Column(
       children: [
-        Text(
-          value,
-          style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(
-          label,
-          style: AppTextStyles.secondaryBodyText.copyWith(fontSize: 12),
-        ),
+        Text(value,
+            style:
+                AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold)),
+        Text(label,
+            style: AppTextStyles.secondaryBodyText.copyWith(fontSize: 12)),
       ],
+    );
+  }
+
+  // ==========================================
+  // ✨ [추가됨] 기기 상태 카드 빌더 (BleService 연동)
+  // ==========================================
+  Widget _buildDeviceCards(BuildContext context) {
+    return Consumer<BleService>(
+      builder: (context, bleService, child) {
+        return Column(
+          children: [
+            _buildDeviceCard(
+              deviceName: '스마트 베개 Pro',
+              deviceType: '스마트 베개',
+              isConnected: bleService.isPillowConnected,
+              batteryPercentage: bleService.pillowBattery,
+              version: 'v1.0.0',
+            ),
+            const SizedBox(height: 16),
+            _buildDeviceCard(
+              deviceName: '수면 팔찌 Plus',
+              deviceType: '스마트 팔찌',
+              isConnected: bleService.isWatchConnected,
+              batteryPercentage: bleService.watchBattery,
+              version: 'v1.0.0',
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDeviceCard({
+    required String deviceName,
+    required String deviceType,
+    required bool isConnected,
+    required int batteryPercentage,
+    required String version,
+  }) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(
+              Icons.wifi,
+              color: isConnected
+                  ? AppColors.successGreen
+                  : AppColors.secondaryText,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  deviceName,
+                  style: AppTextStyles.bodyText
+                      .copyWith(fontWeight: FontWeight.bold),
+                ),
+                Text(deviceType, style: AppTextStyles.secondaryBodyText),
+              ],
+            ),
+            const Spacer(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      batteryPercentage > 20
+                          ? Icons.battery_full
+                          : Icons.battery_alert,
+                      color: batteryPercentage > 20
+                          ? AppColors.successGreen
+                          : AppColors.errorRed,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$batteryPercentage%',
+                      style: AppTextStyles.secondaryBodyText,
+                    ),
+                  ],
+                ),
+                Text(
+                  isConnected ? version : '미연결',
+                  style: AppTextStyles.smallText,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

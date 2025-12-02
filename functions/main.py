@@ -1,222 +1,6 @@
-# # === 0. 기본 라이브러리 임포트 ===
-# import os
-# import firebase_admin as fa
-# from firebase_admin import firestore as fa_firestore
-# from google.cloud import firestore as gc_firestore
-# from firebase_functions.firestore_fn import on_document_created# ✅ 파이썬용 Firestore 트리거
-# from datetime import datetime, timezone
-# import hashlib
-# import json
+# main.py
+# ✅ [하이브리드 엔진] 안전 규칙(Rule) + AI 판단(Tree) + 무호흡 제어 통합 버전
 
-
-# if not fa._apps:
-#     fa.initialize_app()
-
-# db = fa_firestore.client() 
-# # === 1. 지연 초기화(Lazy Initialization) 유틸 (GPT 해결책) ===
-# # "db = firestore.client()"를 파일 상단에서 실행하지 않고,
-# # 함수가 "실제로" 호출될 때만 초기화하도록 함.
-# _app = None
-# _db = None
-
-# def get_db():
-#     """첫 호출 때만 firebase_admin을 초기화하고 Firestore 클라이언트를 만듭니다."""
-#     global _app, _db
-#     if _db is None:
-#         try:
-#             # 앱이 이미 초기화되었는지 확인
-#             _app = firebase_admin.get_app()
-#         except ValueError:
-#             # 초기화되지 않았다면, 지금 초기화
-#             _app = firebase_admin.initialize_app()
-#         _db = firestore.client()
-#     return _db
-
-# # === 2. 안정화 파라미터 ===
-# DEFAULT_MIN_STAGE_DURATION_SEC = 30  # 기본 30초
-
-# def now_utc():
-#     return datetime.now(timezone.utc)
-
-# # === 3. 의사결정트리 규칙 이식부 (스타터 뇌) ===
-# # (나중에 JupyterLab에서 생성된 코드로 이 함수를 교체하면 됩니다)
-# def predict_stage_by_tree(hr: float, motion: float, pressure: float) -> str:
-#     # auto-generated from 4-class starter profiles (Awake/Light/Deep/REM)
-#     if motion <= 11.5:
-#         if motion <= 5.5:
-#             return "Deep"
-#         else:
-#             return "REM"
-#     else:
-#         if motion <= 35.0:
-#             return "Light"
-#         else:
-#             return "Awake"
-
-# def stage_confidence(stage: str) -> float:
-#     return {"Deep": 0.78, "REM": 0.72, "Light": 0.65, "Awake": 0.60}.get(stage, 0.55)
-
-# def min_duration_sec_for(prev_stable_stage: str | None) -> int:
-#     # v1: 모두 30초. (v2에서 단계별 차등 적용 가능)
-#     return DEFAULT_MIN_STAGE_DURATION_SEC
-
-# # === 4. 명령 정책 ===
-# def command_policy(stage: str) -> dict | None:
-#     if stage == "Awake":
-#         return {"type": "VIBRATE", "payload": {"intensity": 30, "durationMs": 500}, "ttlSec": 8}
-#     if stage == "Light":
-#         return {"type": "SET_HEIGHT", "payload": {"heightMm": 45}, "ttlSec": 10}
-#     if stage == "Deep":
-#         return {"type": "SET_HEIGHT", "payload": {"heightMm": 55}, "ttlSec": 10}
-#     return None  # REM: 명령 없음
-
-# # === 5. 세션 상태 트랜잭션 (핵심 로직) ===
-# @gcf.transactional
-# def _update_session_state(
-#     tx: firestore.Transaction,
-#     state_ref: firestore.DocumentReference,
-#     *,
-#     user_id: str,
-#     session_id: str,
-#     raw_stage: str,
-#     source_ts: datetime,
-#     now: datetime,
-# ):
-#     snap = tx.get(state_ref)
-    
-#     if not snap.exists:
-#         # Cold start: 세션 첫 데이터 -> 즉시 확정 (전이로 간주)
-#         new_state = {
-#             "userId": user_id,
-#             "sessionId": session_id,
-#             "stage": raw_stage,
-#             "raw_stage": raw_stage,
-#             "last_change_ts": now,
-#             "updated_at": now,
-#             "last_source_ts": source_ts,
-#         }
-#         tx.set(state_ref, new_state)
-#         return True, raw_stage, now  # (전이 발생, 안정화 단계, 변경 시각)
-
-#     st = snap.to_dict()
-#     stable_stage = st.get("stage")
-#     last_change_ts = st.get("last_change_ts")
-#     if isinstance(last_change_ts, str):
-#         last_change_ts = datetime.fromisoformat(last_change_ts)
-
-#     min_needed = min_duration_sec_for(stable_stage)
-
-#     if raw_stage == stable_stage:
-#         # 변화 없음: 하트비트만 갱신
-#         tx.update(state_ref, {
-#             "raw_stage": raw_stage,
-#             "updated_at": now,
-#             "last_source_ts": source_ts,
-#         })
-#         return False, stable_stage, last_change_ts
-
-#     # 변화 후보: 경과시간 체크
-#     elapsed = (now - last_change_ts).total_seconds() if last_change_ts else 10**9
-#     if elapsed >= min_needed:
-#         # 전이 승인
-#         tx.update(state_ref, {
-#             "stage": raw_stage,
-#             "raw_stage": raw_stage,
-#             "last_change_ts": now,
-#             "updated_at": now,
-#             "last_source_ts": source_ts,
-#         })
-#         return True, raw_stage, now
-#     else:
-#         # 깜빡임 -> 유지 + 하트비트
-#         tx.update(state_ref, {
-#             "raw_stage": raw_stage,
-#             "updated_at": now,
-#             "last_source_ts": source_ts,
-#         })
-#         return False, stable_stage, last_change_ts
-
-# # === 6. 명령 생성 유틸 ===
-# def create_command_for_stage(db, user_id, session_id, stable_stage, changed_at):
-#     policy = command_policy(stable_stage)
-#     if policy:
-#         # 멱등키(중복 방지 키) 생성
-#         core = json.dumps({
-#             "u": user_id, "s": session_id, "stg": stable_stage,
-#             "t": int(changed_at.timestamp()),
-#         }, sort_keys=True).encode()
-#         dkey = hashlib.sha1(core).hexdigest()[:12]
-#         cmd_ref = db.collection("commands").document(dkey)
-        
-#         try:
-#             if not cmd_ref.get().exists:
-#                 cmd_ref.set({
-#                     "userId": user_id,
-#                     "sessionId": session_id,
-#                     "type": policy["type"],
-#                     "payload": policy["payload"],
-#                     "status": "PENDING",
-#                     "ttlSec": policy["ttlSec"],
-#                     "ts": firestore.SERVER_TIMESTAMP,
-#                     "dedupKey": dkey,
-#                 })
-#         except Exception as e:
-#             print(f"로그: 커맨드 생성 실패 (중복 가능성): {e}")
-#             pass # 중복 생성 시도 등은 무시
-
-# # === 7. 엔트리포인트 (1세대 트리거) ===
-# @firestore_fn.on_document_created(document="raw_data/{docId}")
-# def on_new_data(event: firestore_fn.Event[firestore_fn.DocumentSnapshot]):
-    
-#     # ✅ 1. 지연 초기화 실행 (GPT 해결책)
-#     db = get_db()
-
-#     # 2. 데이터 추출
-#     doc = snap.to_dict() or {}
-#     hr        = float(data.get("hr", 0.0))
-#     motion    = float(data.get("motion", 0.0))
-#     pressure  = float(data.get("pressure", 0.0))
-#     user_id   = data.get("userId", "demoUser")
-#     session_id= data.get("sessionId", "demoSession")
-#     source_ts = data.get("ts", now_utc())
-    
-#     # 3. '날것' 예측
-#     raw_stage = predict_stage_by_tree(hr, motion, pressure)
-
-#     # 4. 세션 상태 문서(단일) 갱신 (트랜잭션)
-#     now = now_utc()
-#     state_ref = db.collection("session_state").document(f"{user_id}__{session_id}")
-    
-#     # 트랜잭션 실행
-#     transaction = db.transaction()
-#     stage_changed, stable_stage, changed_at = _update_session_state(
-#         transaction, state_ref,
-#         user_id=user_id, session_id=session_id,
-#         raw_stage=raw_stage, source_ts=source_ts, now=now,
-#     )
-
-#     # 5. 전이 승인 시에만 로그/명령 생성
-#     if stage_changed:
-#         # processed_data: "전이 이벤트"만 기록
-#         db.collection("processed_data").add({
-#             "userId": user_id,
-#             "sessionId": session_id,
-#             "stage": stable_stage,
-#             "raw_stage": raw_stage,
-#             "confidence": stage_confidence(stable_stage),
-#             "ts": firestore.SERVER_TIMESTAMP,
-#             "changed_at": changed_at,
-#             "source_ts": source_ts,
-#         })
-        
-#         # commands: 정책에 따라 1회 생성
-#         create_command_for_stage(db, user_id, session_id, stable_stage, changed_at)
-
-#     print(f"세션 {session_id} 처리 완료: {stable_stage} (변경: {stage_changed})")
-#     return
-
-# === Gen2 Cloud Functions for Firebase (Python) ===
-# Firestore 트리거(문서 생성) → 세션 상태 갱신 + 명령 생성
 import json
 import hashlib
 from datetime import datetime, timezone, timedelta
@@ -224,15 +8,12 @@ from datetime import datetime, timezone, timedelta
 import firebase_admin
 from firebase_functions import firestore_fn, options, https_fn
 from firebase_admin import firestore
-
-# google-cloud-firestore(v2) 타입/트랜잭션 데코레이터는 여기서 가져오는 것이 안전하다
-from google.cloud import firestore as gcf  # gcf.Transaction, gcf.DocumentReference, gcf.transactional
+from google.cloud import firestore as gcf
 from notifications import (
     send_sleep_report_notification,
     send_sleep_efficiency_notification,
     send_snoring_notification,
 )
-
 
 # ---------- lazy init ----------
 _app_inited = False
@@ -245,92 +26,131 @@ def get_db() -> gcf.Client:
         except ValueError:
             firebase_admin.initialize_app()
         _app_inited = True
-    # Admin 초기화 이후에는 google-cloud-firestore 클라이언트를 그대로 씀
     return gcf.Client()
-
 
 # ---------- utility ----------
 DEFAULT_MIN_STAGE_DURATION_SEC = 30
 
-
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
-def predict_stage_by_tree(hr: float, spo2: float, mic_level: float, pressure_level: float) -> str:
-    """Auto-generated tree classifier (accuracy 100% on training set of 2220 samples)."""
+# =========================================================
+# 🧠 1. AI 판단 로직 (Decision Tree)
+# =========================================================
+def predict_stage_ai(hr: float, spo2: float, mic_avg: float, pressure_avg: float) -> str:
+    """
+    JupyterLab에서 학습된 의사결정 나무 모델 (max_depth=5)
+    규칙으로 잡히지 않는 섬세한 단계(Deep/Light/REM/Snoring)를 구분합니다.
+    """
+    # (이전에 학습된 로직 삽입 - 나중에 Jupyter 다시 돌리면 여기만 바꿔끼우세요)
     if hr <= 59.5:
         return "Deep"
-    else:  # hr > 59.5
-        if spo2 <= 91.9683:
-            return "Apnea"
-        else:  # spo2 > 91.9683
-            if pressure_level <= 1493.5:
-                if mic_level <= 109.5:
-                    if pressure_level <= 505.0:
-                        return "REM"
-                    else:  # pressure_level > 505.0
-                        return "Light"
-                else:  # mic_level > 109.5
+    else:
+        if pressure_avg <= 499.5:
+            if spo2 <= 95.9:
+                return "Snoring" # 낮은 SpO2 + 낮은 압력은 보통 코골이/무호흡 전조
+            else:
+                if mic_avg <= 47.0:
+                    return "REM"
+                else:
                     return "Snoring"
-            else:  # pressure_level > 1493.5
-                if pressure_level <= 2749.5:
-                    return "Awake"
-                else:  # pressure_level > 2749.5
-                    if spo2 <= 97.1172:
-                        return "Tossing"
-                    else:  # spo2 > 97.1172
-                        return "Tossing"
+        else: # pressure > 499.5
+            if pressure_avg <= 1504.0:
+                if mic_avg <= 45.5:
+                    return "Light"
+                else:
+                    return "Snoring"
+            else: # pressure > 1504
+                if pressure_avg <= 3010.5:
+                    return "Awake" # 뒤척임 구간
+                else:
+                    return "Awake" # 기상 구간
+
+# =========================================================
+# 🛡️ 2. 하이브리드 엔진 (Safety Rule + AI)
+# =========================================================
+def predict_stage_hybrid(hr: float, spo2: float, mic_avg: float, pressure_avg: float) -> str:
+    """
+    [Rule First, AI Second] 전략
+    위급 상황은 규칙으로 즉시 잡고, 나머지는 AI가 판단합니다.
+    """
+    
+    # 🚨 Rule 1: 무호흡 (최우선)
+    if spo2 <= 90.0:
+        return "Apnea"
+
+    # 🚨 Rule 2: 기상 (Awake) - 물리적으로 머리가 떨어짐 OR 심박수 급상승
+    # 압력이 100 이하면 베개 위에 아무것도 없는 것 (일어남)
+    if pressure_avg < 100.0 or hr > 95:
+        return "Awake"
+
+    # 🚨 Rule 3: 심한 뒤척임 (Tossing) - 베개를 꾹 누르거나 짓이김
+    # 압력이 평소(1000~2000)보다 훨씬 높음
+    if pressure_avg > 3000:
+        return "Tossing"
+
+    # 🚨 Rule 4: 코골이
+    if mic_avg > 50: 
+        return "Snoring"
+
+    # --- 🧠 나머지는 AI 판단 (Deep/Light/REM) ---
+    return predict_stage_ai(hr, spo2, mic_avg, pressure_avg)
 
 def stage_confidence(stage: str) -> float:
-    return {"Deep": 0.78, "REM": 0.72, "Light": 0.65, "Awake": 0.60}.get(stage, 0.55)
+    # Rule로 잡힌 건 확신 100%, AI는 85% 정도
+    if stage in ["Apnea", "Awake", "Tossing"]:
+        return 0.99
+    return 0.85
 
 def min_duration_sec_for(prev_stable_stage: str | None) -> int:
     return DEFAULT_MIN_STAGE_DURATION_SEC
 
-
+# =========================================================
+# 🎮 3. 명령 정책 (Command Policy)
+# =========================================================
 def command_policy(stage: str) -> dict | None:
-    # 1순위: 위험 이벤트 처리
+    # 1. 무호흡 (가장 위험) -> 기도 최대 확보 (Level 3)
     if stage == "Apnea":
-        return {"type": "VIBRATE_STRONG", "payload": {"level": 10, "durationMs": 3000}, "ttlSec": 20}
+        return {
+            "type": "SET_HEIGHT", 
+            "payload": { "cellIndex": 1, "targetLevel": 3 }, 
+            "ttlSec": 20 
+        }
 
+    # 2. 코골이 -> 기도 확보 (Level 2)
     if stage == "Snoring":
-        return {"type": "VIBRATE_GENTLY", "payload": {"level": 3, "durationMs": 500}, "ttlSec": 15}
+        return {
+            "type": "SET_HEIGHT", 
+            "payload": { "cellIndex": 1, "targetLevel": 2 }, 
+            "ttlSec": 60 
+        }
 
-    # 2순위: 수면 단계에 따른 높이 조절
-    if stage == "Light":
-        return {"type": "SET_HEIGHT", "payload": {"heightMm": 45}, "ttlSec": 10}
-
+    # 3. 깊은 수면 -> 목 편안하게 (Level 2)
     if stage == "Deep":
-        return {"type": "SET_HEIGHT", "payload": {"heightMm": 55}, "ttlSec": 10}
+        return {
+            "type": "SET_HEIGHT", 
+            "payload": { "cellIndex": 2, "targetLevel": 2 }, 
+            "ttlSec": 60
+        }
 
-    # 3순위: 명령 없음 (Awake, REM, Tossing 등)
+    # 4. 얕은 수면/깨어있음 -> 기본 상태 (Level 1)
+    if stage == "Light" or stage == "Awake":
+        return {
+            "type": "SET_HEIGHT", 
+            "payload": { "cellIndex": 1, "targetLevel": 1 }, 
+            "ttlSec": 60
+        }
+
     return None
-
 
 # ---------- transactional session-state update ----------
 @gcf.transactional
-def _update_session_state(
-    tx: gcf.Transaction,
-    state_ref: gcf.DocumentReference,
-    *,
-    user_id: str,
-    session_id: str,
-    raw_stage: str,
-    source_ts: datetime,
-    now: datetime,
-):
-    # 트랜잭션 데코레이터 모드의 올바른 읽기 방법
+def _update_session_state(tx: gcf.Transaction, state_ref: gcf.DocumentReference, *, user_id: str, session_id: str, raw_stage: str, source_ts: datetime, now: datetime):
     snap = state_ref.get(transaction=tx)
     if not snap.exists:
-        # cold start
         new_state = {
-            "userId": user_id,
-            "sessionId": session_id,
-            "stage": raw_stage,
-            "raw_stage": raw_stage,
-            "last_change_ts": now,
-            "updated_at": now,
-            "last_source_ts": source_ts,
+            "userId": user_id, "sessionId": session_id, "stage": raw_stage, "raw_stage": raw_stage,
+            "last_change_ts": now, "updated_at": now, "last_source_ts": source_ts,
         }
         tx.set(state_ref, new_state)
         return True, raw_stage, now
@@ -339,131 +159,81 @@ def _update_session_state(
     stable_stage = st.get("stage")
     last_change_ts = st.get("last_change_ts")
 
-    # Firestore Timestamp → datetime 보정 (안전 처리)
-    if isinstance(last_change_ts, datetime):
-        pass
+    if isinstance(last_change_ts, datetime): pass
     elif last_change_ts is not None and hasattr(last_change_ts, "to_datetime"):
         last_change_ts = last_change_ts.to_datetime().astimezone(timezone.utc)
-    else:
-        last_change_ts = None
+    else: last_change_ts = None
 
-    min_needed = min_duration_sec_for(stable_stage)
     elapsed = (now - last_change_ts).total_seconds() if last_change_ts else 10**9
 
     if raw_stage == stable_stage:
-        # 변화 없음: raw만 갱신
         tx.update(state_ref, {"raw_stage": raw_stage, "updated_at": now, "last_source_ts": source_ts})
         return False, stable_stage, last_change_ts
 
-    if elapsed >= min_needed:
-        # 전이 승인
-        tx.update(
-            state_ref,
-            {
-                "stage": raw_stage,
-                "raw_stage": raw_stage,
-                "last_change_ts": now,
-                "updated_at": now,
-                "last_source_ts": source_ts,
-            },
-        )
+    if elapsed >= min_duration_sec_for(stable_stage):
+        tx.update(state_ref, {
+            "stage": raw_stage, "raw_stage": raw_stage, "last_change_ts": now,
+            "updated_at": now, "last_source_ts": source_ts,
+        })
         return True, raw_stage, now
     else:
-        # 플리커(깜빡임): 안정화 대기
         tx.update(state_ref, {"raw_stage": raw_stage, "updated_at": now, "last_source_ts": source_ts})
         return False, stable_stage, last_change_ts
-
 
 def create_command_for_stage(db: gcf.Client, user_id: str, session_id: str, stable_stage: str, changed_at: datetime):
     policy = command_policy(stable_stage)
-    if not policy:
-        return  # 정책이 없으면 즉시 종료
+    if not policy: return
 
-    # --- ▼ 디버깅: 현재 적용된 정책 출력 ▼ ---
-    print(f"[DEBUG_CMD_POLICY] policy: {policy}")
-    # --- ▲ 디버깅 라인 끝 ▲ ---
-
-    core = json.dumps(
-        {"u": user_id, "s": session_id, "stg": stable_stage, "t": int(changed_at.timestamp())},
-        sort_keys=True,
-    ).encode()
+    core = json.dumps({"u": user_id, "s": session_id, "stg": stable_stage, "t": int(changed_at.timestamp())}, sort_keys=True).encode()
     dkey = hashlib.sha1(core).hexdigest()[:12]
     cmd_ref = db.collection("commands").document(dkey)
 
     try:
-        cmd_ref.create(
-            {
-                "userId": user_id,
-                "sessionId": session_id,
-                "type": policy["type"],
-                "payload": policy.get("payload", {}),
-                "status": "PENDING",
-                "ttlSec": policy["ttlSec"],
-                "ts": gcf.SERVER_TIMESTAMP,
-                "dedupKey": dkey,
-            }
-        )
-        print(f"[명령 생성 성공] type: {policy['type']}, dkey: {dkey}")
-    except Exception as e:
-        print(f"[명령 생성 실패] (아마도 중복): {e}")
-        pass
-
+        cmd_ref.create({
+            "userId": user_id, "sessionId": session_id, "type": policy["type"],
+            "payload": policy.get("payload", {}), "status": "PENDING", "ttlSec": policy["ttlSec"],
+            "ts": gcf.SERVER_TIMESTAMP, "dedupKey": dkey,
+        })
+        print(f"[명령 생성 성공] {policy['type']} (for {stable_stage})")
+    except Exception: pass
 
 # ---------- Gen2 options + Firestore trigger ----------
-# 함수 실행 리전(Cloud Run 위치): us-central1 (이미 서비스가 거기에 있음)
 options.set_global_options(region="asia-northeast3")
 
-# 이벤트 구독 리전(Eventarc/Firestore 위치): asia-northeast3 (프로젝트 Firestore가 서울)
-@firestore_fn.on_document_created(document="raw_sensor_data/{docId}", region="asia-northeast3")
+@firestore_fn.on_document_created(document="raw_data/{docId}", region="asia-northeast3")
 def on_new_data(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None]):
     db = get_db()
-
-    if event.data is None:
-        print("no event data; skip")
-        return
+    if event.data is None: return
 
     data = event.data.to_dict() or {}
+    
+    # 1. 데이터 파싱
     hr = float(data.get("hr", 0.0))
     spo2 = float(data.get("spo2", 98.0))
-    mic_level = float(data.get("mic_level", data.get("motion", 0.0)))
-    pressure_level = float(data.get("pressure_level", data.get("pressure", 0.0)))
+    mic_avg = float(data.get("mic_avg", data.get("mic_level", 0.0)))
+    pressure_avg = float(data.get("pressure_avg", data.get("pressure_level", 0.0)))
+    
     user_id = data.get("userId", "demoUser")
     session_id = data.get("sessionId", "demoSession")
+    is_auto_control_on = data.get("auto_control_active", False)
 
-    # ts는 여러 형태로 들어올 수 있음: Firestore Timestamp, ISO 문자열, epoch(ms/sec), dict {seconds,nanos}
+    # Time parsing logic
     source_ts_raw = data.get("ts")
-    if source_ts_raw is None:
-        source_ts = now_utc()
-    elif isinstance(source_ts_raw, datetime):
-        source_ts = source_ts_raw.astimezone(timezone.utc)
+    if source_ts_raw is None: source_ts = now_utc()
+    elif isinstance(source_ts_raw, datetime): source_ts = source_ts_raw.astimezone(timezone.utc)
     else:
         try:
-            # Firestore Timestamp 타입 처리
-            try:
-                from google.cloud.firestore_v1 import Timestamp as FsTimestamp  # type: ignore
-            except Exception:
-                FsTimestamp = None  # type: ignore
+            try: from google.cloud.firestore_v1 import Timestamp as FsTimestamp
+            except: FsTimestamp = None
+            if FsTimestamp and isinstance(source_ts_raw, FsTimestamp): source_ts = source_ts_raw.to_datetime().astimezone(timezone.utc)
+            elif isinstance(source_ts_raw, dict) and "seconds" in source_ts_raw: source_ts = datetime.fromtimestamp(source_ts_raw["seconds"], tz=timezone.utc)
+            elif isinstance(source_ts_raw, (int, float)): source_ts = datetime.fromtimestamp(source_ts_raw / (1000.0 if source_ts_raw > 1e12 else 1.0), tz=timezone.utc)
+            elif isinstance(source_ts_raw, str): source_ts = datetime.fromisoformat(source_ts_raw.replace('Z', '+00:00'))
+            else: source_ts = now_utc()
+        except: source_ts = now_utc()
 
-            if FsTimestamp is not None and isinstance(source_ts_raw, FsTimestamp):
-                source_ts = source_ts_raw.to_datetime().astimezone(timezone.utc)
-            elif isinstance(source_ts_raw, dict) and "seconds" in source_ts_raw:
-                source_ts = datetime.fromtimestamp(source_ts_raw["seconds"], tz=timezone.utc)
-            elif isinstance(source_ts_raw, (int, float)):
-                # 값이 매우 크면 ms로 간주
-                divisor = 1000.0 if source_ts_raw > 1e12 else 1.0
-                source_ts = datetime.fromtimestamp(source_ts_raw / divisor, tz=timezone.utc)
-            elif isinstance(source_ts_raw, str):
-                try:
-                    parsed = datetime.fromisoformat(source_ts_raw)
-                    source_ts = parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-                except Exception:
-                    source_ts = now_utc()
-            else:
-                source_ts = now_utc()
-        except Exception:
-            source_ts = now_utc()
-
-    raw_stage = predict_stage_by_tree(hr, spo2, mic_level, pressure_level)
+    # ✅ 2. 하이브리드 판단 로직 호출!
+    raw_stage = predict_stage_hybrid(hr, spo2, mic_avg, pressure_avg)
 
     now = now_utc()
     state_ref = db.collection("session_state").document(f"{user_id}__{session_id}")
@@ -471,268 +241,147 @@ def on_new_data(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None])
     try:
         tx = db.transaction()
         stage_changed, stable_stage, changed_at = _update_session_state(
-            tx,
-            state_ref,
-            user_id=user_id,
-            session_id=session_id,
-            raw_stage=raw_stage,
-            source_ts=source_ts,
-            now=now,
+            tx, state_ref, user_id=user_id, session_id=session_id,
+            raw_stage=raw_stage, source_ts=source_ts, now=now,
         )
     except Exception as e:
-        print(f"[state] transaction failed: {e}")
+        print(f"[Transaction Error] {e}")
         return
 
+    # 3. 상태 변경 시 처리
     if stage_changed:
-        db.collection("processed_data").add(
-            {
-                "userId": user_id,
-                "sessionId": session_id,
-                "stage": stable_stage,
-                "raw_stage": raw_stage,
-                "confidence": stage_confidence(stable_stage),
-                "ts": gcf.SERVER_TIMESTAMP,
-                "changed_at": changed_at,
-                "source_ts": source_ts,
-            }
-        )
-        create_command_for_stage(db, user_id, session_id, stable_stage, changed_at)
+        db.collection("processed_data").add({
+            "userId": user_id, "sessionId": session_id, "stage": stable_stage,
+            "raw_stage": raw_stage, "confidence": stage_confidence(stable_stage),
+            "ts": gcf.SERVER_TIMESTAMP, "changed_at": changed_at, "source_ts": source_ts,
+        })
+        
+        if is_auto_control_on:
+            create_command_for_stage(db, user_id, session_id, stable_stage, changed_at)
+        else:
+            print(f"[알림] 상태 변경됨({stable_stage}) 그러나 자동 제어 OFF")
 
-    print(f"[session {session_id}] stable={stable_stage}, changed={stage_changed}")
-
+    print(f"[Ok] {session_id} -> {stable_stage} (Changed: {stage_changed})")
 
 # ========================================
-# ✨ E단계: 수면 점수 계산 함수 (수정!)
+# 📊 수면 점수 및 AHI 진단 통합 버전
 # ========================================
-
 @https_fn.on_call()
 def calculate_sleep_score(req: https_fn.CallableRequest):
     """
-    특정 세션의 수면 점수를 계산
-    
-    요청 파라미터:
-    - session_id: 세션 ID (필수)
-    - user_id: 사용자 ID (선택, 없으면 세션에서 추출)
-    
-    반환:
-    - total_score: 총점 (100점 만점)
-    - breakdown: 세부 점수
-    - summary: 수면 요약
-    - message: 평가 메시지
+    수면 점수 계산 및 '수면 무호흡증(AHI)' 진단 로직 통합
     """
     db = get_db()
-    
-    # 파라미터 추출
     session_id = req.data.get("session_id")
+    user_id = req.data.get("user_id")
+    
     if not session_id:
         raise https_fn.HttpsError("invalid-argument", "session_id is required")
     
-    user_id = req.data.get("user_id")
-    
-    print(f"[수면 점수 계산 시작] session_id: {session_id}")
+    print(f"[수면 점수 및 진단 시작] session: {session_id}")
     
     try:
-        # processed_data에서 세션 데이터 조회
+        # 1️⃣ 데이터 가져오기
         processed_docs = db.collection("processed_data")\
             .where("sessionId", "==", session_id)\
             .order_by("changed_at", direction=firestore.Query.ASCENDING)\
             .stream()
-        
-        # 데이터 수집
-        stages_data = []
-        for doc in processed_docs:
-            data = doc.to_dict()
-            stages_data.append(data)
-            
-            # user_id 추출 (파라미터로 안 넘어왔을 때)
-            if not user_id:
-                user_id = data.get("userId")
-        
+        stages_data = [doc.to_dict() for doc in processed_docs]
         if not stages_data:
-            return {
-                "error": "No data found",
-                "session_id": session_id,
-                "total_score": 0,
-                "message": "데이터가 없습니다"
-            }
+            return {"error": "No data", "total_score": 0, "message": "데이터가 없습니다"}
         
-        # 1. 수면 시간 계산
         first_ts = stages_data[0]["changed_at"]
         last_ts = stages_data[-1]["changed_at"]
-        
-        # Timestamp 변환
-        if hasattr(first_ts, "to_datetime"):
-            first_ts = first_ts.to_datetime()
-        if hasattr(last_ts, "to_datetime"):
-            last_ts = last_ts.to_datetime()
-        
+        if hasattr(first_ts, "to_datetime"): first_ts = first_ts.to_datetime()
+        if hasattr(last_ts, "to_datetime"): last_ts = last_ts.to_datetime()
         total_duration_sec = (last_ts - first_ts).total_seconds()
-        total_duration_hours = total_duration_sec / 3600
+        total_duration_hours = total_duration_sec / 3600 if total_duration_sec > 0 else 0
         
-        # 2. 단계별 시간 계산
+        # 2️⃣ 단계별 시간 및 무호흡 계산
         stage_durations = {"Deep": 0, "Light": 0, "REM": 0, "Awake": 0, "Apnea": 0, "Snoring": 0}
-        
+        apnea_event_count = 0
         for i in range(len(stages_data) - 1):
             current = stages_data[i]
-            next_item = stages_data[i + 1]
-            
+            next_ts = stages_data[i + 1]["changed_at"]
+            if hasattr(next_ts, "to_datetime"): next_ts = next_ts.to_datetime()
             current_ts = current["changed_at"]
-            next_ts = next_item["changed_at"]
-            
-            if hasattr(current_ts, "to_datetime"):
-                current_ts = current_ts.to_datetime()
-            if hasattr(next_ts, "to_datetime"):
-                next_ts = next_ts.to_datetime()
-            
+            if hasattr(current_ts, "to_datetime"): current_ts = current_ts.to_datetime()
             duration = (next_ts - current_ts).total_seconds()
             stage = current.get("stage", "Unknown")
-            
-            if stage in stage_durations:
-                stage_durations[stage] += duration
+            if stage in stage_durations: stage_durations[stage] += duration
+            if stage == "Apnea": apnea_event_count += 1
         
-        # 3. 점수 계산
+        # 3️⃣ 점수 계산
+        # 3-1. 수면 시간 점수 (40점)
+        if 7 <= total_duration_hours <= 9: duration_score = 40
+        elif 6 <= total_duration_hours < 7: duration_score = 30
+        elif 9 < total_duration_hours <= 10: duration_score = 35
+        elif 5 <= total_duration_hours < 6: duration_score = 20
+        else: duration_score = 10
         
-        # 3-1. 수면 시간 점수 (40점) - 7~9시간이 이상적
-        if 7 <= total_duration_hours <= 9:
-            duration_score = 40
-        elif 6 <= total_duration_hours < 7:
-            duration_score = 30
-        elif 9 < total_duration_hours <= 10:
-            duration_score = 35
-        elif 5 <= total_duration_hours < 6:
-            duration_score = 20
-        else:
-            duration_score = 10
-        
-        # 3-2. 깊은 수면 점수 (25점) - 전체의 15~25%가 이상적
+        # 3-2. 깊은 수면 점수 (25점)
         deep_ratio = stage_durations["Deep"] / total_duration_sec if total_duration_sec > 0 else 0
-        if 0.15 <= deep_ratio <= 0.25:
-            deep_score = 25
-        elif 0.10 <= deep_ratio < 0.15:
-            deep_score = 20
-        elif 0.25 < deep_ratio <= 0.30:
-            deep_score = 20
-        else:
-            deep_score = 10
+        if 0.15 <= deep_ratio <= 0.25: deep_score = 25
+        elif 0.10 <= deep_ratio < 0.15 or 0.25 < deep_ratio <= 0.30: deep_score = 20
+        else: deep_score = 10
         
-        # 3-3. REM 수면 점수 (20점) - 전체의 20~25%가 이상적
+        # 3-3. REM 수면 점수 (20점)
         rem_ratio = stage_durations["REM"] / total_duration_sec if total_duration_sec > 0 else 0
-        if 0.20 <= rem_ratio <= 0.25:
-            rem_score = 20
-        elif 0.15 <= rem_ratio < 0.20:
-            rem_score = 15
-        elif 0.25 < rem_ratio <= 0.30:
-            rem_score = 15
-        else:
-            rem_score = 8
+        if 0.20 <= rem_ratio <= 0.25: rem_score = 20
+        elif 0.15 <= rem_ratio < 0.20 or 0.25 < rem_ratio <= 0.30: rem_score = 15
+        else: rem_score = 8
         
-        # 3-4. 수면 효율 점수 (15점) - Awake 시간이 적을수록 좋음
+        # 3-4. 수면 효율 점수 (15점)
         awake_ratio = stage_durations["Awake"] / total_duration_sec if total_duration_sec > 0 else 0
-        if awake_ratio < 0.05:
-            efficiency_score = 15
-        elif awake_ratio < 0.10:
-            efficiency_score = 12
-        elif awake_ratio < 0.15:
-            efficiency_score = 8
-        else:
-            efficiency_score = 3
+        if awake_ratio < 0.05: efficiency_score = 15
+        elif awake_ratio < 0.10: efficiency_score = 12
+        elif awake_ratio < 0.15: efficiency_score = 8
+        else: efficiency_score = 3
         
-        # 총점
         total_score = duration_score + deep_score + rem_score + efficiency_score
         
-        # 4. 평가 메시지
-        if total_score >= 90:
-            message = "훌륭한 수면이었습니다! 🌟"
-            grade = "S"
-        elif total_score >= 80:
-            message = "좋은 수면입니다 😊"
-            grade = "A"
-        elif total_score >= 70:
-            message = "양호한 수면입니다 👍"
-            grade = "B"
-        elif total_score >= 60:
-            message = "수면이 부족합니다 😐"
-            grade = "C"
-        else:
-            message = "수면 개선이 필요합니다 ⚠️"
-            grade = "D"
+        # 4️⃣ AHI 기반 무호흡 진단
+        ahi_score = apnea_event_count / total_duration_hours if total_duration_hours > 0 else 0
+        apnea_diagnosis = "정상"
+        if apnea_event_count >= 30 or ahi_score >= 5:
+            total_score = max(0, total_score - 15)
+            if ahi_score >= 30: apnea_diagnosis = "중증 수면 무호흡 (위험)"
+            elif ahi_score >= 15: apnea_diagnosis = "중등도 수면 무호흡 (주의)"
+            else: apnea_diagnosis = "경증 수면 무호흡 (관찰 필요)"
         
-        # ✅ 5. 현재 시간 (ISO 문자열)
-        current_time = now_utc()
+        # 5️⃣ 메시지
+        if total_score >= 90: message = "훌륭한 수면이었습니다! 🌟"
+        elif total_score >= 80: message = "좋은 수면입니다 😊"
+        elif total_score >= 70: message = "양호한 수면입니다 👍"
+        elif total_score >= 60: message = "수면이 부족합니다 😐"
+        else: message = "수면 개선이 필요합니다 ⚠️"
         
-        # ✅ 6. 결과 데이터 (반환용 - JSON 직렬화 가능)
+        # 6️⃣ DB 저장
         report_data = {
             "userId": user_id,
             "sessionId": session_id,
-            "created_at": current_time.isoformat(),  # ✅ ISO 문자열
-            
-            # 점수
-            "total_score": round(total_score),
-            "grade": grade,
+            "created_at": now_utc().isoformat(),
+            "total_score": int(total_score),
             "message": message,
-            
-            # 세부 점수
-            "breakdown": {
-                "duration_score": duration_score,
-                "deep_score": deep_score,
-                "rem_score": rem_score,
-                "efficiency_score": efficiency_score
-            },
-            
-            # 수면 요약
             "summary": {
                 "total_duration_hours": round(total_duration_hours, 2),
-                "deep_sleep_hours": round(stage_durations["Deep"] / 3600, 2),
-                "rem_sleep_hours": round(stage_durations["REM"] / 3600, 2),
-                "light_sleep_hours": round(stage_durations["Light"] / 3600, 2),
-                "awake_hours": round(stage_durations["Awake"] / 3600, 2),
-                
-                "deep_ratio": round(deep_ratio * 100, 1),
-                "rem_ratio": round(rem_ratio * 100, 1),
-                "awake_ratio": round(awake_ratio * 100, 1),
-                
-                "apnea_count": sum(1 for s in stages_data if s.get("stage") == "Apnea"),
-                "snoring_duration": round(stage_durations["Snoring"] / 60, 1)  # 분 단위
+                "apnea_count": apnea_event_count,
+                "ahi_index": round(ahi_score, 1),
+                "apnea_diagnosis": apnea_diagnosis,
+                "snoring_duration": round(stage_durations["Snoring"]/60, 1)
             }
         }
         
-        # ✅ 7. Firestore에 저장 (SERVER_TIMESTAMP 사용)
         db.collection("sleep_reports").document(session_id).set({
-            **report_data,
-            "created_at": gcf.SERVER_TIMESTAMP  # Firestore용으로만
+            **report_data, "created_at": gcf.SERVER_TIMESTAMP
         })
         
-        print(f"[수면 점수 계산 완료] session: {session_id}, score: {total_score}")
-    # ✨ 점수 계산 완료 후 푸시 알림 보내기
-        send_sleep_report_notification(
-            db=db,
-            user_id=user_id,
-            score=total_score,
-            message=message
-        )
-        
-        # ✨ 수면 효율이 낮으면 추가 알림
-        send_sleep_efficiency_notification(
-            db=db,
-            user_id=user_id,
-            efficiency=efficiency_score  # 이 값도 계산해서 넣어야 함
-        )
-        
-        # ✨ 코골이가 심하면 알림
-        if snoring_duration > 30:
-            send_snoring_notification(
-                db=db,
-                user_id=user_id,
-                duration_min=snoring_duration
-            )
-
-
-        # ✅ 8. 반환 (ISO 문자열 포함)
+        send_sleep_report_notification(db=db, user_id=user_id, score=int(total_score), message=message)
         return report_data
         
     except Exception as e:
-        print(f"[수면 점수 계산 오류] {e}")
-        raise https_fn.HttpsError("internal", f"Score calculation failed: {str(e)}")
+        print(f"[오류] {e}")
+        raise https_fn.HttpsError("internal", str(e))
 
 
 # ========================================
@@ -742,7 +391,7 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
 @https_fn.on_call()
 def calculate_weekly_stats(req: https_fn.CallableRequest):
     """
-    사용자의 주간 수면 통계 계산
+    사용자의 주간 수면 통s계 계산
     
     요청 파라미터:
     - user_id: 사용자 ID (필수)

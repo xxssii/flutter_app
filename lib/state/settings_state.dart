@@ -1,9 +1,9 @@
 // lib/state/settings_state.dart
-// lib/state/settings_state.dart
+// ✅ [최종 수정] isSmartAlarmOn 호환성 추가 및 Firestore 연동
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ 추가!
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import '../services/notification_service.dart';
 
 class SettingsState extends ChangeNotifier {
@@ -44,6 +44,9 @@ class SettingsState extends ChangeNotifier {
   bool get isSmartVibrationOn => _isSmartVibrationOn;
   bool get isSmartPillowAdjustOn => _isSmartPillowAdjustOn;
   bool get isExactTimeAlarmOn => _isExactTimeAlarmOn;
+  
+  // ✅ [호환성 추가] AppState에서 사용하는 isSmartAlarmOn Getter
+  bool get isSmartAlarmOn => _isSmartWakeUpOn; 
 
   // 자동 조절 상태
   bool _isAutoAdjustOn = true;
@@ -113,11 +116,8 @@ class SettingsState extends ChangeNotifier {
     _isReportOn = value;
     notifyListeners();
 
-    // 1. SharedPreferences에 저장
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isReportOn', value);
-
-    // 2. ✅ Firestore에도 저장!
     await _updateFirestoreNotificationSetting('sleepReport', value);
   }
 
@@ -127,8 +127,6 @@ class SettingsState extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isEfficiencyOn', value);
-
-    // ✅ Firestore 저장
     await _updateFirestoreNotificationSetting('sleepScore', value);
   }
 
@@ -138,8 +136,6 @@ class SettingsState extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isSnoringOn', value);
-
-    // ✅ Firestore 저장
     await _updateFirestoreNotificationSetting('snoring', value);
   }
 
@@ -149,8 +145,6 @@ class SettingsState extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isGoalOn', value);
-
-    // ✅ Firestore 저장 (goal 추가)
     await _updateFirestoreNotificationSetting('goal', value);
   }
 
@@ -159,10 +153,8 @@ class SettingsState extends ChangeNotifier {
 
     try {
       if (_isGuideOn) {
-        // 알림 예약 시도
         await NotificationService.instance.scheduleDailySleepTip();
       } else {
-        // 알림 취소 시도
         await NotificationService.instance.cancelAllNotifications();
       }
     } catch (e) {
@@ -171,11 +163,8 @@ class SettingsState extends ChangeNotifier {
 
     notifyListeners();
 
-    // SharedPreferences 저장
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isGuideOn', value);
-
-    // ✅ Firestore 저장
     await _updateFirestoreNotificationSetting('guide', value);
   }
 
@@ -183,16 +172,13 @@ class SettingsState extends ChangeNotifier {
   // 📲 Firestore 업데이트 헬퍼 함수
   // ========================================
 
-  /// Firestore에 알림 설정 저장
   Future<void> _updateFirestoreNotificationSetting(
     String settingType,
     bool enabled,
   ) async {
     try {
-      // TODO: 실제 로그인한 사용자 ID로 변경!
       const userId = 'demoUser';
 
-      // NotificationService를 통해 Firestore 업데이트
       await NotificationService.instance.updateNotificationSettings(
         userId: userId,
         settingType: settingType,
@@ -202,7 +188,6 @@ class SettingsState extends ChangeNotifier {
       debugPrint('✅ Firestore 알림 설정 업데이트: $settingType = $enabled');
     } catch (e) {
       debugPrint('❌ Firestore 업데이트 실패: $e');
-      // 실패해도 앱 사용에는 문제없으므로 계속 진행
     }
   }
 
@@ -210,35 +195,29 @@ class SettingsState extends ChangeNotifier {
   // ⏰ 알람 설정
   // ========================================
 
-  /// 알람 시간 설정
   Future<void> setAlarmTime(TimeOfDay newTime) async {
     _alarmTime = newTime;
 
-    // 시간을 설정하면 알람도 자동으로 켜짐
     if (!_isAlarmOn) {
       _isAlarmOn = true;
     }
 
     notifyListeners();
 
-    // SharedPreferences 저장
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('alarmHour', newTime.hour);
     await prefs.setInt('alarmMinute', newTime.minute);
     await prefs.setBool('isAlarmOn', true);
   }
 
-  /// 알람 ON/OFF
   Future<void> toggleAlarm(bool value) async {
     _isAlarmOn = value;
 
     if (value) {
-      // 알람을 켰을 때: 시간이 없으면 현재 시간으로 설정
       if (_alarmTime == null) {
         _alarmTime = TimeOfDay.now();
       }
     } else {
-      // 알람을 껐을 때: 모든 하위 설정도 끄기
       _isSmartWakeUpOn = false;
       _isExactTimeAlarmOn = false;
       _isSmartVibrationOn = false;
@@ -247,19 +226,14 @@ class SettingsState extends ChangeNotifier {
 
     notifyListeners();
 
-    // SharedPreferences 저장
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isAlarmOn', value);
-
-    // TODO: 알람 스케줄링/취소 로직 추가
   }
 
-  /// 스마트 기상 ON/OFF
   Future<void> toggleSmartWakeUp(bool value) async {
     _isSmartWakeUpOn = value;
 
     if (!value) {
-      // 스마트 기상 끄면 하위 옵션도 끄기
       _isSmartVibrationOn = false;
       _isSmartPillowAdjustOn = false;
     }
@@ -269,8 +243,12 @@ class SettingsState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isSmartWakeUpOn', value);
   }
+  
+  // ✅ [호환성 추가] AppState에서 호출하는 메서드 연결
+  void toggleSmartAlarm(bool value) {
+      toggleSmartWakeUp(value);
+  }
 
-  /// 정확한 시간 알람 ON/OFF
   Future<void> toggleExactTimeAlarm(bool value) async {
     _isExactTimeAlarmOn = value;
     notifyListeners();
@@ -279,7 +257,6 @@ class SettingsState extends ChangeNotifier {
     await prefs.setBool('isExactTimeAlarmOn', value);
   }
 
-  /// 스마트 진동 ON/OFF
   Future<void> toggleSmartVibration(bool value) async {
     _isSmartVibrationOn = value;
     notifyListeners();
@@ -288,7 +265,6 @@ class SettingsState extends ChangeNotifier {
     await prefs.setBool('isSmartVibrationOn', value);
   }
 
-  /// 스마트 베개 조절 ON/OFF
   Future<void> toggleSmartPillowAdjust(bool value) async {
     _isSmartPillowAdjustOn = value;
     notifyListeners();

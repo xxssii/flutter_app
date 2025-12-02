@@ -18,8 +18,7 @@ import 'state/app_state.dart';
 import 'state/settings_state.dart';
 import 'state/sleep_data_state.dart';
 import 'state/profile_state.dart';
-//test_code
-import 'screens/hardware_test_screen.dart'; // (파일 경로가 다르면 수정 필요)
+
 // Firebase
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
