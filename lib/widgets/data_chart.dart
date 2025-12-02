@@ -3,7 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../utils/app_colors.dart';
-import '../utils/app_text_styles.dart'; // AppTextStyles를 import 합니다.
+import '../utils/app_text_styles.dart';
 
 class DataChart extends StatelessWidget {
   final List<FlSpot> chartData;
@@ -22,7 +22,6 @@ class DataChart extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 8.0),
-          // AppTextStyles의 heading3 스타일을 사용하여 제목을 표시합니다.
           child: Text(chartTitle, style: AppTextStyles.heading3),
         ),
         Expanded(
@@ -49,8 +48,10 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
+
+                      // ✅ 수정됨: axisSide 에러 해결 -> meta 파라미터 사용
                       return SideTitleWidget(
-                        meta: meta,
+                        meta: meta, // axisSide: meta.axisSide 대신 meta: meta 사용
                         space: 8.0,
                         child: Text(
                           text,
@@ -81,6 +82,8 @@ class DataChart extends StatelessWidget {
                         default:
                           return const SizedBox.shrink();
                       }
+                      // 여기도 SideTitleWidget으로 감싸는 것이 안전하지만,
+                      // 텍스트만 리턴해도 작동한다면 그대로 두셔도 됩니다.
                       return Text(
                         text,
                         style: const TextStyle(color: AppColors.secondaryText),

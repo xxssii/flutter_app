@@ -1,386 +1,583 @@
 // lib/screens/data_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'dart:math' as math;
+
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../state/sleep_data_state.dart';
-import 'dart:math'; // ✅ 최대값 계산을 위해 추가!
-// import '../widgets/alarm_setting_widget.dart'; // SettingsScreen으로 이동함
+import '../providers/sleep_provider.dart';
+import '../models/sleep_report_model.dart';
+import '../state/app_state.dart'; // ✅ AppState 임포트
+import 'sleep_history_screen.dart';
 
-// ⚠️ 참고: 이 파일에서 'SleepDataState' 클래스 정의가 중복되어 있었습니다.
-// 해당 중복 코드를 제거해야 main.dart와의 임포트 충돌이 해결됩니다.
-
-class DataScreen extends StatelessWidget {
+class DataScreen extends StatefulWidget {
   const DataScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: 20),
-            _buildMetricCards(),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: TabBar(
-                isScrollable: false,
-                labelColor: AppColors.primaryNavy,
-                unselectedLabelColor: AppColors.secondaryText,
-                indicatorColor: AppColors.primaryNavy,
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicatorWeight: 2.0,
-                labelStyle: AppTextStyles.bodyText.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                unselectedLabelStyle: AppTextStyles.bodyText,
-                indicatorPadding: EdgeInsets.zero,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 0),
-                tabs: const [
-                  Tab(text: '효율성'),
-                  Tab(text: '수면 단계'),
-                  Tab(text: '트렌드'),
-                  Tab(text: '개선 가이드'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: TabBarView(
-                children: const [
-                  EfficiencyTab(),
-                  SleepStagesTab(),
-                  TrendsTab(),
-                  ImprovementGuideTab(),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Consumer<SleepDataState>(
-      builder: (context, sleepDataState, child) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 20.0,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('수면 데이터 분석', style: AppTextStyles.heading1),
-                    Text(
-                      '상세한 수면 패턴과 효율성을 확인해보세요',
-                      style: AppTextStyles.secondaryBodyText,
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).cardColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.borderColor),
-                  ),
-                  child: Text(
-                    sleepDataState.selectedPeriod, // '최근7일'
-                    style: AppTextStyles.bodyText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMetricCards() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _buildMetricCard(
-            icon: Icons.water_drop,
-            color: AppColors.primaryNavy,
-            title: '수면 효율',
-            value: '93%',
-          ),
-          _buildMetricCard(
-            icon: Icons.refresh,
-            color: AppColors.successGreen,
-            title: 'REM 비율',
-            value: '20%',
-          ),
-          _buildMetricCard(
-            icon: Icons.access_time,
-            color: AppColors.errorRed,
-            title: '평균 수면',
-            value: '8시간',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMetricCard({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String value,
-  }) {
-    return Expanded(
-      child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 4.0),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: color.withOpacity(0.1),
-                    child: Icon(icon, color: color, size: 20),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(title, style: AppTextStyles.smallText)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(value, style: AppTextStyles.heading3),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  State<DataScreen> createState() => _DataScreenState();
 }
 
-// ------------------------------------------------------------------
-// EfficiencyTab (7일치 데이터 연동)
-// ------------------------------------------------------------------
+class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
+  late TabController _tabController;
 
-class EfficiencyTab extends StatelessWidget {
-  const EfficiencyTab({super.key});
+  // 애니메이션 컨트롤러
+  late AnimationController _barChartAnimationController;
+  late Animation<double> _barChartAnimation;
+  late AnimationController _chartAnimationController;
+  late Animation<double> _chartAnimation;
+
+  int? _touchedTrendIndex;
+  // ✅ [추가] 막대 그래프에서 터치된 인덱스
+  int? _touchedBarIndex;
+
+  // ✅ [수정됨] 요청하신 이미지의 색상 조합으로 변경
+  // 깊은 수면 / 긍정적 지표 (#011F25)
+  final Color _mainDeepColor = const Color(0xFF011F25);
+  // 얕은 수면 (#1B4561)
+  final Color _lightSleepColor = const Color(0xFF1B4561);
+  // REM 수면 (#6292BE)
+  final Color _remSleepColor = const Color(0xFF6292BE);
+  // 깬 상태 / 부정적 지표 (#BD9A8E)
+  final Color _awakeColor = const Color(0xFFBD9A8E);
+  // 배경 (막대 그래프 배경 등, #B5C1D4)
+  final Color _themeLightGray = const Color(0xFFB5C1D4);
+  // (참고: #F2E6E6 색상은 사용하지 않았습니다.)
+
+  // 가짜(Mock) 수면 리포트 데이터
+  SleepReport _getMockSleepReport() {
+    final now = DateTime.now();
+    final sleepStart = DateTime(now.year, now.month, now.day - 1, 23, 30);
+    final sleepEnd = DateTime(now.year, now.month, now.day, 7, 15);
+    final totalDuration = sleepEnd.difference(sleepStart);
+    final totalDurationHours = totalDuration.inMinutes / 60.0;
+
+    const deepSleepHours = 1.8;
+    const lightSleepHours = 4.2;
+    const remSleepHours = 1.5;
+    const awakeHours = 0.25;
+
+    final deepRatio = deepSleepHours / totalDurationHours;
+    final remRatio = remSleepHours / totalDurationHours;
+    final awakeRatio = awakeHours / totalDurationHours;
+
+    final mockSummary = SleepSummary(
+      totalDurationHours: totalDurationHours,
+      deepSleepHours: deepSleepHours,
+      remSleepHours: remSleepHours,
+      lightSleepHours: lightSleepHours,
+      awakeHours: awakeHours,
+      deepRatio: deepRatio,
+      remRatio: remRatio,
+      awakeRatio: awakeRatio,
+      apneaCount: 2,
+      snoringDuration: 45.0,
+    );
+
+    final mockBreakdown = Breakdown(
+      durationScore: 90,
+      deepScore: 85,
+      remScore: 88,
+      efficiencyScore: 92,
+    );
+
+    return SleepReport(
+      sessionId: 'mock_session_id',
+      userId: 'mock_user_id',
+      createdAt: sleepEnd,
+      totalScore: 88,
+      grade: 'B+',
+      message: '전반적으로 좋은 수면이었습니다.',
+      summary: mockSummary,
+      breakdown: mockBreakdown,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+
+    // ✅ 화면 진입 시 최신 데이터 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userId =
+          Provider.of<AppState>(context, listen: false).currentUserId;
+      Provider.of<SleepProvider>(context, listen: false)
+          .fetchMostRecentSleepReport(userId);
+    });
+
+    _barChartAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _barChartAnimation = CurvedAnimation(
+      parent: _barChartAnimationController,
+      curve: Curves.easeOutCubic,
+    );
+
+    _chartAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _chartAnimation = CurvedAnimation(
+      parent: _chartAnimationController,
+      curve: Curves.easeInOutCubic,
+    );
+
+    _tabController.addListener(() {
+      if (_tabController.index == 0) {
+        _barChartAnimationController.reset();
+        _barChartAnimationController.forward();
+      }
+      if (_tabController.index == 1) {
+        _chartAnimationController.reset();
+        _chartAnimationController.forward();
+      }
+      if (_tabController.index != 2) {
+        setState(() {
+          _touchedTrendIndex = null;
+        });
+      }
+      // ✅ [추가] 탭 변경 시 막대 그래프 터치 초기화
+      if (_tabController.index != 0) {
+        setState(() {
+          _touchedBarIndex = null;
+        });
+      }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_tabController.index == 0) {
+        _barChartAnimationController.forward();
+      } else if (_tabController.index == 1) {
+        _chartAnimationController.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _barChartAnimationController.dispose();
+    _chartAnimationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 1. SleepDataState에서 TIB/TST 데이터 가져오기
-    final sleepData = Provider.of<SleepDataState>(context);
-    final tibTstData = sleepData.tibTstData;
+    final sleepProvider = Provider.of<SleepProvider>(context);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    // ✅ 로딩 중 처리
+    if (sleepProvider.isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final report = sleepProvider.latestSleepReport ?? _getMockSleepReport();
+
+    return Scaffold(
+      body: Column(
         children: [
-          _buildEfficiencyAnalysis(context),
+          // ✅ PillowScreen 스타일의 헤더 (SafeArea + Padding)
+          SafeArea(
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 35.0, horizontal: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('수면 데이터 분석', style: AppTextStyles.heading1),
+                      const SizedBox(height: 4),
+                      Text(
+                        '상세한 수면 패턴과 효율성을 확인해보세요',
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('현재 최근 7일간의 데이터를 보여주고 있습니다.'),
+                          duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      '최근 7일',
+                      style: AppTextStyles.bodyText.copyWith(
+                        color: AppColors.primaryNavy,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _buildTopSummaryCards(report),
           const SizedBox(height: 16),
-          _buildSleepTimeAnalysis(context, tibTstData), // ✅ 2. 데이터 전달
-          const SizedBox(height: 16),
+          TabBar(
+            controller: _tabController,
+            labelColor: AppColors.primaryNavy,
+            unselectedLabelColor: AppColors.secondaryText,
+            indicatorColor: AppColors.primaryNavy,
+            indicatorWeight: 3.0,
+            indicatorSize: TabBarIndicatorSize.tab,
+            labelStyle: AppTextStyles.bodyText.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+            unselectedLabelStyle: AppTextStyles.bodyText.copyWith(
+              fontWeight: FontWeight.normal,
+            ),
+            tabs: const [
+              Tab(text: '효율성'),
+              Tab(text: '수면 단계'),
+              Tab(text: '트렌드'),
+              Tab(text: '지난 기록'),
+            ],
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildEfficiencyTab(report),
+                    _buildSleepStagesTab(report),
+                    _buildTrendTab(),
+                    const SleepHistoryScreen(),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // 평균 효율 카드
-  Widget _buildEfficiencyAnalysis(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('수면 효율 분석', style: AppTextStyles.heading3),
-            const SizedBox(height: 10),
-            _buildBarItem(
-              context,
-              label: '평균 수면 효율',
-              value: 93,
-              description: '85% 이상이 이상적입니다',
-              color: AppColors.primaryNavy,
+  Widget _buildTopSummaryCards(SleepReport report) {
+    final summary = report.summary;
+    final efficiency = (summary.deepSleepHours +
+            summary.remSleepHours +
+            summary.lightSleepHours) /
+        summary.totalDurationHours;
+    final remRatio = summary.remRatio;
+    final avgSleep = summary.totalDurationHours.toStringAsFixed(1);
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryCard(
+              icon: Icons.opacity,
+              title: '수면 효율',
+              valueText: '${(efficiency * 100).toStringAsFixed(0)}%',
+              // ✅ 테마 적용
+              iconColor: _mainDeepColor,
             ),
-            const SizedBox(height: 10),
-            _buildBarItem(
-              context,
-              label: 'REM 수면 비율',
-              value: 20,
-              description: '20~25%가 이상적입니다',
-              color: AppColors.primaryNavy,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryCard(
+              icon: Icons.psychology,
+              title: 'REM 비율',
+              valueText: '${(remRatio * 100).toStringAsFixed(0)}%',
+              // ✅ 테마 적용
+              iconColor: _remSleepColor,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryCard(
+              icon: Icons.access_time,
+              title: '평균 수면',
+              valueText: '${avgSleep}시간',
+              // ✅ 테마 적용
+              iconColor: _lightSleepColor,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  // ✅ 수정된 '누운 시간 vs 실 수면 시간' 그래프 (가로 스택형 - 최신 fl_chart 대응)
-  Widget _buildSleepTimeAnalysis(BuildContext context, List<TstTibData> data) {
-    // 그래프의 최대 값 계산 (가장 긴 누운 시간 + 여유분)
-    double maxTib = 0;
-    if (data.isNotEmpty) {
-      maxTib = data.map((e) => e.tib).reduce(max);
-    }
-    final double maxValue = (maxTib + 1).ceilToDouble();
-
+  Widget _buildSummaryCard({
+    required IconData icon,
+    required String title,
+    required String valueText,
+    required Color iconColor,
+  }) {
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('누운 시간 대비 실 수면 시간', style: AppTextStyles.heading3),
-            const SizedBox(height: 24),
-            SizedBox(
-              height: 300,
-              child: RotatedBox(
-                quarterTurns: 1,
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    // ✅ 툴팁 설정 수정: API 변경에 따른 코드 수정
-                    barTouchData: BarTouchData(
-                      enabled: true,
-                      touchTooltipData: BarTouchTooltipData(
-                        getTooltipColor: (group) => AppColors.cardBackground,
-                        // tooltipDirection은 제거합니다.
-                        getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                          final dayLabel = data[group.x.toInt()].dayLabel;
-                          final item = data[group.x.toInt()];
-
-                          // rodIndex 0: 네이비색 (실 수면 시간)
-                          // rodIndex 1: 회색 (나머지 누운 시간 -> 전체 누운 시간으로 표시)
-                          String label;
-                          double value;
-                          if (rodIndex == 0) {
-                            label = '실 수면 시간';
-                            value = item.tst;
-                          } else {
-                            label = '전체 누운 시간';
-                            value = item.tib;
-                          }
-
-                          final tooltipText =
-                              '$dayLabel\n$label: ${value.toStringAsFixed(1)}시간';
-
-                          // ✅ WidgetSpan 대신 TextSpan을 사용합니다.
-                          // 텍스트 회전은 불가능하지만, 스타일과 정렬을 설정합니다.
-                          return BarTooltipItem(
-                            tooltipText,
-                            AppTextStyles.smallText.copyWith(
-                              color: AppColors.primaryNavy,
-                              fontWeight: FontWeight.bold, // 가독성을 위해 볼드 처리
-                            ),
-                            textAlign: TextAlign.center, // 텍스트 가운데 정렬
-                          );
-                        },
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      show: true,
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 30,
-                          interval: 2,
-                          getTitlesWidget: (double value, TitleMeta meta) {
-                            return SideTitleWidget(
-                              meta: meta,
-                              space: 8,
-                              child: RotatedBox(
-                                quarterTurns: -1,
-                                child: Text(
-                                  '${value.toInt()}h',
-                                  style: AppTextStyles.smallText,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: 40,
-                          getTitlesWidget: (double value, TitleMeta meta) {
-                            if (value < 0 || value >= data.length) {
-                              return const SizedBox();
-                            }
-                            final label = data[value.toInt()].dayLabel;
-                            return SideTitleWidget(
-                              meta: meta,
-                              space: 8,
-                              child: RotatedBox(
-                                quarterTurns: -1,
-                                child: Text(
-                                  label,
-                                  style: AppTextStyles.smallText,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      topTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                      rightTitles: const AxisTitles(
-                        sideTitles: SideTitles(showTitles: false),
-                      ),
-                    ),
-                    gridData: FlGridData(
-                      show: true,
-                      drawVerticalLine: false,
-                      drawHorizontalLine: true,
-                      horizontalInterval: 2,
-                      getDrawingHorizontalLine: (value) =>
-                          FlLine(color: AppColors.borderColor, strokeWidth: 1),
-                    ),
-                    borderData: FlBorderData(show: false),
-                    barGroups: _getBarGroups(data), // ✅ 수정된 함수 호출
-                    maxY: maxValue,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            // ✅ 범례 색상 확인 (회색 배경, 네이비 채움)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem(
-                  AppColors.lightGrey, // 회색 (배경)
-                  '누운 시간',
-                  isBackground: true,
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.1), // 연한 배경
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: iconColor, size: 18),
                 ),
-                const SizedBox(width: 16),
-                _buildLegendItem(AppColors.primaryNavy, '실 수면 시간'),
+                const SizedBox(width: 8),
+                Text(title, style: AppTextStyles.smallText),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              '진한 색 막대가 연한 색 배경을 많이 채울수록 수면 효율이 높은 날입니다.',
-              style: AppTextStyles.secondaryBodyText,
+              valueText,
+              style: AppTextStyles.heading2.copyWith(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: AppColors.primaryNavy, // 값은 기본 네이비색
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEfficiencyTab(SleepReport? report) {
+    if (report == null) return _buildNoDataPlaceholder();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildEfficiencyAnalysisCard(report),
+          const SizedBox(height: 24),
+          _buildSleepComparisonChart(report),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEfficiencyAnalysisCard(SleepReport report) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('수면 효율 분석', style: AppTextStyles.heading3),
+            const SizedBox(height: 16),
+            _buildAnalysisItem(
+              title: '평균 수면 효율',
+              value: '92%',
+              description: '85% 이상이 이상적입니다.',
+              isPositive: true,
+            ),
+            const Divider(color: AppColors.divider, height: 24),
+            _buildAnalysisItem(
+              title: 'REM 수면 비율',
+              value: '20%',
+              description: '20~25%가 이상적입니다.',
+              isPositive: true,
+            ),
+            const Divider(color: AppColors.divider, height: 24),
+            _buildAnalysisItem(
+              title: '깊은 수면 비율',
+              value: '15%',
+              description: '15~20%가 이상적입니다.',
+              isPositive: false,
+              alertMessage: '깊은 수면이 약간 부족합니다.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSleepComparisonChart(SleepReport report) {
+    final List<Map<String, dynamic>> data = [
+      {'date': '7/13', 'total': 8.5, 'actual': 7.2},
+      {'date': '7/14', 'total': 8.0, 'actual': 6.8},
+      {'date': '7/15', 'total': 9.0, 'actual': 7.5},
+      {'date': '7/16', 'total': 7.5, 'actual': 6.0},
+      {'date': '7/17', 'total': 8.2, 'actual': 7.0},
+      {'date': '7/18', 'total': 8.8, 'actual': 7.8},
+      {'date': '7/19', 'total': 8.0, 'actual': 7.0},
+    ];
+    double maxHours = 0.0;
+    for (var d in data) {
+      maxHours = math.max(maxHours, d['total']);
+    }
+    maxHours = (maxHours / 2).ceil() * 2.0 + 2.0;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('누운 시간 vs 실 수면 시간', style: AppTextStyles.heading3),
+            const SizedBox(height: 24),
+            // ✅ [추가] 터치 시 상세 정보 박스 표시
+            if (_touchedBarIndex != null &&
+                _touchedBarIndex! < data.length) // data.length 범위 확인 추가
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: _buildBarChartTooltip(data[_touchedBarIndex!]),
+              ),
+            SizedBox(
+              height: 250,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final availableWidth = constraints.maxWidth - 40;
+                  return Column(
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(width: 40),
+                          for (int i = 0; i <= maxHours; i += 2)
+                            Expanded(
+                              child: Text(
+                                '${i}h',
+                                style: AppTextStyles.smallText,
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.separated(
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: data.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final d = data[index];
+                            final targetTotalWidth =
+                                (d['total'] / maxHours) * availableWidth;
+                            final targetActualWidth =
+                                (d['actual'] / maxHours) * availableWidth;
+
+                            // ✅ [추가] 터치 감지를 위한 GestureDetector
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  if (_touchedBarIndex == index) {
+                                    _touchedBarIndex = null; // 같은 것 터치 시 해제
+                                  } else {
+                                    _touchedBarIndex = index; // 터치 시 인덱스 저장
+                                  }
+                                });
+                              },
+                              child: AnimatedBuilder(
+                                animation: _barChartAnimation,
+                                builder: (context, child) {
+                                  final animationValue =
+                                      _barChartAnimation.value;
+                                  final currentTotalWidth =
+                                      targetTotalWidth * animationValue;
+                                  final currentActualWidth =
+                                      targetActualWidth * animationValue;
+
+                                  return Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 40,
+                                        child: Text(
+                                          d['date'],
+                                          style:
+                                              AppTextStyles.smallText.copyWith(
+                                            // 터치된 항목 강조
+                                            fontWeight:
+                                                _touchedBarIndex == index
+                                                    ? FontWeight.bold
+                                                    : FontWeight.normal,
+                                            color: _touchedBarIndex == index
+                                                ? AppColors.primaryNavy
+                                                : AppColors.secondaryText,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Stack(
+                                          alignment: Alignment.centerLeft,
+                                          children: [
+                                            // ✅ 테마 적용: 배경
+                                            Container(
+                                              height: 20,
+                                              width: currentTotalWidth,
+                                              decoration: BoxDecoration(
+                                                color: _themeLightGray,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                            // ✅ 테마 적용: 전경
+                                            Container(
+                                              height: 20,
+                                              width: currentActualWidth,
+                                              decoration: BoxDecoration(
+                                                color: _mainDeepColor,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildLegendItem(
+                  // ✅ 테마 적용
+                  _themeLightGray,
+                  '누운 시간',
+                ),
+                const SizedBox(width: 24),
+                _buildLegendItem(
+                  // ✅ 테마 적용
+                  _mainDeepColor,
+                  '실 수면 시간',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              '두 막대의 차이가 적을수록(실 수면 시간 막대가 꽉 찰수록) 수면 효율이 높은 날입니다.',
+              style: AppTextStyles.smallText,
               textAlign: TextAlign.center,
             ),
           ],
@@ -389,454 +586,641 @@ class EfficiencyTab extends StatelessWidget {
     );
   }
 
-  // ✅ 범례 아이템 빌더 수정 (배경색 표현을 위해 테두리 추가 옵션)
-  Widget _buildLegendItem(
-    Color color,
-    String text, {
-    bool isBackground = false,
-  }) {
-    return Row(
-      children: [
-        Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(4),
-            border: isBackground
-                ? Border.all(
-                    color: AppColors.primaryNavy.withOpacity(0.5),
-                    width: 1,
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Text(text, style: AppTextStyles.smallText),
-      ],
+  // ✅ [추가] 막대 차트 툴팁 박스 빌더
+  Widget _buildBarChartTooltip(Map<String, dynamic> data) {
+    final total = data['total'].toStringAsFixed(1);
+    final actual = data['actual'].toStringAsFixed(1);
+    final efficiency = ((data['actual'] / data['total']) * 100).toStringAsFixed(
+      0,
     );
-  }
 
-  // ✅ 막대 그룹 생성 함수 수정 (스택형으로 겹치게 구현)
-  List<BarChartGroupData> _getBarGroups(List<TstTibData> data) {
-    return List.generate(data.length, (index) {
-      final item = data[index];
-      const double barThickness = 20; // 막대 두께
-
-      return BarChartGroupData(
-        x: index,
-        // ✅ 핵심: 막대를 수직으로 쌓아 올려서 겹치는 효과를 냄
-        groupVertically: true,
-        barRods: [
-          // 1. 아래쪽 막대 (먼저 그려짐): 실 수면 시간 (채움, 네이비색)
-          BarChartRodData(
-            toY: item.tst,
-            color: AppColors.primaryNavy, // 진한 네이비
-            width: barThickness,
-            // 가로 그래프이므로 왼쪽(시작점)만 둥글게 처리
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(4),
-              bottomLeft: Radius.circular(4),
-            ),
-          ),
-          // 2. 위쪽 막대 (나중에 그려져서 쌓임): 나머지 누운 시간 (배경, 회색)
-          //    값은 '전체 누운 시간 - 실 수면 시간' 만큼만 그립니다.
-          BarChartRodData(
-            toY: item.tib - item.tst,
-            color: AppColors.lightGrey, // 연한 회색
-            width: barThickness,
-            // 가로 그래프이므로 오른쪽(끝점)만 둥글게 처리
-            borderRadius: const BorderRadius.only(
-              topRight: Radius.circular(4),
-              bottomRight: Radius.circular(4),
-            ),
-          ),
-        ],
-        showingTooltipIndicators: [],
-      );
-    });
-  }
-
-  Widget _buildBarItem(
-    BuildContext context, {
-    required String label,
-    required double value,
-    String? description,
-    required Color color,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.bodyText),
-        if (description != null)
-          Text(description, style: AppTextStyles.smallText),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(
-          value: value / 100,
-          backgroundColor: AppColors.progressBackground,
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 12,
-        ),
-      ],
-    );
-  }
-} // EfficiencyTab 끝
-
-// ------------------------------------------------------------------
-// SleepStagesTab, TrendsTab, ImprovementGuideTab
-// ------------------------------------------------------------------
-
-class SleepStagesTab extends StatelessWidget {
-  const SleepStagesTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      decoration: BoxDecoration(
+        // 투명한 배경 박스
+        color: AppColors.primaryNavy.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primaryNavy.withOpacity(0.1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${data['date']} 상세 정보',
+                style: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '수면 효율: $efficiency%',
+                style: AppTextStyles.smallText.copyWith(
+                  color: AppColors.primaryNavy,
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Column(
                 children: [
-                  Text('수면 단계 분포', style: AppTextStyles.heading3),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    height: 200,
-                    child: PieChart(
-                      PieChartData(
-                        sections: [
-                          PieChartSectionData(
-                            color: AppColors.lightSleepColor,
-                            value: 60,
-                            title: 'Light 60%',
-                            radius: 50,
-                            titleStyle: AppTextStyles.bodyText.copyWith(
-                              color: AppColors.cardBackground,
-                            ),
-                          ),
-                          PieChartSectionData(
-                            color: AppColors.deepSleepColor,
-                            value: 20,
-                            title: 'Deep 20%',
-                            radius: 50,
-                            titleStyle: AppTextStyles.smallText.copyWith(
-                              color: AppColors.cardBackground,
-                            ),
-                          ),
-                          PieChartSectionData(
-                            color: AppColors.remColor,
-                            value: 15,
-                            title: 'REM 15%',
-                            radius: 50,
-                            titleStyle: AppTextStyles.smallText.copyWith(
-                              color: AppColors.cardBackground,
-                            ),
-                          ),
-                          PieChartSectionData(
-                            color: AppColors.awakeColor,
-                            value: 5,
-                            title: 'Awake 5%',
-                            radius: 50,
-                            titleStyle: AppTextStyles.smallText.copyWith(
-                              color: AppColors.cardBackground,
-                            ),
-                          ),
-                        ],
-                        borderData: FlBorderData(show: false),
-                        sectionsSpace: 2,
-                        centerSpaceRadius: 40,
-                      ),
+                  _buildLegendItem(_themeLightGray, '누운 시간'),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${total}h',
+                    style: AppTextStyles.bodyText.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(width: 16),
+              Column(
+                children: [
+                  _buildLegendItem(_mainDeepColor, '실 수면'),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${actual}h',
+                    style: AppTextStyles.bodyText.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          _buildSleepStageDetail(context),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildSleepStageDetail(BuildContext context) {
+  Widget _buildSleepStagesTab(SleepReport? report) {
+    if (report == null) return _buildNoDataPlaceholder();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          _buildAnimatedDonutChart(report),
+          const SizedBox(height: 24),
+          _buildSleepStageDetails(report),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnimatedDonutChart(SleepReport report) {
+    final summary = report.summary;
+
+    if (summary.totalDurationHours < 0.1 ||
+        !_chartAnimationController.isAnimating) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: SizedBox(
+          height: 250,
+          child: Center(
+            child: Text(
+              '데이터를 불러오는 중...',
+              style: AppTextStyles.secondaryBodyText,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
-            const SizedBox(height: 10),
-            _buildDetailItem('Light', '4시간 30분', AppColors.lightSleepColor),
-            _buildDetailItem('Deep', '1시간 40분', AppColors.deepSleepColor),
-            _buildDetailItem('REM', '1시간 15분', AppColors.remColor),
-            _buildDetailItem('Awake', '0시간 25분', AppColors.awakeColor),
+            Text('수면 단계 분포', style: AppTextStyles.heading3),
+            const SizedBox(height: 32),
+            SizedBox(
+              height: 250,
+              child: Center(
+                child: SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 1500),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) {
+                      final deepEnd = summary.deepRatio * value;
+                      final lightEnd = deepEnd +
+                          (summary.lightSleepHours /
+                                  summary.totalDurationHours) *
+                              value;
+                      final remEnd = lightEnd + summary.remRatio * value;
+                      final awakeEnd = remEnd + summary.awakeRatio * value;
+
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CircularProgressIndicator(
+                            value: 1.0,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              AppColors.progressBackground,
+                            ),
+                            strokeWidth: 25,
+                          ),
+                          // ✅ 테마 적용 (Awake)
+                          CircularProgressIndicator(
+                            value: awakeEnd,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _awakeColor,
+                            ),
+                            strokeWidth: 25,
+                            strokeCap: StrokeCap.butt,
+                          ),
+                          // ✅ 테마 적용 (REM)
+                          CircularProgressIndicator(
+                            value: remEnd,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _remSleepColor,
+                            ),
+                            strokeWidth: 25,
+                            strokeCap: StrokeCap.butt,
+                          ),
+                          // ✅ 테마 적용 (Light)
+                          CircularProgressIndicator(
+                            value: lightEnd,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _lightSleepColor,
+                            ),
+                            strokeWidth: 25,
+                            strokeCap: StrokeCap.butt,
+                          ),
+                          // ✅ 테마 적용 (Deep)
+                          CircularProgressIndicator(
+                            value: deepEnd,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _mainDeepColor,
+                            ),
+                            strokeWidth: 25,
+                            strokeCap: StrokeCap.butt,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildDetailItem(String stage, String time, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
+  Widget _buildSleepStageDetails(SleepReport report) {
+    final summary = report.summary;
+
+    String formatDuration(double hours) {
+      int h = hours.floor();
+      int m = ((hours - h) * 60).round();
+      return '${h > 0 ? '$h시간 ' : ''}${m}분';
+    }
+
+    String formatPercentage(double ratio) {
+      return '(${(ratio * 100).toStringAsFixed(0)}%)';
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
+            const SizedBox(height: 24),
+            _buildDetailRow(
+              // ✅ 테마 적용 (Deep)
+              color: _mainDeepColor,
+              label: '깊은 수면',
+              duration: formatDuration(summary.deepSleepHours),
+              percentage: formatPercentage(summary.deepRatio),
+            ),
+            const Divider(height: 32),
+            _buildDetailRow(
+              // ✅ 테마 적용 (Light)
+              color: _lightSleepColor,
+              label: '얕은 수면',
+              duration: formatDuration(summary.lightSleepHours),
+              percentage: formatPercentage(
+                summary.lightSleepHours / summary.totalDurationHours,
+              ),
+            ),
+            const Divider(height: 32),
+            _buildDetailRow(
+              // ✅ 테마 적용 (REM)
+              color: _remSleepColor,
+              label: 'REM 수면',
+              duration: formatDuration(summary.remSleepHours),
+              percentage: formatPercentage(summary.remRatio),
+            ),
+            const Divider(height: 32),
+            _buildDetailRow(
+              // ✅ 테마 적용 (Awake)
+              color: _awakeColor,
+              label: '깬 상태',
+              duration: formatDuration(summary.awakeHours),
+              percentage: formatPercentage(summary.awakeRatio),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow({
+    required Color color,
+    required String label,
+    required String duration,
+    required String percentage,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 12),
+        Text(label, style: AppTextStyles.bodyText),
+        const Spacer(),
+        Text(
+          duration,
+          style: AppTextStyles.heading3.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(width: 8),
+        Text(percentage, style: AppTextStyles.secondaryBodyText),
+      ],
+    );
+  }
+
+  Widget _buildTrendTab() {
+    final List<Map<String, dynamic>> trendData = [
+      {'date': '13일', 'efficiency': 88.0, 'remRatio': 18.0},
+      {'date': '14일', 'efficiency': 91.0, 'remRatio': 22.0},
+      {'date': '15일', 'efficiency': 85.0, 'remRatio': 15.0},
+      {'date': '16일', 'efficiency': 93.0, 'remRatio': 23.0},
+      {'date': '17일', 'efficiency': 89.0, 'remRatio': 19.0},
+      {'date': '18일', 'efficiency': 90.0, 'remRatio': 21.0},
+      {'date': '19일', 'efficiency': 92.0, 'remRatio': 20.0},
+    ];
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Text(stage, style: AppTextStyles.bodyText)),
-          Text(
-            time,
-            style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
-          ),
+          _buildTrendChartCard(trendData),
+          const SizedBox(height: 16),
+          if (_touchedTrendIndex != null)
+            _buildTrendDetailsBox(trendData[_touchedTrendIndex!]),
+          const SizedBox(height: 50),
         ],
       ),
     );
   }
-}
 
-class TrendsTab extends StatelessWidget {
-  const TrendsTab({Key? key}) : super(key: key);
+  Widget _buildTrendChartCard(List<Map<String, dynamic>> data) {
+    final List<FlSpot> efficiencySpots = data
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value['efficiency'] as double))
+        .toList();
 
-  @override
-  Widget build(BuildContext context) {
-    final sleepData = Provider.of<SleepDataState>(context);
-    final trendMetrics = sleepData.trendMetrics;
+    final List<FlSpot> remSpots = data
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value['remRatio'] as double))
+        .toList();
 
-    if (trendMetrics.isEmpty) {
-      return const Center(child: Text("트렌드 데이터가 없습니다."));
-    }
-
-    final List<FlSpot> sleepEfficiencySpots = [];
-    final List<FlSpot> remRatioSpots = [];
-    final List<String> dates = [];
-
-    for (int i = 0; i < trendMetrics.length; i++) {
-      sleepEfficiencySpots.add(
-        FlSpot(i.toDouble(), trendMetrics[i].sleepEfficiency),
-      );
-      remRatioSpots.add(FlSpot(i.toDouble(), trendMetrics[i].remRatio));
-      dates.add(trendMetrics[i].reportDate);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('수면 효율 및 REM 트렌드', style: AppTextStyles.heading3),
-              const SizedBox(height: 50),
-              SizedBox(
-                // ✅ Expanded 대신 SizedBox로 고정 높이 지정
-                height: 250, // 적절한 높이로 조절 (예: 250, 300 등)
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 16, top: 16),
-                  child: LineChart(
-                    LineChartData(
-                      lineTouchData: LineTouchData(
-                        touchTooltipData: LineTouchTooltipData(
-                          // ✅ 툴팁 배경색을 불투명하게 설정하여 겹침 방지
-                          getTooltipColor: (FlSpot spot) {
-                            return AppColors.cardBackground.withOpacity(0.9);
-                          },
-                          getTooltipItems: (List<LineBarSpot> touchedSpots) {
-                            return touchedSpots.map((spot) {
-                              final isSleepEfficiency = spot.barIndex == 0;
-                              final date = dates[spot.x.toInt()];
-                              final value = spot.y.toStringAsFixed(1);
-                              final title = isSleepEfficiency
-                                  ? '수면 효율'
-                                  : 'REM 비율';
-
-                              return LineTooltipItem(
-                                date,
-                                AppTextStyles.bodyText.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                children: [
-                                  TextSpan(
-                                    text: '\n$title: $value%',
-                                    style: AppTextStyles.smallText.copyWith(
-                                      color: isSleepEfficiency
-                                          ? AppColors.primaryNavy
-                                          : AppColors.secondaryText,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList();
-                          },
-                        ),
-                        handleBuiltInTouches: true,
-                        getTouchedSpotIndicator:
-                            (LineChartBarData barData, List<int> spotIndexes) {
-                              return spotIndexes.map((index) {
-                                return TouchedSpotIndicatorData(
-                                  FlLine(
-                                    color: AppColors.primaryNavy,
-                                    strokeWidth: 2,
-                                  ),
-                                  FlDotData(
-                                    show: true,
-                                    getDotPainter:
-                                        (spot, percent, barData, index) =>
-                                            FlDotCirclePainter(
-                                              radius: 4,
-                                              color: AppColors.primaryNavy,
-                                              strokeWidth: 2,
-                                              strokeColor:
-                                                  AppColors.cardBackground,
-                                            ),
-                                  ),
-                                );
-                              }).toList();
-                            },
-                      ),
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: sleepEfficiencySpots,
-                          isCurved: true,
-                          barWidth: 2,
-                          color: AppColors.primaryNavy,
-                          belowBarData: BarAreaData(show: false),
-                          dotData: const FlDotData(show: false),
-                        ),
-                        LineChartBarData(
-                          spots: remRatioSpots,
-                          isCurved: true,
-                          barWidth: 2,
-                          color: AppColors.secondaryText,
-                          belowBarData: BarAreaData(show: false),
-                          dotData: const FlDotData(show: false),
-                        ),
-                      ],
-                      titlesData: FlTitlesData(
-                        show: true,
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            interval: 1,
-                            getTitlesWidget: (value, meta) {
-                              if (value.toInt() >= 0 &&
-                                  value.toInt() < dates.length) {
-                                String day = dates[value.toInt()].split(' ')[1];
-                                return SideTitleWidget(
-                                  meta: meta,
-                                  space: 8,
-                                  child: Text(
-                                    day,
-                                    style: AppTextStyles.smallText,
-                                  ),
-                                );
-                              }
-                              return const SizedBox();
-                            },
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('수면 효율 및 REM 트렌드', style: AppTextStyles.heading3),
+            const SizedBox(height: 8),
+            Text('그래프를 터치하여 상세 정보를 확인하세요.', style: AppTextStyles.smallText),
+            const SizedBox(height: 24),
+            SizedBox(
+              height: 300,
+              child: LineChart(
+                LineChartData(
+                  lineTouchData: LineTouchData(
+                    enabled: true,
+                    touchCallback:
+                        (FlTouchEvent event, LineTouchResponse? touchResponse) {
+                      if (event is FlTapUpEvent ||
+                          event is FlPanEndEvent ||
+                          touchResponse == null ||
+                          touchResponse.lineBarSpots == null ||
+                          touchResponse.lineBarSpots!.isEmpty) {
+                        setState(() {
+                          _touchedTrendIndex = null;
+                        });
+                      } else {
+                        setState(() {
+                          _touchedTrendIndex =
+                              touchResponse.lineBarSpots![0].spotIndex;
+                        });
+                      }
+                    },
+                    handleBuiltInTouches: true,
+                    getTouchedSpotIndicator:
+                        (LineChartBarData barData, List<int> spotIndexes) {
+                      return spotIndexes.map((index) {
+                        return TouchedSpotIndicatorData(
+                          FlLine(
+                            color: AppColors.secondaryText.withOpacity(0.5),
+                            strokeWidth: 1,
                           ),
-                        ),
-                        leftTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        horizontalInterval: 25,
-                        getDrawingHorizontalLine: (value) => FlLine(
-                          color: AppColors.borderColor,
-                          strokeWidth: 1,
-                        ),
-                      ),
-                      borderData: FlBorderData(
-                        show: true,
-                        border: const Border(
-                          bottom: BorderSide(
-                            color: AppColors.borderColor,
-                            width: 1,
-                          ),
-                          left: BorderSide(color: Colors.transparent),
-                          right: BorderSide(color: Colors.transparent),
-                          top: BorderSide(color: Colors.transparent),
-                        ),
-                      ),
+                          FlDotData(show: false),
+                        );
+                      }).toList();
+                    },
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (LineBarSpot touchedSpot) =>
+                          Colors.transparent,
+                      getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+                        return touchedBarSpots.map((barSpot) {
+                          return null;
+                        }).toList();
+                      },
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class ImprovementGuideTab extends StatelessWidget {
-  const ImprovementGuideTab({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Card(
-        color: AppColors.successGreen.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(
-                Icons.check_circle,
-                color: AppColors.successGreen,
-                size: 40,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('훌륭한 수면 패턴', style: AppTextStyles.heading3),
-                    const SizedBox(height: 8),
-                    Text(
-                      '현재 수면 패턴이 매우 양호합니다.',
-                      style: AppTextStyles.secondaryBodyText,
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: 20,
+                    getDrawingHorizontalLine: (value) =>
+                        FlLine(color: AppColors.divider, strokeWidth: 1),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      '권장 사항:',
-                      style: AppTextStyles.bodyText.copyWith(
-                        fontWeight: FontWeight.bold,
+                    topTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                        interval: 1,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.toInt();
+                          if (index >= 0 && index < data.length) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 8.0),
+                              child: Text(
+                                data[index]['date'],
+                                style: AppTextStyles.smallText,
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        },
                       ),
                     ),
-                    Text(
-                      '현재 수면 습관을 유지하세요.',
-                      style: AppTextStyles.secondaryBodyText,
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  minX: 0,
+                  maxX: data.length.toDouble() - 1,
+                  minY: 0,
+                  maxY: 100,
+                  lineBarsData: [
+                    // ✅ 테마 적용: 수면 효율 선
+                    LineChartBarData(
+                      spots: efficiencySpots,
+                      isCurved: true,
+                      color: _mainDeepColor,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: FlDotData(
+                        show: true,
+                        checkToShowDot: (spot, barData) =>
+                            spot.x == _touchedTrendIndex?.toDouble(),
+                        getDotPainter: (spot, percent, barData, index) {
+                          return FlDotCirclePainter(
+                            radius: 6,
+                            color: _mainDeepColor,
+                            strokeWidth: 3,
+                            strokeColor: Colors.white,
+                          );
+                        },
+                      ),
+                      belowBarData: BarAreaData(show: false),
+                    ),
+                    // ✅ 테마 적용: REM 비율 선
+                    LineChartBarData(
+                      spots: remSpots,
+                      isCurved: true,
+                      color: _remSleepColor,
+                      barWidth: 3,
+                      isStrokeCapRound: true,
+                      dotData: FlDotData(
+                        show: true,
+                        checkToShowDot: (spot, barData) =>
+                            spot.x == _touchedTrendIndex?.toDouble(),
+                        getDotPainter: (spot, percent, barData, index) {
+                          return FlDotCirclePainter(
+                            radius: 6,
+                            color: _remSleepColor,
+                            strokeWidth: 3,
+                            strokeColor: Colors.white,
+                          );
+                        },
+                      ),
+                      belowBarData: BarAreaData(show: false),
                     ),
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendDetailsBox(Map<String, dynamic> data) {
+    return Card(
+      margin: EdgeInsets.zero,
+      color: AppColors.cardBackground,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Text(
+              '7월 ${data['date']} 상세 정보',
+              style: AppTextStyles.bodyText.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            // ✅ 테마 적용
+                            color: _mainDeepColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('수면 효율', style: AppTextStyles.smallText),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${data['efficiency']}%',
+                      style: AppTextStyles.heading3.copyWith(
+                        // ✅ 테마 적용
+                        color: _mainDeepColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            // ✅ 테마 적용
+                            color: _remSleepColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('REM 비율', style: AppTextStyles.smallText),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${data['remRatio']}%',
+                      style: AppTextStyles.heading3.copyWith(
+                        // ✅ 테마 적용
+                        color: _remSleepColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalysisItem({
+    required String title,
+    required String value,
+    required String description,
+    bool isPositive = true,
+    String? alertMessage,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: AppTextStyles.bodyText),
+            Text(
+              value,
+              style: AppTextStyles.heading3.copyWith(
+                // ✅ 테마 적용 (긍정, 부정 색상 적용)
+                color: isPositive ? _mainDeepColor : _awakeColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(description, style: AppTextStyles.smallText),
+        if (alertMessage != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                // ✅ 테마 적용 (부정 색상)
+                color: _awakeColor,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                alertMessage,
+                style: AppTextStyles.smallText.copyWith(
+                  // ✅ 테마 적용 (부정 색상)
+                  color: _awakeColor,
+                ),
+              ),
             ],
           ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(Color color, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
+        const SizedBox(width: 8),
+        Text(label, style: AppTextStyles.smallText),
+      ],
+    );
+  }
+
+  Widget _buildNoDataPlaceholder() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.nights_stay_outlined,
+            size: 48,
+            color: AppColors.secondaryText,
+          ),
+          SizedBox(height: 16),
+          Text('수면 데이터가 없습니다.', style: AppTextStyles.secondaryBodyText),
+        ],
       ),
     );
   }

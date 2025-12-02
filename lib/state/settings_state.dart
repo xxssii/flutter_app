@@ -51,6 +51,10 @@ class SettingsState extends ChangeNotifier {
   // 자동 조절 상태
   bool _isAutoAdjustOn = true;
   bool get isAutoAdjustOn => _isAutoAdjustOn;
+  
+  // 진동 세기 상태 (0: 약하게, 1: 강하게)
+  int _vibrationStrength = 1;
+  int get vibrationStrength => _vibrationStrength;
 
   // ========================================
   // 🔧 초기화
@@ -88,6 +92,9 @@ class SettingsState extends ChangeNotifier {
 
       // 자동 조절
       _isAutoAdjustOn = prefs.getBool('isAutoAdjustOn') ?? true;
+      
+      // 진동 세기
+      _vibrationStrength = prefs.getInt('vibrationStrength') ?? 1;
 
       notifyListeners();
       debugPrint('✅ 설정 불러오기 완료');
@@ -283,5 +290,17 @@ class SettingsState extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isAutoAdjustOn', value);
+  }
+
+  // ========================================
+  // 🔊 진동 세기
+  // ========================================
+
+  Future<void> setVibrationStrength(int value) async {
+    _vibrationStrength = value;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('vibrationStrength', value);
   }
 }

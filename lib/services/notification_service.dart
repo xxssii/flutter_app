@@ -45,7 +45,7 @@ class NotificationService {
   /// FCM은 Android, iOS, Web에서만 지원됩니다
   bool _isFCMSupported() {
     if (kIsWeb) return true; // 웹은 지원
-    
+
     try {
       // Android 또는 iOS만 FCM 지원
       return Platform.isAndroid || Platform.isIOS;
@@ -69,11 +69,11 @@ class NotificationService {
 
       // ✅ 플랫폼 체크: FCM 지원 확인
       final fcmSupported = _isFCMSupported();
-      
+
       if (!fcmSupported) {
         debugPrint('ℹ️ FCM은 현재 플랫폼(Windows/Linux/macOS)에서 지원되지 않습니다.');
         debugPrint('ℹ️ 로컬 알림만 초기화합니다. (FCM은 Android/iOS/Web에서만 지원됩니다)');
-        
+
         // 로컬 알림만 초기화
         await _initializeLocalNotifications();
         _isInitialized = true;
@@ -321,8 +321,8 @@ class NotificationService {
 
     await _flutterLocalNotificationsPlugin.show(
       0, // 알림 ID
-      '🔔 테스트 알림',
-      '알림이 정상적으로 작동합니다!',
+      '🔔 테스트 푸시 알림',
+      '딩동! 알림이 잘 도착하네요. 앞으로도 꿀잠 소식 전해드릴게요! 🔔',
       platformDetails,
     );
 
@@ -372,43 +372,53 @@ class NotificationService {
   // ========================================
   // ⚠️ 9. 즉시 경고 알림 (무호흡, 코골이 등)
   // ========================================
-  Future<void> showImmediateWarning(
-    int id,
-    String title,
-    String body,
-  ) async {
-    const androidDetails = AndroidNotificationDetails(
-      'warning_channel',
-      'Warning Notifications',
-      channelDescription: '긴급 경고 알림',
-      importance: Importance.max,
-      priority: Priority.max,
-      icon: '@mipmap/ic_launcher',
-      playSound: true,
-      enableVibration: true,
-      channelShowBadge: true,
-    );
+  // ✅ [핵심] 즉시 경고 알림 (무호흡, 코골이 등) - 앱 죽음 방지 적용
+  Future<void> showImmediateWarning(int id, String title, String body) async {
+    // 🔹 1차 방어선: 플래그 확인
+    if (!_isInitialized) {
+      debugPrint("🚨 [방어 성공] 초기화 플래그가 false입니다. 알림을 보내지 않습니다.");
+      return;
+    }
 
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      interruptionLevel: InterruptionLevel.critical, // iOS: 중요 알림
-    );
+    debugPrint("🔔 알림 발송 시도: $title (ID: $id)");
 
-    const platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'warning_channel',
+        'Warning Notifications',
+        channelDescription: '긴급 경고 알림',
+        importance: Importance.max,
+        priority: Priority.max,
+        icon: '@mipmap/ic_launcher',
+        playSound: true,
+        enableVibration: true,
+        channelShowBadge: true,
+      );
 
-    await _flutterLocalNotificationsPlugin.show(
-      id,
-      title,
-      body,
-      platformDetails,
-    );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.critical,
+      );
 
-    debugPrint('⚠️ 경고 알림($id) 전송됨: $title');
+      const platformDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      // 🔹 2차 방어선: 실제 플러그인 호출 감싸기
+      await _flutterLocalNotificationsPlugin.show(
+          id, title, body, platformDetails);
+      debugPrint("✅ 알림 발송 성공: $title");
+    } catch (e) {
+      // 🔹 여기가 핵심: 플러그인 내부 오류를 잡아서 앱 죽음 방지
+      debugPrint("🚨 경고 알림 발송 중 플러그인 내부 오류 발생: $e");
+      debugPrint("👉 조치 필요: 앱을 완전히 삭제 후 다시 설치하고, 알림 권한을 허용해주세요.");
+
+      // 만약 이 오류가 계속되면 초기화가 풀린 것으로 간주
+      _isInitialized = false;
+    }
   }
 
   // ========================================

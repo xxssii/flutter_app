@@ -1,10 +1,15 @@
 // lib/utils/sleep_apnea_detector.dart
 
 class SleepApneaDetector {
-  // 베개 높이를 조절하는 가상의 메서드
-  void _adjustPillowHeight() {
-    print("수면 무호흡 감지: 베개 높이를 조절합니다.");
-    // TODO: 여기에 실제 베개 높이 조절 로직을 추가하세요.
+  // 베개 높이 조절 콜백 (셀 번호, 높이)
+  final Function(int cellIndex, int height)? onAdjustPillow;
+
+  SleepApneaDetector({this.onAdjustPillow});
+
+  // 베개 높이를 조절하는 메서드
+  void _adjustPillowHeight(int cellIndex, int height) {
+    print("수면 무호흡 감지: 베개 높이를 조절합니다. (Cell: $cellIndex, Height: $height)");
+    onAdjustPillow?.call(cellIndex, height);
   }
 
   String? detectApnea({
@@ -16,28 +21,28 @@ class SleepApneaDetector {
     required bool isSuddenInhalation, // 급격한 들숨 감지 여부
   }) {
     if (respirationDuration >= 10.0) {
-      _adjustPillowHeight();
-      return "10초 이상 호흡 정지 감지. 베개 높이를 조절합니다.";
+      _adjustPillowHeight(1, 3); // 머리 높이 최대
+      return "10초 이상 호흡 정지 감지. 기도 확보를 위해 머리 높이를 올립니다.";
     }
 
     if (spo2Level <= 90.0) {
-      _adjustPillowHeight();
-      return "산소포화도 급락 (SpO₂ < 90%). 베개 높이를 조절합니다.";
+      _adjustPillowHeight(1, 3); // 머리 높이 최대
+      return "산소포화도 급락 (SpO₂ < 90%). 산소 공급 원활화를 위해 머리 높이를 올립니다.";
     }
 
     if (heartRateChange >= 10.0) {
-      _adjustPillowHeight();
-      return "심박수 급격한 변화 감지. 베개 높이를 조절합니다.";
+      _adjustPillowHeight(2, 2); // 목 높이 조절
+      return "심박수 급격한 변화 감지. 편안한 호흡을 위해 목 높이를 조절합니다.";
     }
 
     if (chestAbdomenMovement < 0.5) {
-      _adjustPillowHeight();
-      return "가슴/복부 움직임 정지 감지. 베개 높이를 조절합니다.";
+      _adjustPillowHeight(1, 2); // 머리 높이 조절
+      return "가슴/복부 움직임 정지 감지. 호흡 유도를 위해 머리 높이를 조절합니다.";
     }
 
     if (isSnoringStopped && isSuddenInhalation) {
-      _adjustPillowHeight();
-      return "코골이 정지 후 급격한 들숨 감지. 베개 높이를 조절합니다.";
+      _adjustPillowHeight(1, 3); // 머리 높이 최대
+      return "코골이 정지 후 급격한 들숨 감지. 기도 폐쇄 방지를 위해 머리 높이를 올립니다.";
     }
 
     return null;

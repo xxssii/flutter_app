@@ -82,6 +82,7 @@ class BleService extends ChangeNotifier {
   bool get isCollectingData => _isCollectingData;
   bool get isScanning => _isScanning;
   bool get autoHeightControl => _autoHeightControl;
+  double get micLevel => micAvg; // ✅ 마이크 데시벨 레벨 getter 추가
 
   void toggleAutoHeightControl(bool value) {
     _autoHeightControl = value;
@@ -474,9 +475,35 @@ class BleService extends ChangeNotifier {
     try {
       if (_pillowDevice != null) await _pillowDevice!.disconnect();
       if (_watchDevice != null) await _watchDevice!.disconnect();
+      
+      // ✅ 중요: 디바이스 참조 해제하여 재연결 가능하도록 수정
+      _pillowDevice = null;
+      _watchDevice = null;
+      
       _isPillowConnected = false;
       _isWatchConnected = false;
       _pillowStatus = "베개 연결 끊김";
+      _watchStatus = "팔찌 연결 끊김";
+    } catch (e) {}
+    notifyListeners();
+  }
+
+  // 개별 연결 해제 메서드
+  Future<void> disconnectPillow() async {
+    try {
+      if (_pillowDevice != null) await _pillowDevice!.disconnect();
+      _pillowDevice = null;
+      _isPillowConnected = false;
+      _pillowStatus = "베개 연결 끊김";
+    } catch (e) {}
+    notifyListeners();
+  }
+
+  Future<void> disconnectWatch() async {
+    try {
+      if (_watchDevice != null) await _watchDevice!.disconnect();
+      _watchDevice = null;
+      _isWatchConnected = false;
       _watchStatus = "팔찌 연결 끊김";
     } catch (e) {}
     notifyListeners();

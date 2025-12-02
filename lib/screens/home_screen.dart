@@ -1,8 +1,8 @@
 // lib/screens/home_screen.dart
-// ✅ [수정 완료] 실시간 배터리 및 연결 상태 모니터링 UI 통합됨
 
 import 'dart:async';
 import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,15 +12,20 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../state/app_state.dart';
 import '../state/settings_state.dart';
+import '../state/sleep_data_state.dart';
+import '../utils/sleep_score_analyzer.dart';
 import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
-import 'hardware_test_screen.dart';
+// 🔔 알림 서비스 import 추가
+import '../services/notification_service.dart';
+import 'hardware_test_screen.dart'; // ✅ 하드웨어 테스트 화면 import
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
-  // ✅ [수정] 가우시안 랜덤 (자연스러운 종 모양 분포)
+  // 사용하지 않는 색상 변수 제거됨
   static final _random = Random();
+  // 🔧 [백엔드 기능] 가우시안 랜덤 함수 (더 현실적인 데이터 분포)
   static double _randRange(double min, double max) {
     // Box-Muller 변환으로 정규분포 난수 생성
     double u = 0, v = 0;
@@ -44,7 +49,7 @@ class HomeScreen extends StatelessWidget {
   }
 
   // ========================================
-  // ✨ [개선] 8일치 테스트 데이터 생성 (기존 데이터 삭제 + 직장인 패턴)
+  // ✨ 7일치 테스트 데이터 생성
   // ========================================
   Future<void> _generateWeeklyTestData(BuildContext context) async {
     if (!context.mounted) return;
@@ -57,62 +62,30 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('기존 데이터 삭제 후\n새로 생성 중... (약 1분)'),
+            Text('7일치 데이터 생성 중...'),
           ],
         ),
       ),
     );
 
     try {
-      final userId = 'demoUser'; // ID 통일
-
-      // 🧹 1. 기존 데모 데이터 청소 (중복 방지)
-      print("🧹 기존 데이터 삭제 시작...");
-      await _clearCollection(userId, 'raw_data');
-      await _clearCollection(userId, 'processed_data');
-      await _clearCollection(userId, 'sleep_reports');
-      await _clearCollection(userId, 'session_state');
-      print("🧹 기존 데이터 삭제 완료!");
-
-      // 🏭 2. 데이터 생성 시작
       final now = DateTime.now();
-      int totalDocs = 0;
+      int totalDataPoints = 0;
 
-      // 7일 전 ~ 어제까지 (총 8일치)
-      for (int i = 7; i >= 0; i--) {
-        final targetDate = now.subtract(Duration(days: i));
-
-        // 🏢 [직장인 패턴]
-        // 취침: 23:00 ~ 00:30 랜덤
-        final int startHour = 23;
-        final int startMin = _random.nextInt(90);
-
-        // 기상: 06:30 ~ 07:30 랜덤
-        final int endHour = 6;
-        final int endMin = 30 + _random.nextInt(60);
-
-        DateTime sleepStart = DateTime(
-                targetDate.year, targetDate.month, targetDate.day, startHour, 0)
-            .add(Duration(minutes: startMin));
-
-        DateTime sleepEnd = DateTime(
-                targetDate.year, targetDate.month, targetDate.day, endHour, 0)
-            .add(Duration(days: 1, minutes: endMin));
-
+      for (int dayOffset = 6; dayOffset >= 0; dayOffset--) {
+        final date = now.subtract(Duration(days: dayOffset));
         final dateString =
-            '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
+            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
         final sessionId = 'session-$dateString';
+        final userId = 'demo_user';
 
-        print('📅 생성 중: $dateString ($sessionId)');
+        print('📅 날짜: $dateString 데이터 생성 시작...');
 
-        DateTime currentTime = sleepStart;
-        WriteBatch batch = FirebaseFirestore.instance.batch();
-        int batchCount = 0;
+        DateTime currentTime = DateTime(date.year, date.month, date.day, 22, 0);
+        final sleepCycle = _generateRealisticSleepCycle();
 
-        while (currentTime.isBefore(sleepEnd)) {
-          // 수면 단계 시뮬레이션
-          String stage = _simulateSleepStage(sleepStart, sleepEnd, currentTime);
-
+        for (int minute = 0; minute < 480; minute++) {
+          final stage = sleepCycle[minute];
           final data = _generateDataForStage(
             stage: stage,
             userId: userId,
@@ -120,82 +93,57 @@ class HomeScreen extends StatelessWidget {
             timestamp: currentTime,
           );
 
-          final docRef =
-              FirebaseFirestore.instance.collection('raw_data').doc();
-          batch.set(docRef, data);
-          batchCount++;
-          totalDocs++;
+          await FirebaseFirestore.instance.collection('raw_data').add(data);
+          currentTime = currentTime.add(const Duration(minutes: 1));
+          totalDataPoints++;
 
-          if (batchCount >= 400) {
-            await batch.commit();
-            batch = FirebaseFirestore.instance.batch();
-            batchCount = 0;
+          if (totalDataPoints % 100 == 0) {
+            print('✅ $totalDataPoints개 데이터 저장됨...');
           }
-
-          // 3분 간격 (데이터 절약)
-          currentTime = currentTime.add(const Duration(minutes: 3));
         }
 
-        if (batchCount > 0) await batch.commit();
+        print('✅ $dateString 완료! (480개 데이터)');
       }
 
       if (context.mounted) {
         Navigator.of(context).pop();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('✅ 초기화 및 8일치 데이터 생성 완료! ($totalDocs개)'),
-              backgroundColor: Colors.green),
+            content: Text('✅ 7일치 데이터 생성 완료! (총 $totalDataPoints개)'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
+
+      print('🎉 전체 완료! 총 $totalDataPoints개 데이터 생성됨');
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
+
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('오류: $e'), backgroundColor: Colors.red));
+          SnackBar(
+            content: Text('❌ 데이터 생성 실패: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
+      print('❌ 오류 발생: $e');
     }
   }
 
-  // 🧹 컬렉션 청소 헬퍼 함수
-  Future<void> _clearCollection(String userId, String collection) async {
-    var collectionRef = FirebaseFirestore.instance.collection(collection);
-    var snapshots =
-        await collectionRef.where('userId', isEqualTo: userId).get();
-
-    WriteBatch batch = FirebaseFirestore.instance.batch();
-    int count = 0;
-
-    for (var doc in snapshots.docs) {
-      batch.delete(doc.reference);
-      count++;
-      if (count >= 400) {
-        await batch.commit();
-        batch = FirebaseFirestore.instance.batch();
-        count = 0;
-      }
-    }
-    if (count > 0) await batch.commit();
-  }
-
-  String _simulateSleepStage(DateTime start, DateTime end, DateTime current) {
-    final totalMinutes = end.difference(start).inMinutes;
-    final elapsedMinutes = current.difference(start).inMinutes;
-    final progress = elapsedMinutes / totalMinutes;
-
-    if (progress < 0.3) {
-      return _random.nextDouble() < 0.6 ? 'Deep' : 'Light';
-    } else if (progress < 0.7) {
-      double r = _random.nextDouble();
-      if (r < 0.1) return 'Snoring';
-      if (r < 0.4) return 'Deep';
-      if (r < 0.6) return 'REM';
-      return 'Light';
-    } else {
-      double r = _random.nextDouble();
-      if (r < 0.05) return 'Awake';
-      if (r < 0.4) return 'REM';
-      return 'Light';
-    }
+  List<String> _generateRealisticSleepCycle() {
+    final List<String> cycle = [];
+    cycle.addAll(List.filled(60, 'Light'));
+    cycle.addAll(List.filled(120, 'Deep'));
+    cycle.addAll(List.filled(90, 'Light'));
+    cycle.addAll(List.filled(30, 'REM'));
+    cycle.addAll(List.filled(90, 'Deep'));
+    cycle.addAll(List.filled(30, 'Light'));
+    cycle.addAll(List.filled(30, 'REM'));
+    cycle.addAll(List.filled(30, 'Light'));
+    return cycle;
   }
 
   Map<String, dynamic> _generateDataForStage({
@@ -214,116 +162,60 @@ class HomeScreen extends StatelessWidget {
         pressureMax;
 
     switch (stage) {
-      case 'Deep': // 깊은 잠: 심박수 최저, 움직임 거의 없음
-        hrMin = 50;
-        hrMax = 60; // 안정적인 낮은 심박수
-        spo2Min = 97;
-        spo2Max = 99; // 정상 산소포화도
-        micMin = 5;
-        micMax = 20; // 거의 침묵 (백색소음 수준)
-        pressureMin = 800;
-        pressureMax = 1200; // 머리 무게 안정적 지지
-        break;
-
-      case 'Light': // 얕은 잠: 심박수 약간 상승, 일반적인 수면 상태
+      case 'Light':
         hrMin = 60;
-        hrMax = 75;
+        hrMax = 70;
         spo2Min = 96;
-        spo2Max = 99;
-        micMin = 20;
-        micMax = 40; // 얕은 숨소리나 약한 생활 소음
-        pressureMin = 800;
-        pressureMax = 1300;
-        break;
-
-      case 'REM': // 렘수면: 뇌 활발, 심박수 불규칙하게 상승 (꿈)
-        hrMin = 65;
-        hrMax = 85; // 꿈꿀 때 심박수 오름
-        spo2Min = 96;
-        spo2Max = 99;
+        spo2Max = 98;
         micMin = 10;
-        micMax = 30; // 근육 마비로 소리는 조용함
-        pressureMin = 800;
-        pressureMax = 1200;
-        break;
-
-      case 'Awake': // 깸: 심박수 급증, 머리를 뗌 (압력 0 근처)
-        hrMin = 80;
-        hrMax = 110; // 깨어나서 활동 시작
-        spo2Min = 97;
-        spo2Max = 100;
-        micMin = 40;
-        micMax = 100; // 말하거나 움직이는 소리
-        pressureMin = 0;
-        pressureMax = 100; // 💡 핵심: 머리를 들어서 압력이 사라짐
-        break;
-
-      case 'Tossing': // 뒤척임: 베개를 짓누르거나 강한 움직임
-        hrMin = 70;
-        hrMax = 90;
-        spo2Min = 96;
-        spo2Max = 99;
-        micMin = 30;
-        micMax = 80; // 이불 부스럭거리는 소리
-        pressureMin = 3000;
-        pressureMax = 4095; // 💡 핵심: 베개를 꾹 누르는 최대 압력
-        break;
-
-      case 'Snoring': // 코골이: 소리 센서 폭발
-        hrMin = 60;
-        hrMax = 75;
-        spo2Min = 93;
-        spo2Max = 96; // 호흡 곤란으로 약간 떨어질 수 있음
-        micMin = 150;
-        micMax = 255; // 💡 핵심: 마이크 값 최대치 (코고는 소리)
-        pressureMin = 800;
-        pressureMax = 1300; // 자세는 그대로
-        break;
-
-      case 'Apnea': // 수면 무호흡: 소리 없음 + 산소포화도 위험 수준
-        hrMin = 75;
-        hrMax = 95; // 숨 멈춰서 느려졌다가, 헐떡이며 빨라짐 (변동성)
-        spo2Min = 80;
-        spo2Max = 88; // 💡 핵심: 위험 수준으로 떨어짐 (저산소증)
-        micMin = 0;
-        micMax = 5; // 💡 핵심: 숨을 안 쉬어서 소리가 '0'에 가까움
+        micMax = 40;
         pressureMin = 500;
-        pressureMax = 900; // 몸부림 치기 직전 정지 상태
+        pressureMax = 1500;
         break;
-
+      case 'Deep':
+        hrMin = 50;
+        hrMax = 60;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 5;
+        micMax = 20;
+        pressureMin = 100;
+        pressureMax = 500;
+        break;
+      case 'REM':
+        hrMin = 65;
+        hrMax = 75;
+        spo2Min = 96;
+        spo2Max = 98;
+        micMin = 5;
+        micMax = 20;
+        pressureMin = 100;
+        pressureMax = 500;
+        break;
       default:
         hrMin = 60;
-        hrMax = 75;
+        hrMax = 70;
         spo2Min = 96;
-        spo2Max = 99;
+        spo2Max = 98;
         micMin = 10;
         micMax = 30;
-        pressureMin = 800;
-        pressureMax = 1200;
-        break;
+        pressureMin = 500;
+        pressureMax = 1000;
     }
+
     return {
       'hr': _randRange(hrMin, hrMax).toInt(),
-      'spo2': _randRange(spo2Min, spo2Max).toInt(),
-      'mic_avg': _randRange(micMin, micMax).toInt(),
-      'pressure_avg': _randRange(pressureMin, pressureMax).toInt(),
-
-      // 더미 데이터
-      'mic_1_avg_10s': 0, 'mic_2_avg_10s': 0,
-      'pressure_1_avg_10s': 0, 'pressure_2_avg_10s': 0, 'pressure_3_avg_10s': 0,
-      'pillow_battery': 100, 'watch_battery': 100,
-      'auto_control_active': false,
-      'is_snoring': false,
-
+      'spo2': _randRange(spo2Min, spo2Max),
+      'mic_level': _randRange(micMin, micMax).toInt(),
+      'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
       'userId': userId,
       'sessionId': sessionId,
       'ts': Timestamp.fromDate(timestamp),
-      'label': stage,
     };
   }
 
   // ========================================
-  // ✨ 테스트: raw_data에서 직접 수면 점수 계산
+  // ✨ 수면 점수 계산 테스트
   // ========================================
   Future<void> _testCalculateSleepScore(BuildContext context) async {
     final now = DateTime.now();
@@ -342,140 +234,21 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('수면 데이터 분석 중...'),
+            Text('수면 점수 계산 중...'),
           ],
         ),
       ),
     );
 
     try {
-      final querySnapshot = await FirebaseFirestore.instance
-          .collection('raw_data')
-          .where('sessionId', isEqualTo: sessionId)
-          .get();
+      final functions = FirebaseFunctions.instanceFor(
+        region: 'asia-northeast3',
+      );
+      final callable = functions.httpsCallable('calculate_sleep_score');
 
-      final sortedDocs = querySnapshot.docs.toList()
-        ..sort((a, b) {
-          final aTime = (a['ts'] as Timestamp).toDate();
-          final bTime = (b['ts'] as Timestamp).toDate();
-          return aTime.compareTo(bTime);
-        });
+      final result = await callable.call({'session_id': sessionId});
 
-      if (sortedDocs.isEmpty) {
-        if (!context.mounted) return;
-        Navigator.of(context).pop();
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('❌ 데이터 없음'),
-            content: Text(
-                '세션 $sessionId의 데이터가 없습니다.\n\n먼저 "7일치 테스트 데이터 생성" 버튼을 눌러주세요!'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('확인')),
-            ],
-          ),
-        );
-        return;
-      }
-
-      print('✅ ${sortedDocs.length}개 데이터 발견!');
-
-      final firstDoc = sortedDocs.first;
-      final lastDoc = sortedDocs.last;
-      final firstTime = (firstDoc['ts'] as Timestamp).toDate();
-      final lastTime = (lastDoc['ts'] as Timestamp).toDate();
-      final totalSeconds = lastTime.difference(firstTime).inSeconds;
-      final totalHours = totalSeconds / 3600;
-
-      Map<String, int> stageDurations = {
-        'Deep': 0,
-        'Light': 0,
-        'REM': 0,
-        'Awake': 0
-      };
-      int totalMinutes = 0;
-
-      for (var doc in sortedDocs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final hr = (data['hr'] as num).toDouble();
-        final spo2 = (data['spo2'] as num).toDouble();
-        final micLevel = (data['mic_avg'] ?? data['mic_level'] ?? 0).toDouble();
-        final pressureLevel =
-            (data['pressure_avg'] ?? data['pressure_level'] ?? 0).toDouble();
-
-        String stage;
-        if (hr <= 59.5) {
-          stage = 'Deep';
-        } else if (spo2 <= 91.9) {
-          stage = 'Awake';
-        } else if (pressureLevel > 1493.5) {
-          stage = 'Awake';
-        } else if (micLevel > 109.5) {
-          stage = 'Light';
-        } else if (pressureLevel <= 505.0) {
-          stage = 'REM';
-        } else {
-          stage = 'Light';
-        }
-
-        stageDurations[stage] = stageDurations[stage]! + 60;
-        totalMinutes++;
-      }
-
-      final actualTotalSeconds = totalMinutes * 60;
-      final deepRatio = (stageDurations['Deep']! / actualTotalSeconds * 100);
-      final remRatio = (stageDurations['REM']! / actualTotalSeconds * 100);
-      final awakeRatio = (stageDurations['Awake']! / actualTotalSeconds * 100);
-
-      int durationScore = 30;
-      if (totalHours >= 7 && totalHours <= 9)
-        durationScore = 40;
-      else if (totalHours >= 6)
-        durationScore = 30;
-      else
-        durationScore = 20;
-
-      int deepScore = 10;
-      if (deepRatio >= 15 && deepRatio <= 25)
-        deepScore = 25;
-      else if (deepRatio >= 10 || deepRatio > 25) deepScore = 20;
-
-      int remScore = 8;
-      if (remRatio >= 20 && remRatio <= 25)
-        remScore = 20;
-      else if (remRatio >= 15)
-        remScore = 15;
-      else if (remRatio >= 10) remScore = 10;
-
-      int efficiencyScore = 5;
-      if (awakeRatio < 5)
-        efficiencyScore = 15;
-      else if (awakeRatio < 10)
-        efficiencyScore = 12;
-      else if (awakeRatio < 15) efficiencyScore = 8;
-
-      final totalScore = durationScore + deepScore + remScore + efficiencyScore;
-
-      String grade;
-      String message;
-      if (totalScore >= 90) {
-        grade = 'S';
-        message = '훌륭한 수면! 🌟';
-      } else if (totalScore >= 80) {
-        grade = 'A';
-        message = '좋은 수면 😊';
-      } else if (totalScore >= 70) {
-        grade = 'B';
-        message = '양호한 수면 👍';
-      } else if (totalScore >= 60) {
-        grade = 'C';
-        message = '개선 필요 😐';
-      } else {
-        grade = 'D';
-        message = '수면 개선 필요 ⚠️';
-      }
+      final data = result.data;
 
       if (!context.mounted) return;
       Navigator.of(context).pop();
@@ -483,7 +256,7 @@ class HomeScreen extends StatelessWidget {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('📊 수면 점수 (raw_data 분석)'),
+          title: const Text('📊 수면 점수'),
           content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -491,41 +264,46 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Text('세션: $sessionId', style: const TextStyle(fontSize: 12)),
                 const Divider(),
-                Text('총점: $totalScore점',
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.bold)),
-                Text('등급: $grade'),
-                Text('평가: $message'),
+                Text(
+                  '총점: ${data['total_score']}점',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text('등급: ${data['grade']}'),
+                Text('평가: ${data['message']}'),
                 const SizedBox(height: 16),
-                const Text('수면 요약:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                Text('총 수면: ${totalHours.toStringAsFixed(2)}시간'),
-                Text(
-                    '깊은 수면: ${(stageDurations['Deep']! / 3600).toStringAsFixed(2)}시간 (${deepRatio.toStringAsFixed(1)}%)'),
-                Text(
-                    'REM 수면: ${(stageDurations['REM']! / 3600).toStringAsFixed(2)}시간 (${remRatio.toStringAsFixed(1)}%)'),
-                Text(
-                    '얕은 수면: ${(stageDurations['Light']! / 3600).toStringAsFixed(2)}시간'),
-                Text(
-                    '깨어있음: ${(stageDurations['Awake']! / 3600).toStringAsFixed(2)}시간 (${awakeRatio.toStringAsFixed(1)}%)'),
-                const SizedBox(height: 16),
-                Text('데이터: ${sortedDocs.length}개',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                const Text(
+                  '수면 요약:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('총 수면: ${data['summary']['total_duration_hours']}시간'),
+                Text('깊은 수면: ${data['summary']['deep_sleep_hours']}시간'),
+                Text('REM 수면: ${data['summary']['rem_sleep_hours']}시간'),
+                Text('얕은 수면: ${data['summary']['light_sleep_hours']}시간'),
               ],
             ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인')),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('확인'),
+            ),
           ],
         ),
       );
+
+      print('✅ 테스트 성공!');
+      print('점수: ${data['total_score']}');
+      print('총 수면 시간: ${data['summary']['total_duration_hours']}시간');
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('❌ 오류 발생: $e'), backgroundColor: Colors.red));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ 오류 발생: $e'), backgroundColor: Colors.red),
+        );
       }
       print('❌ 직접 계산 실패: $e');
     }
@@ -536,16 +314,19 @@ class HomeScreen extends StatelessWidget {
   // ========================================
   Future<void> _testOnNewDataTrigger(BuildContext context) async {
     print('🔧 트리거 테스트 시작...');
+
     if (!context.mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const AlertDialog(
-        content: Row(children: [
-          CircularProgressIndicator(),
-          SizedBox(width: 20),
-          Text('트리거 테스트 중...')
-        ]),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Text('트리거 테스트 중...'),
+          ],
+        ),
       ),
     );
 
@@ -553,21 +334,25 @@ class HomeScreen extends StatelessWidget {
       final now = DateTime.now();
       final testSessionId = 'test-trigger-${now.millisecondsSinceEpoch}';
 
-      await FirebaseFirestore.instance.collection('raw_data').add({
+      print('📝 raw_data에 테스트 데이터 추가 중...');
+
+      final docRef =
+          await FirebaseFirestore.instance.collection('raw_data').add({
         'hr': 65,
         'spo2': 97.5,
-        'mic_avg': 20,
-        'pressure_avg': 300,
-        'mic_1_avg_10s': 0,
-        'pressure_1_avg_10s': 0,
+        'mic_level': 20,
+        'pressure_level': 300,
         'userId': 'test_user',
         'sessionId': testSessionId,
         'ts': Timestamp.now(),
-        'auto_control_active': false,
       });
 
-      print('⏳ 5초 대기 중...');
-      await Future.delayed(const Duration(seconds: 15));
+      print('✅ raw_data 추가 완료! docId: ${docRef.id}');
+
+      print('⏳ 5초 대기 중 (트리거 실행 시간)...');
+      await Future.delayed(const Duration(seconds: 5));
+
+      print('🔍 processed_data 확인 중...');
 
       final processedQuery = await FirebaseFirestore.instance
           .collection('processed_data')
@@ -582,40 +367,62 @@ class HomeScreen extends StatelessWidget {
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('❌ 트리거 작동 안 함'),
-            content: const Text('processed_data가 생성되지 않았습니다. 서버 로그를 확인하세요.'),
+            content: const Text('5초를 기다렸지만 processed_data에 데이터가 생성되지 않았습니다.\n\n'
+                'Cloud Functions의 on_new_data 트리거가 작동하지 않고 있습니다.\n\n'
+                '원인:\n'
+                '1. Functions 배포 안 됨\n'
+                '2. 트리거 설정 오류\n'
+                '3. 코드 오류'),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('확인'))
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
             ],
           ),
         );
+        print('❌ 트리거 작동 안 함!');
       } else {
-        final stage = processedQuery.docs.first['stage'];
+        final processedDoc = processedQuery.docs.first;
+        final stage = processedDoc['stage'];
+
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('✅ 트리거 작동함!'),
-            content: Text('Cloud Functions 정상 작동.\n분류된 단계: $stage'),
+            content: Text('Cloud Functions가 정상 작동합니다!\n\n'
+                '분류된 단계: $stage\n\n'
+                'processed_data에 데이터가 생성되었습니다.'),
             actions: [
               TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('확인'))
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('확인'),
+              ),
             ],
           ),
         );
+        print('✅ 트리거 작동함! stage: $stage');
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('❌ 테스트 실패: $e'), backgroundColor: Colors.red));
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 오류 발생: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
+      print('❌ 테스트 실패: $e');
     }
   }
 
   // ========================================
   // 훈련 데이터 생성
+  // ========================================
+  // ========================================
+  // 🔧 [백엔드 기능] 훈련 데이터 생성 (랜덤 개수)
   // ========================================
   Future<void> _pushBurstData(BuildContext context, String label) async {
     final String userId = "demoUser";
@@ -657,175 +464,352 @@ class HomeScreen extends StatelessWidget {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
-          appBar: AppBar(
-            toolbarHeight: 80,
-            title: Padding(
-              padding: const EdgeInsets.only(left: 8.0, top: 10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('오늘 밤은 어떨까요?',
-                      style: AppTextStyles.heading2.copyWith(fontSize: 22)),
-                  const SizedBox(height: 4),
-                  Text('수면 측정을 시작해 주세요.',
-                      style: AppTextStyles.secondaryBodyText
-                          .copyWith(fontSize: 15)),
-                ],
-              ),
-            ),
-            actions: [
-              Consumer<SettingsState>(
-                builder: (context, settingsState, _) {
-                  return IconButton(
-                    icon: Icon(
-                      settingsState.isDarkMode
-                          ? Icons.wb_sunny_outlined
-                          : Icons.mode_night_outlined,
-                      color: settingsState.isDarkMode
-                          ? AppColors.darkPrimaryText
-                          : AppColors.primaryText,
-                      size: 28,
-                    ),
-                    onPressed: () =>
-                        settingsState.toggleDarkMode(!settingsState.isDarkMode),
-                  );
-                },
-              ),
-              const SizedBox(width: 16),
-            ],
-          ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ✅ PillowScreen 스타일의 헤더 (SafeArea + Padding)
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '오늘 밤은 어떨까요?',
+                              style:
+                                  AppTextStyles.heading2.copyWith(fontSize: 22),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '수면 측정을 시작해 주세요.',
+                              style: AppTextStyles.secondaryBodyText.copyWith(
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                        // 다크모드 토글 버튼
+                        Consumer<SettingsState>(
+                          builder: (context, settingsState, _) {
+                            final iconColor = settingsState.isDarkMode
+                                ? AppColors.darkPrimaryText
+                                : AppColors.primaryText;
+                            return IconButton(
+                              icon: Icon(
+                                settingsState.isDarkMode
+                                    ? Icons.wb_sunny_outlined
+                                    : Icons.mode_night_outlined,
+                                color: iconColor,
+                                size: 28,
+                              ),
+                              onPressed: () {
+                                settingsState
+                                    .toggleDarkMode(!settingsState.isDarkMode);
+                              },
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 Center(child: _buildMeasurementButton(context, appState)),
                 const SizedBox(height: 24),
-
-                // --- 테스트 도구 섹션 ---
                 Center(
                   child: Column(
                     children: [
-                      Text("--- [0단계] 테스트 데이터 생성 ---",
-                          style: AppTextStyles.secondaryBodyText.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.purple)),
+                      Text(
+                        "--- [0단계] 테스트 데이터 생성 (날짜별 분리) ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: () => _generateWeeklyTestData(context),
                         icon: const Icon(Icons.calendar_month),
-                        label: const Text('7일치 데이터 생성'),
+                        label: const Text('7일치 테스트 데이터 생성 (날짜별)'),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            foregroundColor: Colors.white),
+                          backgroundColor: Colors.purple,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
+                      Text(
+                        '각 날짜마다 다른 sessionId로 8시간 수면 데이터 생성',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       ElevatedButton.icon(
                         onPressed: () => _testCalculateSleepScore(context),
                         icon: const Icon(Icons.analytics),
-                        label: const Text('📊 수면 점수 분석'),
+                        label: const Text('📊 수면 점수 계산 테스트'),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white),
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
+                      Text(
+                        '가장 최근 세션의 수면 점수 계산',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+
+                      // ========================================
+                      // ✨ 새로 추가: 트리거 테스트 버튼
+                      // ========================================
+                      const SizedBox(height: 24),
                       ElevatedButton.icon(
                         onPressed: () => _testOnNewDataTrigger(context),
                         icon: const Icon(Icons.bug_report),
-                        label: const Text('🔧 트리거 테스트'),
+                        label: const Text('🔧 Cloud Functions 트리거 테스트'),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange,
-                            foregroundColor: Colors.white),
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 24),
-                      Text("--- [1단계] 훈련 데이터 (v3) ---",
-                          style: AppTextStyles.secondaryBodyText),
+                      const SizedBox(height: 8),
+                      Text(
+                        'raw_data에 1개 테스트 데이터 추가 (트리거 확인용)',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          ElevatedButton(
-                              onPressed: () => _pushBurstData(context, 'Awake'),
-                              child: const Text('Awake')),
-                          ElevatedButton(
-                              onPressed: () => _pushBurstData(context, 'Light'),
-                              child: const Text('Light')),
-                          ElevatedButton(
-                              onPressed: () => _pushBurstData(context, 'Deep'),
-                              child: const Text('Deep')),
-                          ElevatedButton(
-                              onPressed: () => _pushBurstData(context, 'REM'),
-                              child: const Text('REM')),
-                          ElevatedButton(
-                              onPressed: () =>
-                                  _pushBurstData(context, 'Snoring'),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.teal),
-                              child: const Text('코골이')),
-                          ElevatedButton(
-                              onPressed: () =>
-                                  _pushBurstData(context, 'Tossing'),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.brown),
-                              child: const Text('뒤척임')),
-                          ElevatedButton(
-                              onPressed: () => _pushBurstData(context, 'Apnea'),
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red),
-                              child: const Text('무호흡')),
-                        ],
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
                       ),
-                      const SizedBox(height: 24),
-                      Text("--- [하드웨어] 제어 ---",
-                          style: AppTextStyles.secondaryBodyText.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.indigo)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "--- [1단계] 훈련 데이터 생성기 (v3: 진짜 범위) ---",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Awake'),
+                        child: const Text('Awake 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Light'),
+                        child: const Text('Light 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Deep'),
+                        child: const Text('Deep 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'REM'),
+                        child: const Text('REM 훈련 데이터 (10s)'),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Snoring'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                        ),
+                        child: const Text('★ 코골이(Snoring) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Tossing'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.brown,
+                        ),
+                        child: const Text('★ 뒤척임(Tossing) 훈련 데이터 (10s)'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => _pushBurstData(context, 'Apnea'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        child: const Text('★ 무호흡(Apnea) 훈련 데이터 (10s)'),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
+                      ),
+                    ],
+                  ),
+                ),
+                // 🔔 [신규] 알림 시뮬레이션 버튼 추가
+                // ===============================================
+                // ✨✨✨ 새로 추가된 하드웨어 테스트 섹션 ✨✨✨
+                // ===============================================
+                const SizedBox(height: 24),
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "--- [2단계] 알림 시뮬레이션 (즉시 발송) ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 1. 수면 리포트 알림 시뮬레이션
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          // 실제로는 아침에 예약되지만, 시연을 위해 즉시 발송합니다.
+                          NotificationService.instance.showImmediateWarning(
+                            1, // ID
+                            '☀️ 좋은 아침입니다!',
+                            '지난밤 수면 효율은 92%입니다. 리포트를 확인해보세요.',
+                          );
+                        },
+                        icon: const Icon(Icons.wb_sunny),
+                        label: const Text('시뮬레이션: 아침 리포트 알림'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 2. 수면 효율 저하 알림 시뮬레이션
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          // 설정값 확인 (설정이 켜져 있을 때만 알림 발송)
+                          final settings = Provider.of<SettingsState>(
+                            context,
+                            listen: false,
+                          );
+                          if (settings.isEfficiencyOn) {
+                            NotificationService.instance.showImmediateWarning(
+                              2, // ID
+                              '⚠️ 수면 효율 저하 감지',
+                              '깊은 잠이 부족했어요. 오늘은 카페인 섭취를 줄여보세요.',
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('수면 효율 알림 설정이 꺼져 있습니다.'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.warning_amber),
+                        label: const Text('시뮬레이션: 효율 저하 알림 (조건부)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // 3. 코골이 알림 시뮬레이션
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          // 설정값 확인
+                          final settings = Provider.of<SettingsState>(
+                            context,
+                            listen: false,
+                          );
+                          if (settings.isSnoringOn) {
+                            NotificationService.instance.showImmediateWarning(
+                              3, // ID
+                              '💤 코골이 감지',
+                              '심한 코골이가 감지되었습니다. 베개 높이를 조절해보세요.',
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('코골이 알림 설정이 꺼져 있습니다.'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.mic_off),
+                        label: const Text('시뮬레이션: 코골이 알림 (조건부)'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                      // ===============================================
+                      // [하드웨어] 기기 제어 및 테스트
+                      // ===============================================
+                      Text(
+                        "--- [하드웨어] 기기 제어 및 테스트 ---",
+                        style: AppTextStyles.secondaryBodyText.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.indigo,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
-                        icon: const Icon(Icons.build),
-                        label: const Text("🛠️ 하드웨어 테스트"),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo,
-                            foregroundColor: Colors.white),
-                        onPressed: () => Navigator.push(
+                          backgroundColor: Colors.indigo,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 15, horizontal: 20),
+                        ),
+                        icon: const Icon(Icons.build),
+                        label: const Text(
+                          "🛠️ 하드웨어 테스트 화면으로 이동",
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
                                 builder: (context) =>
-                                    const HardwareTestScreen())),
+                                    const HardwareTestScreen()),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '펌프, 밸브, 진동 모터 개별 제어',
+                        style: AppTextStyles.smallText.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "-----------------------------------------",
+                        style: AppTextStyles.secondaryBodyText,
                       ),
                     ],
                   ),
                 ),
-
                 const SizedBox(height: 24),
-                _buildRealTimeMetricsCard(context, appState),
-                const SizedBox(height: 16),
-                _buildInfoCard(
-                  context,
-                  title: '오늘의 총 수면시간',
-                  icon: Icons.access_time,
-                  content: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('8시간 38분',
-                          style: AppTextStyles.heading1
-                              .copyWith(color: AppColors.primaryNavy)),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                          value: 0.9,
-                          backgroundColor: AppColors.progressBackground,
-                          color: AppColors.primaryNavy,
-                          minHeight: 8),
-                    ],
-                  ),
-                ),
-
                 const SizedBox(height: 24),
-                // ✅ [수정됨] 실시간 BleService 상태를 구독하는 위젯 사용
+                _buildPlaceholderInfoCards(), // ✅ 도넛 그래프 카드 복구
+                const SizedBox(height: 24),
                 _buildDeviceCards(context),
-
                 const SizedBox(height: 24),
                 _buildSummaryCard(context),
               ],
@@ -836,104 +820,44 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMeasurementButton(BuildContext context, AppState appState) {
-    final bool isMeasuring = appState.isMeasuring;
-    final buttonColor =
-        isMeasuring ? AppColors.errorRed : AppColors.primaryNavy;
-
-    return Column(
-      children: [
-        GestureDetector(
-          onTap: () {
-            final bleService = Provider.of<BleService>(context, listen: false);
-            if (isMeasuring) {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('수면 측정 종료'),
-                  content: const Text('수면 측정을 종료하시겠습니까?'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('취소')),
-                    TextButton(
-                      onPressed: () {
-                        bleService.stopDataCollection();
-                        appState.toggleMeasurement(context);
-                        Navigator.of(context).pop();
-                      },
-                      child:
-                          const Text('종료', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              );
-            } else {
-              if (!bleService.isPillowConnected &&
-                  !bleService.isWatchConnected) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('먼저 기기를 연결해주세요!'),
-                    backgroundColor: Colors.orange));
-                return;
-              }
-              bleService.startDataCollection();
-              appState.toggleMeasurement(context);
-              if (appState.isMeasuring) {
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (context) =>
-                        const SleepModeScreen(key: Key('sleepModeScreen'))));
-              }
-            }
-          },
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-                shape: BoxShape.circle, color: buttonColor.withOpacity(0.1)),
-            child: isMeasuring
-                ? SpinKitPulse(color: buttonColor, size: 80.0)
-                : Icon(Icons.nights_stay_rounded, color: buttonColor, size: 80),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(isMeasuring ? '수면 측정 중지' : '수면 측정 시작',
-            style: AppTextStyles.heading2),
-      ],
-    );
-  }
-
   Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
-    if (!appState.isMeasuring) return const SizedBox.shrink();
+    if (!appState.isMeasuring) {
+      return const SizedBox.shrink();
+    }
     return Card(
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildMetricItem(
-                icon: Icons.favorite,
-                label: '심박수',
-                value: appState.currentHeartRate.toStringAsFixed(0),
-                unit: 'BPM',
-                color: AppColors.errorRed),
+              icon: Icons.favorite,
+              label: '심박수',
+              value: appState.currentHeartRate.toStringAsFixed(0),
+              unit: 'BPM',
+              color: AppColors.errorRed,
+            ),
             _buildMetricItem(
-                icon: Icons.opacity,
-                label: '산소포화도',
-                value: appState.currentSpo2.toStringAsFixed(0),
-                unit: '%',
-                color: AppColors.primaryNavy),
+              icon: Icons.opacity,
+              label: '산소포화도',
+              value: appState.currentSpo2.toStringAsFixed(0),
+              unit: '%',
+              color: AppColors.primaryNavy,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMetricItem(
-      {required IconData icon,
-      required String label,
-      required String value,
-      required String unit,
-      required Color color}) {
+  Widget _buildMetricItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required String unit,
+    required Color color,
+  }) {
     return Column(
       children: [
         Icon(icon, color: color, size: 24),
@@ -946,68 +870,155 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoCard(BuildContext context,
-      {required String title,
-      required IconData icon,
-      required Widget content}) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(icon, color: AppColors.primaryNavy, size: 24),
-              const SizedBox(width: 8),
-              Text(title, style: AppTextStyles.heading3)
-            ]),
-            const SizedBox(height: 16),
-            content,
-          ],
-        ),
-      ),
-    );
-  }
+  // ✅ [수정됨] 수면 측정 버튼 UI (베개 모양 아이콘 적용)
+  Widget _buildMeasurementButton(BuildContext context, AppState appState) {
+    final bool isMeasuring = appState.isMeasuring;
 
-  Widget _buildSummaryCard(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    // 🎨 디자인 팔레트
+    final Color colDeep = const Color(0xFF011F25);
+    final Color colMoon = const Color(0xFFF2E6E6);
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () {
+            // (기존 측정 시작/종료 로직 - 그대로 유지)
+            final bleService = Provider.of<BleService>(context, listen: false);
+            if (isMeasuring) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: Colors.white,
+                  title: Text('수면 종료',
+                      style: TextStyle(
+                          color: colDeep, fontWeight: FontWeight.bold)),
+                  content: const Text('측정을 종료하시겠습니까?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('취소',
+                            style: TextStyle(color: Colors.grey))),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: colDeep,
+                          foregroundColor: Colors.white),
+                      onPressed: () {
+                        bleService.stopDataCollection();
+                        appState.toggleMeasurement(context);
+                        Navigator.pop(context);
+                      },
+                      child: const Text('종료'),
+                    ),
+                  ],
+                ),
+              );
+            } else {
+              if (!bleService.isPillowConnected &&
+                  !bleService.isWatchConnected) {
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('기기를 연결해주세요.')));
+                return;
+              }
+              bleService.startDataCollection();
+              appState.toggleMeasurement(context);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const SleepModeScreen(key: Key('sleepModeScreen'))));
+            }
+          },
+          // ✨ [UI 핵심] 측정 대기 중일 때 '베개 아이콘' 표시
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: isMeasuring
+                ? _buildMeasuringState(colDeep) // 측정 중 UI
+                : const SleepStartJellyIcon(), // 대기 중 UI (베개 아이콘)
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // 하단 텍스트
+        Column(
           children: [
-            Text('최근 수면 요약', style: AppTextStyles.heading3),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildSummaryItem('8시간 17.5분', '평균 수면', context),
-                _buildSummaryItem('3.3점', '평균 코골이', context),
-                _buildSummaryItem('92%', '수면 효율', context),
-                _buildSummaryItem('20%', 'REM 비율', context),
-              ],
+            Text(
+              isMeasuring ? "편안한 밤 되세요" : "수면 시작",
+              style: AppTextStyles.heading2.copyWith(
+                  color: Color(0xFF6292BE), fontSize: 22, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isMeasuring ? "수면 데이터를 분석하고 있습니다" : "베개를 톡 눌러 꿈나라로 떠나보세요",
+              style: AppTextStyles.secondaryBodyText
+                  .copyWith(color: Color(0xFFBD9A8E), fontSize: 14),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryItem(String value, String label, BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style:
-                AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold)),
-        Text(label,
-            style: AppTextStyles.secondaryBodyText.copyWith(fontSize: 12)),
       ],
     );
   }
 
-  // ==========================================
-  // ✨ [추가됨] 기기 상태 카드 빌더 (BleService 연동)
-  // ==========================================
+  // 측정 중일 때 보여줄 심플한 UI (파동)
+  Widget _buildMeasuringState(Color colDeep) {
+    return Container(
+      width: 180,
+      height: 140,
+      decoration: BoxDecoration(
+        color: colDeep.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(40),
+        border: Border.all(color: colDeep.withOpacity(0.1)),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SpinKitRipple(
+            color: const Color(0xFF6292BE),
+            size: 120.0,
+            borderWidth: 4.0,
+          ),
+          Icon(Icons.stop_rounded, size: 48, color: colDeep),
+        ],
+      ),
+    );
+  }
+
+  // ✅ 수정됨: 도넛 그래프를 사용하여 정보를 표시하는 함수
+  Widget _buildPlaceholderInfoCards() {
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: _buildAnimatedDonutContent(
+              title: '목표: 8시간',
+              centerValue: '6시간 48분',
+              footerLabel: '오늘의 수면 달성률',
+              progress: 0.85,
+              // 팔레트 색상: #6292BE
+              color: const Color(0xFF6292BE),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: _buildAnimatedDonutContent(
+              title: '권장: 10~12cm',
+              centerValue: '12cm',
+              footerLabel: '현재 높이 상태',
+              progress: 0.6,
+              // 팔레트 색상: #B5C1D4
+              color: const Color(0xFFB5C1D4),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDeviceCards(BuildContext context) {
     return Consumer<BleService>(
       builder: (context, bleService, child) {
@@ -1060,8 +1071,9 @@ class HomeScreen extends StatelessWidget {
               children: [
                 Text(
                   deviceName,
-                  style: AppTextStyles.bodyText
-                      .copyWith(fontWeight: FontWeight.bold),
+                  style: AppTextStyles.bodyText.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(deviceType, style: AppTextStyles.secondaryBodyText),
               ],
@@ -1070,6 +1082,7 @@ class HomeScreen extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                // if (isConnected)
                 Row(
                   children: [
                     Icon(
@@ -1099,4 +1112,425 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildSummaryCard(BuildContext context) {
+    return Consumer<SleepDataState>(
+      builder: (context, sleepDataState, _) {
+        final history = sleepDataState.sleepHistory;
+
+        String avgSleepStr = '-';
+        String avgSnoringStr = '-';
+        String avgEfficiencyStr = '-';
+        String avgRemStr = '-';
+
+        if (history.isNotEmpty) {
+          // 최근 7개 데이터만 사용
+          final recentHistory = history.take(7).toList();
+          final analyzer = SleepScoreAnalyzer();
+
+          double totalSleep = 0;
+          double totalSnoringScore = 0;
+          double totalEfficiency = 0;
+          double totalRem = 0;
+
+          for (var metric in recentHistory) {
+            totalSleep += metric.totalSleepDuration;
+
+            // ✅ 코골이 점수 계산 (10점 만점)
+            double score = analyzer.getSnoringScore(
+              metric.avgSnoringDuration, // 분 단위
+              metric.totalSleepDuration * 60, // 분 단위로 변환
+            );
+            totalSnoringScore += score;
+
+            totalEfficiency += metric.sleepEfficiency;
+            totalRem += metric.remRatio;
+          }
+
+          final count = recentHistory.length;
+
+          // 평균 수면 시간 포맷팅
+          final avgSleep = totalSleep / count;
+          final hours = avgSleep.floor();
+          final minutes = ((avgSleep - hours) * 60).round();
+          avgSleepStr = '${hours}시간 ${minutes}분';
+
+          // 평균 코골이 점수
+          final avgSnoringScore = totalSnoringScore / count;
+          avgSnoringStr = '${avgSnoringScore.toStringAsFixed(1)}점';
+
+          // 수면 효율
+          final avgEfficiency = totalEfficiency / count;
+          avgEfficiencyStr = '${avgEfficiency.toStringAsFixed(0)}%';
+
+          // REM 비율
+          final avgRem = totalRem / count;
+          avgRemStr = '${avgRem.toStringAsFixed(0)}%';
+        }
+
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('최근 7일 수면 요약', style: AppTextStyles.heading3),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildSummaryItem(avgSleepStr, '평균 수면', context),
+                    _buildSummaryItem(avgSnoringStr, '평균 코골이', context),
+                    _buildSummaryItem(avgEfficiencyStr, '수면 효율', context),
+                    _buildSummaryItem(avgRemStr, 'REM 비율', context),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSummaryItem(String value, String label, BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          label,
+          style: AppTextStyles.secondaryBodyText.copyWith(fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  // ✅ 도넛 그래프 위젯 (애니메이션 복원 및 테마 적용됨)
+  Widget _buildAnimatedDonutContent({
+    required String title,
+    required String centerValue,
+    required String footerLabel,
+    required double progress,
+    Color color = AppColors.primaryNavy,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                centerValue,
+                style: AppTextStyles.heading2.copyWith(color: color),
+              ),
+              const SizedBox(height: 8),
+              Text(title, style: AppTextStyles.heading3),
+              const SizedBox(height: 8),
+              Text(footerLabel, style: AppTextStyles.secondaryBodyText),
+            ],
+          ),
+        ),
+        Expanded(
+          flex: 2,
+          child: Center(
+            child: SizedBox(
+              width: 100,
+              height: 100,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0.0, end: progress),
+                duration: const Duration(milliseconds: 1500),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) {
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: 1.0,
+                        // ✅ [테마 적용] 배경색 투명도 조절
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.grey.shade300.withOpacity(0.3),
+                        ),
+                        strokeWidth: 12,
+                      ),
+                      CircularProgressIndicator(
+                        value: value,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        strokeWidth: 12,
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Center(
+                        child: Text(
+                          '${(value * 100).toInt()}%',
+                          style: AppTextStyles.heading3.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ✨ [ART] 풍부한 입체감의 레이어드 베개 아이콘 (이미지 참고)
+class SleepStartJellyIcon extends StatelessWidget {
+  const SleepStartJellyIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 아이콘 크기
+    const double width = 200;
+    const double height = 150;
+
+    // 팔레트
+    const Color colRose = Color(0xFFBD9A8E); // 로즈 브라운
+    const Color colBlue = Color(0xFF6292BE); // 블루
+    const Color colMoon = Color(0xFFF2E6E6); // 달빛
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 1. 베개 모양 그림자 & 테두리 (Glow)
+        CustomPaint(
+          size: const Size(width, height),
+          painter: _SoftPillowPainter(), // ✅ 이제 정의된 클래스를 사용합니다
+        ),
+
+        // 2. 베개 모양으로 내용물 자르기
+        ClipPath(
+          clipper: _SoftPillowClipper(), // ✅ 이제 정의된 클래스를 사용합니다
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              // 배경 그라데이션
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colBlue.withOpacity(0.4),
+                  colRose.withOpacity(0.3),
+                ],
+              ),
+            ),
+            // ☁️ 내부 콘텐츠
+            child: Stack(
+              children: [
+                // Layer 1: 뒤쪽 물결
+                Positioned(
+                  bottom: 40,
+                  left: -20,
+                  right: -20,
+                  height: 80,
+                  child: _buildWave(colBlue.withOpacity(0.5), 0.1),
+                ),
+                // Layer 2: 중간 물결
+                Positioned(
+                  bottom: 20,
+                  left: -30,
+                  right: -30,
+                  height: 90,
+                  child: _buildWave(colRose.withOpacity(0.6), -0.15),
+                ),
+                // Layer 3: 앞쪽 물결
+                Positioned(
+                  bottom: -10,
+                  left: -20,
+                  right: -20,
+                  height: 100,
+                  child: _buildWave(colMoon.withOpacity(0.8), 0.05),
+                ),
+
+                // 반짝이는 별
+                ..._buildSparkles(),
+
+                // 🌙 중앙 달 아이콘
+                Positioned(
+                  top: 30,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Transform.rotate(
+                      angle: -math.pi / 8,
+                      child: Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: colMoon,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: colRose.withOpacity(0.5),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                              offset: const Offset(2, 4),
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withOpacity(0.8),
+                              blurRadius: 10,
+                              spreadRadius: -2,
+                              offset: const Offset(-2, -2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.nightlight_round,
+                          size: 45,
+                          color: colRose.withOpacity(0.8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 상단 유리 광택
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: height / 2,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withOpacity(0.5),
+                          Colors.white.withOpacity(0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWave(Color color, double angle) {
+    return Transform.rotate(
+      angle: angle,
+      child: Container(
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.elliptical(200, 60)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSparkles() {
+    final random = math.Random(42);
+    final sparkles = <Widget>[];
+    final positions = [
+      const Offset(30, 40),
+      const Offset(170, 30),
+      const Offset(160, 110),
+      const Offset(40, 100),
+      const Offset(100, 20),
+      const Offset(150, 60)
+    ];
+
+    for (var pos in positions) {
+      sparkles.add(
+        Positioned(
+          top: pos.dy,
+          left: pos.dx,
+          child: Container(
+            width: random.nextDouble() * 3 + 2,
+            height: random.nextDouble() * 3 + 2,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: const [
+                BoxShadow(color: Colors.white, blurRadius: 3, spreadRadius: 1),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return sparkles;
+  }
+}
+
+// 📐 [Path] 부드러운 쿠션/베개 모양 정의 (누락되었던 부분!)
+Path _getSoftPillowPath(Size size) {
+  final path = Path();
+  final w = size.width;
+  final h = size.height;
+
+  const double r = 30.0;
+  const double curve = 10.0;
+
+  path.moveTo(0, r);
+  path.quadraticBezierTo(curve, h / 2, 0, h - r);
+  path.quadraticBezierTo(0, h, r, h);
+  path.quadraticBezierTo(w / 2, h - curve, w - r, h);
+  path.quadraticBezierTo(w, h, w, h - r);
+  path.quadraticBezierTo(w - curve, h / 2, w, r);
+  path.quadraticBezierTo(w, 0, w - r, 0);
+  path.quadraticBezierTo(w / 2, curve, r, 0);
+  path.quadraticBezierTo(0, 0, 0, r);
+
+  path.close();
+  return path;
+}
+
+// 🎨 [Clipper] (누락되었던 부분!)
+class _SoftPillowClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) => _getSoftPillowPath(size);
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+// 🖌️ [Painter] (누락되었던 부분!)
+class _SoftPillowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _getSoftPillowPath(size);
+
+    // 1. 부드러운 그림자 (Glow)
+    canvas.drawShadow(
+      path,
+      const Color(0xFF6292BE).withOpacity(0.3),
+      15.0,
+      true,
+    );
+
+    // 2. 흰색 테두리
+    final borderPaint = Paint()
+      ..color = Colors.white.withOpacity(0.6)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawPath(path, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }

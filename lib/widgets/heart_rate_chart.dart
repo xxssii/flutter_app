@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
+import '../state/sleep_data_state.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 
@@ -10,6 +12,19 @@ class HeartRateChartSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ Provider로 데이터 가져오기
+    final sleepDataState = Provider.of<SleepDataState>(context);
+    final sleepMetrics = sleepDataState.todayMetrics;
+
+    // 데이터가 없거나 비어있을 경우 처리
+    if (sleepMetrics == null || sleepMetrics.heartRateData.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        alignment: Alignment.center,
+        child: Text('심박수 데이터가 없습니다.', style: AppTextStyles.bodyText),
+      );
+    }
+
     // 그래프에 사용할 그라데이션 색상 (네이비 -> 연한 네이비 -> 투명)
     final List<Color> gradientColors = [
       AppColors.errorRed.withOpacity(0.5), // AppColors.errorRed는 빨간색 계열일 거야
@@ -48,14 +63,25 @@ class HeartRateChartSection extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 30,
-                    interval: 2, // 2시간 간격
+                    interval: 12, // 12개 데이터 = 60초 (1분)
                     getTitlesWidget: (value, meta) {
-                      // X축 시간 표시 (임시 데이터 기준 0~8시간)
-                      // 실제로는 시작 시간(예: 23:00)을 더해서 표시해야 함
-                      int time = (22 + value.toInt()) % 24;
+                      // 시연용: 5초 단위로 데이터가 들어옴
+                      // value는 인덱스 (0, 1, 2...)
+                      int seconds = value.toInt() * 5;
+                      
+                      // 60초 이상이면 분:초로 표시
+                      String timeText;
+                      if (seconds >= 60) {
+                        int min = seconds ~/ 60;
+                        int sec = seconds % 60;
+                        timeText = '$min분${sec > 0 ? " $sec초" : ""}';
+                      } else {
+                        timeText = '${seconds}초';
+                      }
+                      
                       return SideTitleWidget(
                         meta: meta,
-                        child: Text('${time}시', style: AppTextStyles.smallText),
+                        child: Text(timeText, style: AppTextStyles.smallText),
                       );
                     },
                   ),
@@ -84,28 +110,22 @@ class HeartRateChartSection extends StatelessWidget {
                 ),
               ),
               minX: 0,
-              maxX: 8, // 8시간 수면 가정
+              maxX: (sleepMetrics.heartRateData.length > 8) 
+                  ? sleepMetrics.heartRateData.length.toDouble() 
+                  : 8.0, // 데이터 길이에 따라 X축 확장
               minY: 40, // 최소 심박수
-              maxY: 100, // 최대 심박수
+              maxY: 120, // 최대 심박수 (여유 있게)
               lineBarsData: [
                 LineChartBarData(
-                  // 임시 심박수 데이터 (Mock) - 부드러운 곡선을 위해 데이터 배치
-                  spots: const [
-                    FlSpot(0, 75), // 잠들기 시작
-                    FlSpot(1, 68), // 얕은 잠
-                    FlSpot(2, 58), // 깊은 잠 (심박수 하락)
-                    FlSpot(3, 55), // 깊은 잠 유지
-                    FlSpot(4, 65), // REM 수면 (상승)
-                    FlSpot(5, 60), // 다시 잠
-                    FlSpot(6, 70), // REM 수면
-                    FlSpot(7, 62), // 얕은 잠
-                    FlSpot(8, 78), // 기상 직전
-                  ],
-                  isCurved: true, // ✨ 부드러운 곡선 효과
+                  // ✅ 실제 심박수 데이터 사용
+                  spots: sleepMetrics.heartRateData.asMap().entries.map((entry) {
+                    return FlSpot(entry.key.toDouble(), entry.value);
+                  }).toList(),
+                  isCurved: sleepMetrics.heartRateData.length > 1, // 데이터가 1개면 곡선 불가
                   color: AppColors.errorRed, // ✨ 선 색상도 빨간색 계열로 변경
                   barWidth: 3,
                   isStrokeCapRound: true,
-                  dotData: const FlDotData(show: false), // 점 숨기기 (깔끔하게)
+                  dotData: FlDotData(show: sleepMetrics.heartRateData.length == 1), // 데이터 1개면 점 표시
                   belowBarData: BarAreaData(
                     show: true, // ✨ 그래프 아래 색칠하기
                     gradient: LinearGradient(
