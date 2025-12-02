@@ -1,3 +1,5 @@
+// lib/services/ble_service.dart
+
 import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/material.dart';
@@ -83,7 +85,15 @@ class BleService extends ChangeNotifier {
   bool get isWatchConnected => _isWatchConnected;
   bool get isCollectingData => _isCollectingData;
   bool get isScanning => _isScanning;
+
   bool get autoHeightControl => _autoHeightControl;
+
+  // ✅ 리포트용 데이터 (외부에서 접근 가능하도록 추가)
+  double _lastSnoringMinutes = 0.0;
+  double _lastEfficiency = 0.0;
+
+  double get lastSnoringMinutes => _lastSnoringMinutes;
+  double get lastEfficiency => _lastEfficiency;
 
   void toggleAutoHeightControl(bool value) {
     _autoHeightControl = value;
@@ -118,25 +128,27 @@ class BleService extends ChangeNotifier {
 
     try {
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-      
+
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
         for (ScanResult r in results) {
           String deviceName = r.device.platformName.toLowerCase();
 
           if (_pillowDevice == null) {
-             if (deviceName.contains("smartpillow") || 
-                 r.advertisementData.serviceUuids.contains(Guid(PILLOW_SERVICE_UUID))) {
-               print("✅✅✅ 베개 발견: ${r.device.platformName}");
-               _pillowDevice = r.device;
-               connectToPillow();
-             }
+            if (deviceName.contains("smartpillow") ||
+                r.advertisementData.serviceUuids
+                    .contains(Guid(PILLOW_SERVICE_UUID))) {
+              print("✅✅✅ 베개 발견: ${r.device.platformName}");
+              _pillowDevice = r.device;
+              connectToPillow();
+            }
           }
 
           if (_watchDevice == null) {
             if (deviceName.contains("watch") ||
                 deviceName.contains("band") ||
                 deviceName.contains("wristband") ||
-                r.advertisementData.serviceUuids.contains(Guid(WRISTBAND_SERVICE_UUID))) {
+                r.advertisementData.serviceUuids
+                    .contains(Guid(WRISTBAND_SERVICE_UUID))) {
               print("✅✅✅ 팔찌 발견: ${r.device.platformName}");
               _watchDevice = r.device;
               connectToWatch();
@@ -178,16 +190,16 @@ class BleService extends ChangeNotifier {
     try {
       await _scanSubscription?.cancel();
       _scanSubscription = null;
-      
+
       await FlutterBluePlus.stopScan();
-      
+
       if (!_isPillowConnected && _pillowStatus.contains("스캔 중")) {
         _pillowStatus = "스캔 중지됨";
       }
       if (!_isWatchConnected && _watchStatus.contains("스캔 중")) {
         _watchStatus = "스캔 중지됨";
       }
-      
+
       print("🛑 BLE 스캔 완전히 중지됨");
       notifyListeners();
     } catch (e) {
@@ -280,10 +292,12 @@ class BleService extends ChangeNotifier {
                     pressure1_avg = double.parse(values[0]);
                     pressure2_avg = double.parse(values[1]);
                     pressure3_avg = double.parse(values[2]);
-                    pressureAvg = (pressure1_avg + pressure2_avg + pressure3_avg) / 3;
+                    pressureAvg =
+                        (pressure1_avg + pressure2_avg + pressure3_avg) / 3;
 
                     if (_isCollectingData) {
-                      print("📊 [수집 중] 압력: ${pressure1_avg.toStringAsFixed(0)} / ${pressure2_avg.toStringAsFixed(0)} / ${pressure3_avg.toStringAsFixed(0)}");
+                      print(
+                          "📊 [수집 중] 압력: ${pressure1_avg.toStringAsFixed(0)} / ${pressure2_avg.toStringAsFixed(0)} / ${pressure3_avg.toStringAsFixed(0)}");
                       _sendToFirebase();
                     }
 
@@ -312,7 +326,8 @@ class BleService extends ChangeNotifier {
                     isSnoring = micAvg > 100;
 
                     if (_isCollectingData) {
-                      print("🎤 [수집 중] 마이크: ${mic1_avg.toStringAsFixed(0)} / ${mic2_avg.toStringAsFixed(0)} (코골이: $isSnoring)");
+                      print(
+                          "🎤 [수집 중] 마이크: ${mic1_avg.toStringAsFixed(0)} / ${mic2_avg.toStringAsFixed(0)} (코골이: $isSnoring)");
                     }
 
                     _checkAndAdjustHeight();
@@ -377,7 +392,7 @@ class BleService extends ChangeNotifier {
               _subscribeToCharacteristic(c, (value) {
                 try {
                   String rawData = String.fromCharCodes(value);
-                  
+
                   RegExp bpmRegex = RegExp(r'bpm\s*:\s*(\d+)');
                   RegExp spo2Regex = RegExp(r'spo2\s*:\s*(\d+)');
                   RegExp batRegex = RegExp(r'bat:\s*(\d+)');
@@ -415,30 +430,32 @@ class BleService extends ChangeNotifier {
       print("⚠️ 팔찌 서비스 검색 오류: $e");
     }
   }
-  
+
   void _checkAndAdjustHeight() {
     if (!_autoHeightControl) return;
     if (!_isCollectingData) return;
     if (!_isPillowConnected) return;
 
     if (_lastAdjustmentTime != null) {
-      final timeSinceLastAdjustment = DateTime.now().difference(_lastAdjustmentTime!);
+      final timeSinceLastAdjustment =
+          DateTime.now().difference(_lastAdjustmentTime!);
       if (timeSinceLastAdjustment.inSeconds < 30) {
         return;
       }
     }
-    
+
     double hrChange = 0.0;
     if (_prevHeartRate > 0 && heartRate > 0) {
       hrChange = (heartRate - _prevHeartRate).abs();
     }
     _prevHeartRate = heartRate;
-    
+
     double respirationDuration = 0.0;
     if (pressureAvg > 100) {
       _lastBreathingTime = DateTime.now();
     } else if (_lastBreathingTime != null) {
-      respirationDuration = DateTime.now().difference(_lastBreathingTime!).inSeconds.toDouble();
+      respirationDuration =
+          DateTime.now().difference(_lastBreathingTime!).inSeconds.toDouble();
     }
 
     double movementScore = (pressureAvg / 4095.0) * 10.0;
@@ -459,7 +476,7 @@ class BleService extends ChangeNotifier {
 
     if (isSnoring) {
       _snoringCount++;
-      _totalSnoringSeconds += 1; 
+      _totalSnoringSeconds += 1;
 
       if (_snoringCount >= 3) {
         print("😴 연속 코골이 감지 -> 베개 높이 조절");
@@ -475,7 +492,7 @@ class BleService extends ChangeNotifier {
   void startDataCollection() {
     print("\n${'=' * 60}");
     print("✅✅✅ [startDataCollection() 호출됨]");
-    
+
     _isCollectingData = true;
     sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
 
@@ -498,7 +515,7 @@ class BleService extends ChangeNotifier {
   void stopDataCollection() {
     print("\n${'=' * 60}");
     print("⏹️⏹️⏹️ [stopDataCollection() 호출됨]");
-    
+
     _isCollectingData = false;
 
     if (_collectionStartTime != null) {
@@ -510,7 +527,11 @@ class BleService extends ChangeNotifier {
       print("   - 총 수면 시간: ${totalMinutes.toStringAsFixed(1)}분");
       print("   - 총 코골이 시간: ${snoringMinutes.toStringAsFixed(1)}분");
 
-      double snoringScore = _scoreAnalyzer.getSnoringScore(snoringMinutes, totalMinutes);
+      // ✅ 멤버 변수에 저장 (AppState에서 가져갈 수 있도록)
+      _lastSnoringMinutes = snoringMinutes;
+
+      double snoringScore =
+          _scoreAnalyzer.getSnoringScore(snoringMinutes, totalMinutes);
       print("   - 코골이 점수: ${snoringScore.toStringAsFixed(1)} / 10.0");
 
       String? snoringWarning = _scoreAnalyzer.getSnoringWarning(snoringMinutes);
@@ -526,6 +547,9 @@ class BleService extends ChangeNotifier {
         efficiency = ((totalMinutes - lostMinutes) / totalMinutes) * 100.0;
         efficiency = efficiency.clamp(0.0, 100.0);
       }
+      // ✅ 멤버 변수에 저장
+      _lastEfficiency = efficiency;
+
       print("   - 추정 수면 효율: ${efficiency.toStringAsFixed(1)}%");
 
       int totalScore = _scoreAnalyzer.getSleepScore(efficiency, 20.0, 20.0);
@@ -601,6 +625,18 @@ class BleService extends ChangeNotifier {
     }
   }
 
+  Future<void> stopVibration() async {
+    if (kIsWeb || _commandChar == null || !_isPillowConnected) {
+      return;
+    }
+    try {
+      await _commandChar!.write([0x38], withoutResponse: true);
+      print("📤 진동 중지 명령 전송 성공");
+    } catch (e) {
+      print("⚠️ 진동 중지 실패: $e");
+    }
+  }
+
   Future<void> adjustHeight(int cellNumber) async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
       print("⚠️ 명령 실패: 특성 없음 또는 미연결");
@@ -631,8 +667,34 @@ class BleService extends ChangeNotifier {
       String command = "C$cellIndex:$height";
       await _commandChar!.write(command.codeUnits, withoutResponse: true);
       print("📤 셀 높이 조절 명령 전송: $command");
+
+      // ✅ [Backend] 사용자 수동 조절 로그 기록
+      _logUserAction("MANUAL_ADJUST", {
+        "cellIndex": cellIndex,
+        "height": height,
+        "timestamp": DateTime.now().toIso8601String(),
+      });
+
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");
+    }
+  }
+
+  // ✅ 사용자 액션 로깅 (수동 조절 등)
+  Future<void> _logUserAction(String actionType, Map<String, dynamic> payload) async {
+    if (!_isCollectingData) return; // 데이터 수집 중일 때만 기록 (선택 사항)
+
+    try {
+      await _db.collection('user_actions').add({
+        'userId': userId,
+        'sessionId': sessionId,
+        'action': actionType,
+        'payload': payload,
+        'ts': FieldValue.serverTimestamp(),
+      });
+      print("📝 [User Action Logged] $actionType");
+    } catch (e) {
+      print("⚠️ 로그 기록 실패: $e");
     }
   }
 

@@ -43,7 +43,12 @@ class SettingsState extends ChangeNotifier {
   bool get isSmartWakeUpOn => _isSmartWakeUpOn;
   bool get isSmartVibrationOn => _isSmartVibrationOn;
   bool get isSmartPillowAdjustOn => _isSmartPillowAdjustOn;
+
   bool get isExactTimeAlarmOn => _isExactTimeAlarmOn;
+
+  // 진동 세기 (0: 약하게, 1: 강하게)
+  int _vibrationStrength = 1;
+  int get vibrationStrength => _vibrationStrength;
 
   // 자동 조절 상태
   bool _isAutoAdjustOn = true;
@@ -82,6 +87,9 @@ class SettingsState extends ChangeNotifier {
       _isSmartVibrationOn = prefs.getBool('isSmartVibrationOn') ?? true;
       _isSmartPillowAdjustOn = prefs.getBool('isSmartPillowAdjustOn') ?? true;
       _isExactTimeAlarmOn = prefs.getBool('isExactTimeAlarmOn') ?? true;
+
+      // 진동 세기 (0: 약하게, 1: 강하게) - 기본값: 강하게(1)
+      _vibrationStrength = prefs.getInt('vibrationStrength') ?? 1;
 
       // 자동 조절
       _isAutoAdjustOn = prefs.getBool('isAutoAdjustOn') ?? true;
@@ -286,6 +294,15 @@ class SettingsState extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isSmartVibrationOn', value);
+  }
+
+  /// 진동 세기 설정 (0: 약하게, 1: 강하게)
+  Future<void> setVibrationStrength(int value) async {
+    _vibrationStrength = value;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('vibrationStrength', value);
   }
 
   /// 스마트 베개 조절 ON/OFF

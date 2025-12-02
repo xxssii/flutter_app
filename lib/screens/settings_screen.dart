@@ -10,6 +10,7 @@ import '../widgets/alarm_setting_widget.dart';
 import 'profile_screen.dart';
 import 'info_screen.dart';
 import '../services/notification_service.dart';
+import 'alarm_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -194,6 +195,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         '수면 단계와 관계없이 설정된 시간에 진동이 울립니다.',
                         settingsState.isExactTimeAlarmOn,
                         settingsState.toggleExactTimeAlarm,
+                      ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 0.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '진동 세기',
+                              style: AppTextStyles.bodyText.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<int>(
+                                segments: const [
+                                  ButtonSegment<int>(
+                                    value: 1,
+                                    label: Text('강하게'),
+                                    icon: Icon(Icons.vibration),
+                                  ),
+                                  ButtonSegment<int>(
+                                    value: 0,
+                                    label: Text('약하게'),
+                                    icon: Icon(Icons.smartphone),
+                                  ),
+                                ],
+                                selected: {settingsState.vibrationStrength},
+                                onSelectionChanged: (Set<int> newSelection) {
+                                  settingsState.setVibrationStrength(newSelection.first);
+                                },
+                                style: ButtonStyle(
+                                  backgroundColor: MaterialStateProperty.resolveWith<Color>(
+                                    (Set<MaterialState> states) {
+                                      if (states.contains(MaterialState.selected)) {
+                                        return const Color(0xFF011F25);
+                                      }
+                                      return Colors.transparent;
+                                    },
+                                  ),
+                                  foregroundColor: MaterialStateProperty.resolveWith<Color>(
+                                    (Set<MaterialState> states) {
+                                      if (states.contains(MaterialState.selected)) {
+                                        return Colors.white;
+                                      }
+                                      return const Color(0xFF011F25);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const AlarmScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text("알람 화면 테스트 (개발용)"),
+                        ),
                       ),
                     ],
                   ),

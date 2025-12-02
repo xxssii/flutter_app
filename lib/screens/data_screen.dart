@@ -251,24 +251,9 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                 return TabBarView(
                   controller: _tabController,
                   children: [
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: _buildEfficiencyTab(report),
-                    ),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: _buildSleepStagesTab(report),
-                    ),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight,
-                      ),
-                      child: _buildTrendTab(),
-                    ),
+                    _buildEfficiencyTab(report),
+                    _buildSleepStagesTab(report),
+                    _buildTrendTab(),
                     const SleepHistoryScreen(),
                   ],
                 );
@@ -891,6 +876,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     ];
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
@@ -898,7 +884,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
           const SizedBox(height: 16),
           if (_touchedTrendIndex != null)
             _buildTrendDetailsBox(trendData[_touchedTrendIndex!]),
-          const SizedBox(height: 32),
+          const SizedBox(height: 50),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:bottom_navy_bar/bottom_navy_bar.dart';
 import 'package:flutter/foundation.dart'; // kIsWeb 사용
+import 'package:flutter_spinkit/flutter_spinkit.dart'; // 로딩 스피너 추가
 
 import 'screens/home_screen.dart';
 import 'screens/data_screen.dart' as data_screen;
@@ -20,7 +21,7 @@ import 'state/settings_state.dart';
 import 'state/sleep_data_state.dart';
 import 'state/profile_state.dart';
 //test_code
-import 'screens/hardware_test_screen.dart'; // (파일 경로가 다르면 수정 필요)
+// import 'screens/hardware_test_screen.dart'; // (필요하면 주석 해제)
 // Firebase
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -31,10 +32,49 @@ import 'services/ble_service.dart';
 // ✅ 실제 FCM 알림 서비스
 import 'services/notification_service.dart';
 
+import 'package:flutter_native_splash/flutter_native_splash.dart'; // ✅ 패키지 임포트
 
+// 비동기 앱 초기화 로직을 수행할 함수
+Future<void> _performAppInitialization(BuildContext context) async {
+  // 1. Firebase 초기화 (main 함수에서 이미 했지만, 혹시 모를 경우를 대비한 패턴)
+  // WidgetsFlutterBinding.ensureInitialized()는 main에서 이미 호출됨
+  // try {
+  //   await Firebase.initializeApp(
+  //     options: DefaultFirebaseOptions.currentPlatform,
+  //   );
+  //   debugPrint('✅ Firebase 초기화 성공! (AnimatedSplashScreen 내)');
+  // } catch (e) {
+  //   debugPrint('⚠️ Firebase 초기화 경고: $e (AnimatedSplashScreen 내)');
+  // }
+
+  // 2. 사용자 ID 로드 (main 함수에서 이미 했지만, 여기서도 필요하다면)
+  String userId = 'demoUser';
+  try {
+    userId = await UserIdHelper.getUserId();
+    debugPrint('✅ 사용자 ID: $userId (AnimatedSplashScreen 내)');
+  } catch (e) {
+    debugPrint('⚠️ 사용자 ID 생성 실패, demoUser 사용: $e (AnimatedSplashScreen 내)');
+  }
+
+  // 3. FCM 알림 서비스 초기화 (main 함수에서 이미 했지만, 여기서도 필요하다면)
+  try {
+    await NotificationService.instance.init(
+      userId: userId,
+    );
+    debugPrint('✅ 알림 서비스 초기화 완료! (AnimatedSplashScreen 내)');
+  } catch (e) {
+    debugPrint('⚠️ 알림 서비스 초기화 실패: $e (AnimatedSplashScreen 내)');
+  }
+
+  // TODO: 여기에 앱 시작 시 필요한 추가 데이터 로딩 또는 초기화 로직을 추가합니다.
+  // 예: 사용자 설정 불러오기, 초기 데이터베이스 쿼리 등
+  // await Future.delayed(const Duration(seconds: 2)); // 데이터 로딩을 시뮬레이션
+  debugPrint('✅ 앱 초기화 작업 완료!');
+}
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding); // ✅ 스플래시 화면 유지
 
   // 1. Firebase 초기화
   try {
@@ -45,6 +85,7 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('⚠️ Firebase 초기화 경고: $e');
   }
+
   String userId = 'demoUser'; // 기본값
   try {
     userId = await UserIdHelper.getUserId();
@@ -250,9 +291,98 @@ class MyApp extends StatelessWidget {
           ),
           themeMode:
               settingsState.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-          home: const MainWrapper(),
+          home: const AnimatedSplashScreen(), // 첫 화면을 AnimatedSplashScreen으로 설정
         );
       },
+    );
+  }
+}
+
+// ✅ 추가된 AnimatedSplashScreen 위젯
+class AnimatedSplashScreen extends StatefulWidget {
+  const AnimatedSplashScreen({super.key});
+
+  @override
+  State<AnimatedSplashScreen> createState() => _AnimatedSplashScreenState();
+}
+
+class _AnimatedSplashScreenState extends State<AnimatedSplashScreen> {
+  // 앱 초기화 상태를 추적하는 Future
+  late Future<void> _initializationFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializationFuture = _performAppInitialization(context);
+    // ✅ 화면이 빌드된 후 네이티브 스플래시를 즉시 제거하여 로딩 화면(AnimatedSplashScreen)이 보이게 함
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // 다크 모드 여부에 따라 배경색과 스피너 색상 결정
+    // Native Splash와 색상을 일치시켜 자연스러운 전환 유도 (#1A237E)
+    final backgroundColor = const Color(0xFF1A237E);
+    final spinnerColor = Colors.white;
+
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: Stack(
+        fit: StackFit.expand, // ✅ 스택을 화면 전체로 확장
+        children: [
+          // 1. 배경 이미지 (전체 화면)
+          Image.asset(
+            'assets/logo.png',
+            fit: BoxFit.cover, // ✅ 화면을 꽉 채우도록 설정
+          ),
+          
+          // 2. 로딩 스피너 및 텍스트 (위에 겹쳐서 표시)
+          FutureBuilder(
+            future: _initializationFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => const MainWrapper()),
+                  );
+                });
+                return Container();
+              } else {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 200), // 로고 가리지 않게 약간 아래로 내림 (조절 가능)
+                      SpinKitRing(
+                        color: spinnerColor,
+                        size: 50.0,
+                        lineWidth: 3.0,
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        '앱 초기화 중...',
+                        style: AppTextStyles.bodyText.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              offset: const Offset(1.0, 1.0),
+                              blurRadius: 3.0,
+                              color: Colors.black.withOpacity(0.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 }

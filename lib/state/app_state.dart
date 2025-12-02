@@ -1,5 +1,5 @@
 // lib/state/app_state.dart
-// ✅ [수정 완료] NotificationService 호출 에러 해결 버전
+// ✅ [수정 완료] NotificationService 호출 에러 해결 및 테스트 코드 포함 버전
 
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -14,6 +14,7 @@ import '../widgets/apnea_report_dialog.dart';
 import '../services/ble_service.dart';
 import '../state/settings_state.dart';
 import '../screens/sleep_report_screen.dart';
+import '../screens/alarm_screen.dart'; // ✅ AlarmScreen 임포트
 
 // ✅ 시연용으로 사용할 고정 ID 정의
 const String DEMO_USER_ID = "capstone_demo_session_01";
@@ -43,6 +44,7 @@ class AppState extends ChangeNotifier {
   double get currentHeartRate => _currentHeartRate;
   double get currentSpo2 => _currentSpo2;
   double get currentMovementScore => _currentMovementScore;
+  String get currentUserId => _currentUserId;
   double get currentPressure => _bleService?.pressureAvg ?? 0.0;
   bool get isSnoringNow => _bleService?.isSnoring ?? false;
 
@@ -160,6 +162,9 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  // ✅ 알람이 이미 울렸는지 확인하는 플래그 (날짜별 관리 필요하지만 간단히 메모리 변수로)
+  DateTime? _lastAlarmTriggeredDate;
+
   void _checkAlarmTrigger(BuildContext context) {
     if (_settingsState == null ||
         !_settingsState!.isAlarmOn ||
@@ -170,12 +175,47 @@ class AppState extends ChangeNotifier {
     final now = DateTime.now();
     final alarmTime = _settingsState!.alarmTime!;
 
-    if (_settingsState!.isExactTimeAlarmOn &&
-        now.hour == alarmTime.hour &&
-        now.minute == alarmTime.minute &&
-        now.second == 0) {
-      print("⏰ 알람 시간 도달! 팔찌로 진동 명령 전송.");
-      Provider.of<BleService>(context, listen: false).sendVibrateStrong();
+    // 1. 오늘 이미 알람이 울렸는지 확인
+    if (_lastAlarmTriggeredDate != null &&
+        _lastAlarmTriggeredDate!.year == now.year &&
+        _lastAlarmTriggeredDate!.month == now.month &&
+        _lastAlarmTriggeredDate!.day == now.day) {
+      return;
+    }
+
+    // 2. 시간 비교 (분 단위까지)
+    if (now.hour == alarmTime.hour && now.minute == alarmTime.minute) {
+      print("⏰ [알람 트리거] 시간이 되었습니다! (${alarmTime.format(context)})");
+      
+      // 3. 알람 실행
+      _triggerAlarm(context);
+      
+      // 4. 플래그 업데이트
+      _lastAlarmTriggeredDate = now;
+    }
+  }
+
+  void _triggerAlarm(BuildContext context) async {
+    // 1. 진동 명령 전송 (설정된 세기에 따라)
+    if (_bleService != null && _bleService!.isPillowConnected) {
+      print("📳 [알람] 베개 진동 시작 (세기: ${_settingsState!.vibrationStrength})");
+      if (_settingsState!.vibrationStrength == 1) {
+        await _bleService!.sendVibrateStrong();
+      } else {
+        await _bleService!.sendVibrateGently();
+      }
+    } else {
+      print("⚠️ [알람] 베개 미연결 (진동 명령 건너뜀)");
+    }
+
+    // 2. 알람 화면 띄우기
+    if (context.mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const AlarmScreen(),
+          fullscreenDialog: true, // 전체 화면 모달 느낌
+        ),
+      );
     }
   }
 
@@ -225,10 +265,21 @@ class AppState extends ChangeNotifier {
     final settings = _settingsState!;
     final List<String> reportDetails = [];
 
-    double finalSleepEfficiency = 80.0;
-    double finalRemRatio = 22.0;
+    // ✅ [수정됨] BleService의 실제 측정 데이터 사용
+    double finalSleepEfficiency = _bleService?.lastEfficiency ?? 0.0;
+    double finalRemRatio = 22.0; 
     double finalDeepSleepRatio = 18.0;
-    double finalSnoringDuration = 30.0;
+    double finalSnoringDuration = _bleService?.lastSnoringMinutes ?? 0.0;
+
+    // 🧪 [테스트 모드] 강제 경고 값 설정
+    if (finalSleepEfficiency >= 85.0 || finalSleepEfficiency == 0.0) {
+      print("🧪 [테스트] 수면 효율 강제 조정 (100 -> 80)");
+      finalSleepEfficiency = 80.0; 
+    }
+    if (finalSnoringDuration == 0.0) {
+      print("🧪 [테스트] 코골이 시간 강제 조정 (0 -> 30)");
+      finalSnoringDuration = 30.0; 
+    }
 
     int score = analyzer.getSleepScore(
       finalSleepEfficiency,
@@ -239,21 +290,34 @@ class AppState extends ChangeNotifier {
     String reportTitle = "어젯밤 수면 점수는 ${score}점입니다.";
 
     if (settings.isReportOn) {
-      // ✅ [오류 수정 부분] getBody: 매개변수 제거하고 순서대로 전달
       NotificationService.instance.scheduleDailyReportNotification(
         reportTitle,
-        reportBody, 
+        reportBody,
       );
     }
 
     if (settings.isEfficiencyOn) {
       String? efficiencyWarning = analyzer.getEfficiencyWarning(finalSleepEfficiency);
-      if (efficiencyWarning != null) reportDetails.add("경고: $efficiencyWarning");
+      if (efficiencyWarning != null) {
+        reportDetails.add("경고: $efficiencyWarning");
+        NotificationService.instance.showImmediateWarning(
+          2,
+          '⚠️ 수면 효율 저하',
+          efficiencyWarning,
+        );
+      }
     }
 
     if (settings.isSnoringOn) {
       String? snoringWarning = analyzer.getSnoringWarning(finalSnoringDuration);
-      if (snoringWarning != null) reportDetails.add("경고: $snoringWarning");
+      if (snoringWarning != null) {
+        reportDetails.add("경고: $snoringWarning");
+        NotificationService.instance.showImmediateWarning(
+          3,
+          '💤 코골이 감지',
+          snoringWarning,
+        );
+      }
     }
 
     if (_apneaEvents.isNotEmpty) {

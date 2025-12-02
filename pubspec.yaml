@@ -39,6 +39,8 @@ dependencies:
   flutter_local_notifications: ^19.5.0
   device_info_plus: ^12.3.0
   shared_preferences: ^2.5.3
+  # 스플래시 화면 패키지 추가
+  flutter_native_splash: ^2.3.1
 
 dev_dependencies:
   flutter_test:
@@ -50,10 +52,31 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
-    - assets/icon/ 
+    - assets/icon/
 
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon/app_icon.png"
   min_sdk_android: 21
+
+# 스플래시 화면 설정 (최상위 레벨에 위치)
+flutter_native_splash:
+  # color: "#1A237E" # 배경색 제거 (배경 이미지가 덮음)
+  # image: "assets/logo.png" # 중앙 로고 제거
+  
+  # ✅ 배경 이미지를 전체 화면으로 설정
+  background_image: "assets/logo.png"
+  background_image_dark: "assets/logo_dark.png"
+  
+  android: true
+  ios: true
+  web: true
+  fullscreen: true # ✅ 전체 화면 모드 (상단바 숨김)
+
+  # ✅ Android 12+ 지원 설정 (필수!)
+  android_12:
+    image: "assets/logo.png"
+    icon_background_color: "#1A237E"
+    image_dark: "assets/logo_dark.png"
+    icon_background_color_dark: "#1A237E"
