@@ -161,7 +161,16 @@ class AppState extends ChangeNotifier {
   // ----------------------------------------------------
 
   void _startMockDataStream(BuildContext context) {
+    // ✅ [메모리 최적화] 기존 타이머가 있다면 확실히 취소
+    _sensorDataTimer?.cancel();
+
     _sensorDataTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      // ✅ [안전장치] 측정 중 아니면 타이머 강제 종료
+      if (!_isMeasuring) {
+        timer.cancel();
+        _sensorDataTimer = null;
+        return;
+      }
       // BLE 데이터가 있으면 그걸 쓰고, 없으면 Mock 데이터 사용
       if (_bleService != null && _bleService!.isCollectingData) {
         _currentHeartRate = _bleService!.heartRate;
@@ -192,7 +201,7 @@ class AppState extends ChangeNotifier {
           }
           
           _sessionSnoringData.add(SnoringDataPoint(DateTime.now(), decibel));
-          print("📝 [DataCollection] 1분 데이터 저장: HR=$_currentHeartRate, dB=$decibel");
+          // print("📝 [DataCollection] 데이터 저장: HR=$_currentHeartRate, dB=$decibel"); // 로그 과다 방지
         }
       }
       notifyListeners();
