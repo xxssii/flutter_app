@@ -385,33 +385,59 @@ class BleService extends ChangeNotifier {
         return;
     }
 
-    // 2. 레벨 -> 작동 시간 변환 로직 (하드웨어 팀 값 대기 중)
-    // 💡 나중에 하드웨어 팀이 "2단계는 4초 켜야 해요" 하면 여기 숫자만 고치세요!
+    // 2. 레벨 -> 작동 시간 변환 로직 (하드웨어 팀 제공 값 적용)
+    // ✅ 하드웨어 팀 제공 시간 값:
+    // 1단계: 1번 에어셀 25초, 2번 에어셀 35초, 3번 에어셀 20초
+    // 2단계: 1번 에어셀 50초, 2번 에어셀 75초, 3번 에어셀 40초
     int durationMs = 0;
     
-    switch (targetLevel) {
-      case 1: 
-        durationMs = 0;    // 0 = 배기 (공기 빼기 / 기본 높이)
-        break;
-      case 2: 
-        durationMs = 3000; // 3초 주입 (중간 높이)
-        break;
-      case 3: 
-        durationMs = 6000; // 6초 주입 (최대 높이)
-        break;
-      default: 
-        durationMs = 1000;
+    if (targetLevel == 0) {
+      // 0 = 배기 (공기 빼기 / 기본 높이)
+      durationMs = 0;
+    } else if (targetLevel == 1) {
+      // 1단계: 셀별로 다른 시간 적용
+      switch (cellIndex) {
+        case 1:
+          durationMs = 25 * 1000; // 25초
+          break;
+        case 2:
+          durationMs = 35 * 1000; // 35초
+          break;
+        case 3:
+          durationMs = 20 * 1000; // 20초
+          break;
+        default:
+          durationMs = 25 * 1000;
+      }
+    } else if (targetLevel == 2) {
+      // 2단계: 셀별로 다른 시간 적용
+      switch (cellIndex) {
+        case 1:
+          durationMs = 50 * 1000; // 50초
+          break;
+        case 2:
+          durationMs = 75 * 1000; // 75초
+          break;
+        case 3:
+          durationMs = 40 * 1000; // 40초
+          break;
+        default:
+          durationMs = 50 * 1000;
+      }
+    } else {
+      // 기본값
+      durationMs = 25 * 1000;
     }
 
     try {
-      // 3. 프로토콜 생성: "C{셀번호}:{밀리초}" (예: "C1:6000")
+      // 3. 프로토콜 생성: "C{셀번호}:{밀리초}" (예: "C1:25000")
       String command = "C$cellIndex:$durationMs";
       
       // 4. 전송 (withoutResponse: false로 안정성 확보)
       // string을 byte로 변환해서 전송
       await _commandChar!.write(command.codeUnits, withoutResponse: false);
       
-      print("📤 [명령 전송] 셀 $cellIndex번 → Level $targetLevel (${durationMs}ms 가동)");
+      print("📤 [명령 전송] 셀 $cellIndex번 → Level $targetLevel (${durationMs}ms = ${durationMs ~/ 1000}초 가동)");
       
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");

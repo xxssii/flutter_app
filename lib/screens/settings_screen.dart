@@ -10,6 +10,7 @@ import '../widgets/alarm_setting_widget.dart';
 import 'profile_screen.dart';
 import 'info_screen.dart';
 import '../services/notification_service.dart';
+import '../services/ble_service.dart';
 import 'alarm_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -259,6 +260,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Center(
                         child: ElevatedButton(
                           onPressed: () {
+                            // ✅ 진동 시작 (하드웨어 테스트 화면처럼)
+                            final bleService = Provider.of<BleService>(context, listen: false);
+                            if (settingsState.vibrationStrength == 1) {
+                              bleService.sendVibrateStrong();
+                            } else {
+                              bleService.sendVibrateGently();
+                            }
+                            // 알람 화면으로 이동
                             Navigator.push(
                               context,
                               MaterialPageRoute(
