@@ -144,13 +144,13 @@ class _SleepModeScreenState extends State<SleepModeScreen>
                   child: Icon(Icons.mic, color: Colors.white),
                 ),
                 title: const Text("코골이 발생 (Snoring)"),
-                subtitle: const Text("반응: 목 부분 높이기 (3초)"),
+                subtitle: const Text("반응: 목 부분 높이기 (6초)"),
                 trailing: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
                   onPressed: () {
                     Navigator.pop(context); // 창 닫기
                     // '1'번 명령: Cell 1(목) 주입
-                    _triggerSimulation(context, ble, '1', "코골이", 3);
+                    _triggerSimulation(context, ble, '1', "코골이", 6);
                   },
                   child: const Text("발생"),
                 ),
@@ -164,13 +164,13 @@ class _SleepModeScreenState extends State<SleepModeScreen>
                   child: Icon(Icons.warning_amber_rounded, color: Colors.white),
                 ),
                 title: const Text("무호흡 감지 (Apnea)"),
-                subtitle: const Text("반응: 강한 진동 알림 (2초)"),
+                subtitle: const Text("반응: 강한 진동 알림 (5초)"),
                 trailing: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                   onPressed: () {
                     Navigator.pop(context);
                     // '7'번 명령: 진동 강하게
-                    _triggerSimulation(context, ble, '7', "무호흡(저산소)", 2);
+                    _triggerSimulation(context, ble, '7', "무호흡(저산소)", 5);
                   },
                   child: const Text("발생"),
                 ),

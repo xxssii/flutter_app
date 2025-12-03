@@ -260,7 +260,7 @@ class AppState extends ChangeNotifier {
       bleService.sendVibrateStrong();
 
       // 베개도 최대로!
-      bleService.adjustCell(1, 3);
+      bleService.adjustCell(1, 2);
     }
   }
 
@@ -329,7 +329,7 @@ class AppState extends ChangeNotifier {
 
     // 2. 베개 높이 조절 (기상 유도: 상체 일으키기)
     // 1번 셀(머리)을 최대 높이로
-    bleService.adjustCell(1, 3); // Level 3
+    bleService.adjustCell(1, 2); // Level 2 (최대)
 
     // ✅ 알람 화면 표시 (이미 표시되지 않았을 때만)
     if (!_alarmScreenShown) {
