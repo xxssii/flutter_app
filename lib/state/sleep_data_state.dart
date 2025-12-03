@@ -1,11 +1,9 @@
-// lib/state/sleep_data_state.dart
-// ✅ 최종 버전: 디버깅 로그 포함
-
 import 'package:flutter/material.dart';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../utils/app_colors.dart';
 
+// ✅ 소음 데이터 모델
 class SnoringDataPoint {
   final DateTime time;
   final double decibel;
@@ -15,6 +13,7 @@ class SnoringDataPoint {
   }
 }
 
+// ✅ 수면 지표 모델
 class SleepMetrics {
   final String reportDate;
   final double totalSleepDuration;
@@ -47,13 +46,6 @@ class SleepMetrics {
   });
 }
 
-class TstTibData {
-  final String dayLabel;
-  final double tib;
-  final double tst;
-  TstTibData({required this.dayLabel, required this.tib, required this.tst});
-}
-
 class SleepDataState extends ChangeNotifier {
   String _selectedPeriod = '최근7일';
   String get selectedPeriod => _selectedPeriod;
@@ -74,6 +66,12 @@ class SleepDataState extends ChangeNotifier {
 
   SleepMetrics get todayMetrics => _todayMetrics;
 
+  // ✅ [복구됨] 화면에서 선택한 날짜의 데이터를 메인에 표시하기 위한 함수
+  void setTodayMetrics(SleepMetrics metrics) {
+    _todayMetrics = metrics;
+    notifyListeners();
+  }
+
   SleepMetrics _generateTodayMockMetrics() {
     final List<double> mockHeartRate = List.generate(49, (index) => 60.0);
     return SleepMetrics(
@@ -93,11 +91,7 @@ class SleepDataState extends ChangeNotifier {
     );
   }
 
-  void setTodayMetrics(SleepMetrics metrics) {
-    _todayMetrics = metrics;
-    notifyListeners();
-  }
-
+  // ✅ [복구됨] 수면 데이터 저장 함수
   Future<void> saveSleepData(BuildContext context, String userId, SleepMetrics metrics) async {
     try {
       _isLoading = true;
@@ -135,13 +129,13 @@ class SleepDataState extends ChangeNotifier {
     }
   }
 
+  // ✅ 데이터 불러오기 함수
   Future<void> fetchAllSleepReports(String userId, {BuildContext? context}) async {
     try {
       print('📥 [1/5] 데이터 가져오기 시작...');
       _isLoading = true;
       notifyListeners();
 
-      print('📥 [2/5] Firebase 쿼리 실행 중...');
       QuerySnapshot snapshot = await FirebaseFirestore.instance
           .collection('sleep_reports') 
           .where('userId', isEqualTo: userId) 
@@ -161,43 +155,35 @@ class SleepDataState extends ChangeNotifier {
           final deepSleepHours = (summary['deep_sleep_hours'] as num?)?.toDouble() ?? 0.0;
           final remSleepHours = (summary['rem_sleep_hours'] as num?)?.toDouble() ?? 0.0;
           final lightSleepHours = (summary['light_sleep_hours'] as num?)?.toDouble() ?? 0.0;
-          final awakeHours = (summary['awake_hours'] as num?)?.toDouble() ?? 0.0;
           
           final deepRatio = (summary['deep_ratio'] as num?)?.toDouble() ?? 0.0;
           final remRatio = (summary['rem_ratio'] as num?)?.toDouble() ?? 0.0;
-          final awakeRatio = (summary['awake_ratio'] as num?)?.toDouble() ?? 0.0;
-          
-          final totalScore = (data['total_score'] as num?)?.toDouble() ?? 0.0;
           final snoringDuration = (summary['snoring_duration'] as num?)?.toDouble() ?? 0.0;
           final apneaCount = (summary['apnea_count'] as num?)?.toInt() ?? 0;
-          
-          // 🔍 디버깅 로그!
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          print('📊 세션: ${data['sessionId']}');
-          print('⏰ 총 수면: ${totalDurationHours}시간');
-          print('💤 깊은 수면: ${deepSleepHours}시간');
-          print('💤 얕은 수면: ${lightSleepHours}시간');
-          print('💤 REM 수면: ${remSleepHours}시간');
-          print('😴 깬 시간: ${awakeHours}시간 ← 중요!');
-          print('📈 깊은 비율: ${deepRatio}%');
-          print('📈 REM 비율: ${remRatio}%');
-          print('📈 깼 비율: ${awakeRatio}% ← 중요!');
-          
+
+          // 깬 시간 보정 로직
+          double awakeHours = (summary['awake_hours'] as num?)?.toDouble() ?? 0.0;
           final actualSleepTime = deepSleepHours + remSleepHours + lightSleepHours;
-          final timeInBed = actualSleepTime + awakeHours;
+
+          if (awakeHours == 0 && totalDurationHours > actualSleepTime) {
+             awakeHours = totalDurationHours - actualSleepTime;
+          }
           
-          print('🛏️ 실제 수면: ${actualSleepTime.toStringAsFixed(2)}시간');
-          print('🛏️ 누운 시간: ${timeInBed.toStringAsFixed(2)}시간');
+          double timeInBed = totalDurationHours;
+          if ((actualSleepTime + awakeHours) > timeInBed) {
+            timeInBed = actualSleepTime + awakeHours;
+          }
           
-          final sleepEfficiency = timeInBed > 0 ? (actualSleepTime / timeInBed) * 100 : 0.0;
-          
-          print('✅ 계산된 효율: ${sleepEfficiency.toStringAsFixed(1)}%');
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+          double sleepEfficiency = 0.0;
+          if (timeInBed > 0) {
+            sleepEfficiency = (actualSleepTime / timeInBed) * 100;
+            if (sleepEfficiency > 100.0) sleepEfficiency = 100.0;
+          }
           
           sleepHistory.add(
             SleepMetrics(
               reportDate: data['sessionId'] ?? 'unknown',
-              totalSleepDuration: totalDurationHours,
+              totalSleepDuration: actualSleepTime,
               timeInBed: timeInBed,
               sleepEfficiency: sleepEfficiency,
               remRatio: remRatio,
@@ -211,36 +197,29 @@ class SleepDataState extends ChangeNotifier {
               snoringDecibelData: [],
             ),
           );
-          print('✅ 데이터 파싱 성공: ${data['sessionId']}');
         } catch (e) {
           print('⚠️ 문서 파싱 에러 (건너뛰기): $e');
           continue;
         }
       }
 
-      print('📥 [4/5] 총 ${sleepHistory.length}개 데이터 파싱 완료');
-
       if (sleepHistory.isNotEmpty) {
         _todayMetrics = sleepHistory.first; 
-        print("✅ [5/5] 최신 데이터 업데이트 완료!");
-        print("📊 첫 번째 데이터: ${_todayMetrics.totalSleepDuration}시간");
       } else {
-        print("⚠️ [5/5] 데이터가 없습니다. 기본값 유지");
         _todayMetrics = _generateTodayMockMetrics();
       }
     } catch (e, stackTrace) {
       print('❌ 데이터 불러오기 실패!');
       print('❌ 에러: $e');
-      print('❌ 스택 트레이스: $stackTrace');
       sleepHistory = [];
       _todayMetrics = _generateTodayMockMetrics();
     } finally {
       _isLoading = false;
       notifyListeners();
-      print('✅ fetchAllSleepReports 완료!\n');
     }
   }
 
+  // ✅ [복구됨] UI 헬퍼 함수들
   String get averageSleepDurationStr {
     if (sleepHistory.isEmpty) return "-";
     final recent = sleepHistory.take(7);

@@ -45,17 +45,42 @@ class AnalysisScreen extends StatelessWidget {
   Widget _buildReportCard(Map<String, dynamic> data) {
     // 데이터 파싱
     final summary = data['summary'] as Map<String, dynamic>;
-    final breakdown = data['breakdown'] as Map<String, dynamic>?;
-    
     final dateStr = data['created_at']?.toString().split('T')[0] ?? '날짜 없음';
     final score = data['total_score'] ?? 0;
-    final totalSleep = summary['total_duration_hours'] ?? 0.0;
-    final efficiency = summary['awake_ratio'] != null ? (100 - (summary['awake_ratio'] as num)) : 0; // Awake 비율 역산
-    final remRatio = summary['rem_ratio'] ?? 0;
 
-    // 누운 시간 대비 실 수면 시간 (간단히 계산)
-    // 실제로는 누운 시간 데이터가 따로 있어야 하지만, 여기선 총 수면 / (총 수면 + Awake) 로 근사치 표현
-    // 혹은 total_duration_hours를 실 수면 시간으로 가정.
+    // ✅ [수정] 안전한 변수 추출 및 계산 로직 적용
+    double deep = (summary['deep_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+    double rem = (summary['rem_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+    double light = (summary['light_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+    double awake = (summary['awake_hours'] as num?)?.toDouble() ?? 0.0;
+    double totalLog = (summary['total_duration_hours'] as num?)?.toDouble() ?? 0.0;
+
+    // 실 수면 시간 합계
+    double actualSleep = deep + rem + light;
+
+    // 깬 시간이 0이면 역산 시도
+    if (awake == 0 && totalLog > actualSleep) {
+      awake = totalLog - actualSleep;
+    }
+
+    // 누운 시간 (Time In Bed)
+    double timeInBed = actualSleep + awake;
+    
+    // 안전장치: DB의 total과 계산된 timeInBed 중 큰 값 사용 (데이터 누락 방지)
+    if (totalLog > timeInBed) timeInBed = totalLog;
+
+    // 효율 계산
+    double efficiency = 0;
+    if (timeInBed > 0) {
+      efficiency = (actualSleep / timeInBed) * 100;
+      if (efficiency > 100) efficiency = 100; // 100% 초과 방지
+    }
+
+    // REM 비율 계산
+    double remRatio = 0;
+    if (timeInBed > 0) {
+      remRatio = (rem / timeInBed) * 100; 
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -80,9 +105,9 @@ class AnalysisScreen extends StatelessWidget {
             ),
             const Divider(),
             const SizedBox(height: 8),
-            _buildRow('총 수면 시간', '${totalSleep.toStringAsFixed(1)} 시간'),
-            _buildRow('수면 효율', '${efficiency.toStringAsFixed(1)} %'),
-            _buildRow('REM 수면 비율', '${remRatio.toStringAsFixed(1)} %'),
+            _buildRow('총 수면 시간', '${actualSleep.toStringAsFixed(1)} 시간'),
+            _buildRow('수면 효율', '${efficiency.toStringAsFixed(0)} %'),
+            _buildRow('REM 수면 비율', '${remRatio.toStringAsFixed(0)} %'),
             const SizedBox(height: 8),
             const Text("수면 단계 분포:", style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),

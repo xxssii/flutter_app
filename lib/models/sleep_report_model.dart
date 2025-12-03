@@ -23,12 +23,10 @@ class SleepReport {
     required this.breakdown,
   });
 
-  // 1. Cloud Functions API 응답(JSON Map)으로부터 객체 생성
   factory SleepReport.fromJson(Map<String, dynamic> json) {
     return SleepReport(
       sessionId: json['sessionId'] ?? '',
       userId: json['userId'] ?? '',
-      // Cloud Functions는 날짜를 ISO 8601 문자열로 반환하므로 DateTime.parse 사용
       createdAt: DateTime.parse(json['created_at']),
       totalScore: json['total_score'] ?? 0,
       grade: json['grade'] ?? '',
@@ -38,13 +36,11 @@ class SleepReport {
     );
   }
 
-  // 2. Firestore 문서(DocumentSnapshot)로부터 객체 생성
   factory SleepReport.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return SleepReport(
       sessionId: doc.id,
       userId: data['userId'] ?? '',
-      // Firestore는 날짜를 Timestamp 객체로 저장하므로 toDate() 사용
       createdAt: (data['created_at'] as Timestamp).toDate(),
       totalScore: data['total_score'] ?? 0,
       grade: data['grade'] ?? '',
@@ -54,39 +50,30 @@ class SleepReport {
     );
   }
 
-  // ---------------------------------------------------------
-  // ✅ UI에서 사용하기 위한 편의 Getter
-  // ---------------------------------------------------------
-
-  /// 1. 실제 수면 시간 (UI 연결용)
-  double get totalSleepDuration => summary.totalDurationHours;
-
-  /// 2. 누운 시간 계산 로직 (핵심 수정 사항!)
-  /// 공식: 실 수면 시간 + 깬 시간 = 총 누운 시간
+  // 편의 Getter
+  double get totalSleepDuration => summary.totalDurationHours; // 실제 수면 시간 (TIB 아님)
+  
+  // 💡 수정됨: Time In Bed 계산 (수면 시간 + 깬 시간)
   double get timeInBed => summary.totalDurationHours + summary.awakeHours;
 
-  /// 3. 수면 효율 (자동 계산)
-  /// 공식: (실 수면 / 누운 시간) * 100
   double get sleepEfficiency {
     if (timeInBed == 0) return 0.0;
-    return (totalSleepDuration / timeInBed) * 100;
+    double eff = (totalSleepDuration / timeInBed) * 100;
+    return eff > 100 ? 100 : eff; // 100% 초과 방지
   }
 
-  /// 4. 기타 비율 데이터 연결
   double get remRatio => summary.remRatio;
   double get deepSleepRatio => summary.deepRatio;
-
-  /// 5. 날짜 정보 (sessionId가 'session-2024-11-27' 형식이므로 그대로 사용)
   String get reportDate => sessionId;
 }
 
-// 수면 요약 데이터 모델
+// ✅ 수면 요약 데이터 모델 (수정된 로직 포함)
 class SleepSummary {
-  final double totalDurationHours;
+  final double totalDurationHours; // 여기서는 '실제 수면 시간' 혹은 '기록된 총 시간'
   final double deepSleepHours;
   final double remSleepHours;
   final double lightSleepHours;
-  final double awakeHours;
+  final double awakeHours; // 💡 0일 경우 자동 보정됨
   final double deepRatio;
   final double remRatio;
   final double awakeRatio;
@@ -107,17 +94,33 @@ class SleepSummary {
   });
 
   factory SleepSummary.fromMap(Map<String, dynamic> data) {
-    // 👇 1. 디버깅용 로그 - 수면 데이터 확인
-    print('🔍 수면 데이터 확인: $data');
+    // 1. 수면 시간 파싱
+    double total = (data['total_duration_hours'] ?? 0).toDouble();
+    double deep = (data['deep_sleep_hours'] ?? 0).toDouble();
+    double rem = (data['rem_sleep_hours'] ?? 0).toDouble();
+    double light = (data['light_sleep_hours'] ?? 0).toDouble();
     
+    // 2. 깬 시간 파싱 및 자동 보정
+    double parsedAwake = (data['awake_hours'] ?? 0).toDouble();
+    double actualSleep = deep + rem + light;
+    
+    // 데이터에 awake_hours가 0인데, 총 시간이 수면 시간보다 길다면 그 차이를 깬 시간으로 간주
+    if (parsedAwake <= 0 && total > actualSleep) {
+      parsedAwake = total - actualSleep;
+      if (parsedAwake < 0) parsedAwake = 0;
+    }
+
+    // 3. 만약 'total_duration_hours'가 실제 수면 시간의 합보다 작다면(데이터 오류), 실제 수면 시간 합으로 대체
+    if (total < actualSleep) {
+      total = actualSleep;
+    }
+
     return SleepSummary(
-      totalDurationHours: (data['total_duration_hours'] ?? 0).toDouble(),
-      deepSleepHours: (data['deep_sleep_hours'] ?? 0).toDouble(),
-      remSleepHours: (data['rem_sleep_hours'] ?? 0).toDouble(),
-      lightSleepHours: (data['light_sleep_hours'] ?? 0).toDouble(),
-      
-      // 👇 2. awake_hours 키 값 확인 필요
-      awakeHours: (data['awake_hours'] ?? 0).toDouble(),
+      totalDurationHours: actualSleep, // 실제 수면 시간으로 매핑
+      deepSleepHours: deep,
+      remSleepHours: rem,
+      lightSleepHours: light,
+      awakeHours: parsedAwake,
       
       deepRatio: (data['deep_ratio'] ?? 0).toDouble(),
       remRatio: (data['rem_ratio'] ?? 0).toDouble(),
@@ -128,7 +131,7 @@ class SleepSummary {
   }
 }
 
-// 세부 점수 데이터 모델
+// ✅ 세부 점수 데이터 모델 (누락되었던 부분)
 class Breakdown {
   final int durationScore;
   final int deepScore;
