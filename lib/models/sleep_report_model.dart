@@ -53,6 +53,31 @@ class SleepReport {
       breakdown: Breakdown.fromMap(data['breakdown'] ?? {}),
     );
   }
+
+  // ---------------------------------------------------------
+  // ✅ UI에서 사용하기 위한 편의 Getter
+  // ---------------------------------------------------------
+
+  /// 1. 실제 수면 시간 (UI 연결용)
+  double get totalSleepDuration => summary.totalDurationHours;
+
+  /// 2. 누운 시간 계산 로직 (핵심 수정 사항!)
+  /// 공식: 실 수면 시간 + 깬 시간 = 총 누운 시간
+  double get timeInBed => summary.totalDurationHours + summary.awakeHours;
+
+  /// 3. 수면 효율 (자동 계산)
+  /// 공식: (실 수면 / 누운 시간) * 100
+  double get sleepEfficiency {
+    if (timeInBed == 0) return 0.0;
+    return (totalSleepDuration / timeInBed) * 100;
+  }
+
+  /// 4. 기타 비율 데이터 연결
+  double get remRatio => summary.remRatio;
+  double get deepSleepRatio => summary.deepRatio;
+
+  /// 5. 날짜 정보 (sessionId가 'session-2024-11-27' 형식이므로 그대로 사용)
+  String get reportDate => sessionId;
 }
 
 // 수면 요약 데이터 모델

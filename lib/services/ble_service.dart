@@ -376,9 +376,8 @@ class BleService extends ChangeNotifier {
   // ✅ [수정] 현재 레벨 추적을 위한 변수 추가
   final Map<int, int> _currentCellLevels = {}; // cellIndex -> currentLevel
 
-  // ✅ [최종 통합] 레벨(Level)을 받아서 시간(Duration)으로 변환하여 쏘는 로직
-  // ✅ [핵심 수정] 이전 레벨에서 목표 레벨로 가기 위한 **증분 시간**을 계산합니다.
-  // 예: 2번 에어셀이 1단계(35초)에서 2단계(75초)로 올리려면 40초 추가로 넣어야 함
+  // ✅ [수정] 하드웨어 테스트 화면과 동일한 원시 명령어("1", "a" 등) 사용
+  // 앱에서 시간을 재고 멈춤 명령("a")을 보내는 방식
   Future<void> adjustCell(int cellIndex, int targetLevel, {int? currentLevel}) async {
     // 1. 연결 체크
     if (kIsWeb || _commandChar == null || !_isPillowConnected) {
@@ -386,54 +385,62 @@ class BleService extends ChangeNotifier {
         return;
     }
 
-    // 2. 현재 레벨 확인 (파라미터로 받거나, 저장된 값 사용)
+    // 2. 현재 레벨 확인
     int prevLevel = currentLevel ?? _currentCellLevels[cellIndex] ?? 0;
-    
-    // 3. 목표 레벨로 업데이트
     _currentCellLevels[cellIndex] = targetLevel;
 
-    // 4. 레벨별 누적 시간 정의 (하드웨어 팀 제공 최대 값)
-    // ✅ 하드웨어 팀 제공 시간 값 (누적 시간):
-    // 1단계: 1번 에어셀 25초, 2번 에어셀 35초, 3번 에어셀 20초
-    // 2단계: 1번 에어셀 50초, 2번 에어셀 75초, 3번 에어셀 40초
+    // 3. 레벨별 누적 시간 정의 (초 단위) - 사용자 스펙 반영
+    // 1단계: 1번(25s), 2번(35s), 3번(20s)
+    // 2단계: 1번(50s), 2번(75s), 3번(40s)
     int getCumulativeTime(int cellIdx, int level) {
       if (level == 0) return 0;
-      
       switch (cellIdx) {
-        case 1:
-          return level == 1 ? 25 : 50; // 1단계: 25초, 2단계: 50초
-        case 2:
-          return level == 1 ? 35 : 75; // 1단계: 35초, 2단계: 75초
-        case 3:
-          return level == 1 ? 20 : 40; // 1단계: 20초, 2단계: 40초
-        default:
-          return level == 1 ? 25 : 50;
+        case 1: return level == 1 ? 25 : 50;
+        case 2: return level == 1 ? 35 : 75;
+        case 3: return level == 1 ? 20 : 40;
+        default: return level == 1 ? 25 : 50;
       }
     }
 
-    // 5. 이전 레벨과 목표 레벨의 누적 시간 계산
-    int prevCumulativeTime = getCumulativeTime(cellIndex, prevLevel);
-    int targetCumulativeTime = getCumulativeTime(cellIndex, targetLevel);
-    
-    // 6. **증분 시간** 계산 (추가로 넣어야 하는 시간)
-    int incrementalTimeMs = (targetCumulativeTime - prevCumulativeTime) * 1000;
-    
-    // 7. 0단계로 내려가면 배기 (음수 방지)
-    if (targetLevel == 0) {
-      incrementalTimeMs = 0; // 배기 명령은 별도 처리 필요할 수 있음
+    // 4. 증분 시간 계산
+    int prevTime = getCumulativeTime(cellIndex, prevLevel);
+    int targetTime = getCumulativeTime(cellIndex, targetLevel);
+    int durationSec = targetTime - prevTime; // 양수면 주입, 음수면 배출
+
+    if (durationSec == 0) return;
+
+    String startCmd = "";
+    String stopCmd = "a"; // 공기 제어 멈춤
+
+    // 5. 커맨드 매핑 (HardwareTestScreen 참조)
+    // Cell 1: 주입 '1', 배출 '4'
+    // Cell 2: 주입 '2', 배출 '5'
+    // Cell 3: 주입 '3', 배출 '6'
+    if (durationSec > 0) {
+      // 주입
+      if (cellIndex == 1) startCmd = "1";
+      else if (cellIndex == 2) startCmd = "2";
+      else if (cellIndex == 3) startCmd = "3";
+    } else {
+      // 배출 (시간은 양수로 변환)
+      durationSec = -durationSec;
+      if (cellIndex == 1) startCmd = "4";
+      else if (cellIndex == 2) startCmd = "5";
+      else if (cellIndex == 3) startCmd = "6";
     }
 
     try {
-      // 8. 프로토콜 생성: "C{셀번호}:{밀리초}" (예: "C1:25000" 또는 "C2:40000")
-      String command = "C$cellIndex:$incrementalTimeMs";
-      
-      // 9. 전송 (withoutResponse: false로 안정성 확보)
-      // string을 byte로 변환해서 전송
-      await _commandChar!.write(command.codeUnits, withoutResponse: false);
-      
-      print("📤 [명령 전송] 셀 $cellIndex번: Level $prevLevel → $targetLevel (${incrementalTimeMs}ms = ${incrementalTimeMs ~/ 1000}초 추가 가동)");
-      print("   누적 시간: $prevCumulativeTime초 → $targetCumulativeTime초");
-      
+      // 6. 시작 명령 전송
+      print("🚀 [BleService] $cellIndex번 셀 동작 시작: $startCmd ($durationSec초)");
+      await sendRawCommand(startCmd);
+
+      // 7. 시간만큼 대기 (앱에서 타이머 동작)
+      await Future.delayed(Duration(seconds: durationSec));
+
+      // 8. 정지 명령 전송
+      print("🛑 [BleService] $cellIndex번 셀 동작 정지: $stopCmd");
+      await sendRawCommand(stopCmd);
+
     } catch (e) {
       print("⚠️ 명령 전송 실패: $e");
     }

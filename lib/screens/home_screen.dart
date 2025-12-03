@@ -1,4 +1,4 @@
-// lib/screens/home_screen.dart
+// lib/screens/home_screen.dart **임시디버깅 이전의 원본**
 // ✅ 수정된 버전: 앱 시작 시 자동으로 Firebase 데이터 가져오기
 
 import 'dart:async';
