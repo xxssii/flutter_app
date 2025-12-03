@@ -327,6 +327,7 @@ class _PillowScreenState extends State<PillowScreen> {
   ) {
     final Color shadowColor = _colNeck;
     final Color textColor = _mainDeepColor;
+    final bool isConnected = bleService.isPillowConnected;
 
     return Container(
       decoration: BoxDecoration(
@@ -385,137 +386,143 @@ class _PillowScreenState extends State<PillowScreen> {
               ),
               const SizedBox(height: 30),
 
-              // 2. 비주얼라이저
-              SizedBox(
-                height: 180,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      flex: 1,
-                      child: _buildDomeCell(
-                        currentLevel: _cell1Height,
-                        isAdjusting: _isAdjustingCell1,
-                        color: _colHead,
+               // ✅ [안전장치] 연결 안 되면 조작 불가
+              AbsorbPointer(
+                absorbing: !isConnected,
+                child: Opacity(
+                  opacity: isConnected ? 1.0 : 0.5,
+                  child: Column(
+                    children: [
+                       // 2. 비주얼라이저
+                      SizedBox(
+                        height: 180,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              flex: 1,
+                              child: _buildDomeCell(
+                                currentLevel: _cell1Height,
+                                isAdjusting: _isAdjustingCell1,
+                                color: _colHead,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: _buildDomeCell(
+                                currentLevel: _cell2Height,
+                                isAdjusting: _isAdjustingCell2,
+                                isLarge: true,
+                                color: _colNeck,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 1,
+                              child: _buildDomeCell(
+                                currentLevel: _cell3Height,
+                                isAdjusting: _isAdjustingCell3,
+                                color: _colShoulder,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: _buildDomeCell(
-                        currentLevel: _cell2Height,
-                        isAdjusting: _isAdjustingCell2,
-                        isLarge: true,
-                        color: _colNeck,
+        
+                      // 바닥 선
+                      Container(
+                        height: 2,
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(top: 0, bottom: 24),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              _colHead.withOpacity(0.5),
+                              _colShoulder.withOpacity(0.5),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 1,
-                      child: _buildDomeCell(
-                        currentLevel: _cell3Height,
-                        isAdjusting: _isAdjustingCell3,
-                        color: _colShoulder,
+        
+                      // 3. 컨트롤러 영역
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: _buildVerticalControl(
+                              level: _cell1Height,
+                              label: "오른쪽", // 위치 라벨
+                              activeColor: _colHead,
+                              textColor: textColor,
+                              onChanged: (val) {
+                                // 1. 현재 레벨 저장 (BleService가 증분 계산용으로 사용)
+                                final prevLevel = _cell1Height;
+                                
+                                // 2. UI 업데이트
+                                _updateAircellHeight(1, val);
+                                _showHeightChangeSnackBar(context, '오른쪽', val);
+                                
+                                // 3. BLE 서비스 호출 (currentLevel 전달)
+                                bleService.adjustCell(1, val, currentLevel: prevLevel);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: _buildVerticalControl(
+                              level: _cell2Height,
+                              label: "가운데",
+                              activeColor: _colNeck,
+                              textColor: textColor,
+                              onChanged: (val) {
+                                final prevLevel = _cell2Height;
+                                _updateAircellHeight(2, val);
+                                _showHeightChangeSnackBar(context, '가운데', val);
+        
+                                bleService.adjustCell(2, val, currentLevel: prevLevel);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 1,
+                            child: _buildVerticalControl(
+                              level: _cell3Height,
+                              label: "왼쪽",
+                              activeColor: _colShoulder,
+                              textColor: textColor,
+                              onChanged: (val) {
+                                final prevLevel = _cell3Height;
+                                _updateAircellHeight(3, val);
+                                _showHeightChangeSnackBar(context, '왼쪽', val);
+        
+                                bleService.adjustCell(3, val, currentLevel: prevLevel);
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 바닥 선
-              Container(
-                height: 2,
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 0, bottom: 24),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      _colHead.withOpacity(0.5),
-                      _colShoulder.withOpacity(0.5),
-                      Colors.transparent,
                     ],
                   ),
                 ),
               ),
 
-              // 3. 컨트롤러 영역
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    flex: 1,
-                    child: _buildVerticalControl(
-                      level: _cell1Height,
-                      label: "오른쪽", // 위치 라벨
-                      activeColor: _colHead,
-                      textColor: textColor,
-                      onChanged: (val) {
-                        _updateAircellHeight(1, val);
-                        _showHeightChangeSnackBar(context, '오른쪽', val);
-                        
-                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
-                        if (val == 1) {
-                          bleService.adjustCell(1, 1);
-                        }
-                        
-                        bleService.adjustCell(1, val);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: _buildVerticalControl(
-                      level: _cell2Height,
-                      label: "가운데",
-                      activeColor: _colNeck,
-                      textColor: textColor,
-                      onChanged: (val) {
-                        _updateAircellHeight(2, val);
-                        _showHeightChangeSnackBar(context, '가운데', val);
-
-                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
-                        if (val == 1) {
-                          bleService.adjustCell(2, 1);
-                        }
-
-                        bleService.adjustCell(2, val);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 1,
-                    child: _buildVerticalControl(
-                      level: _cell3Height,
-                      label: "왼쪽",
-                      activeColor: _colShoulder,
-                      textColor: textColor,
-                      onChanged: (val) {
-                        _updateAircellHeight(3, val);
-                        _showHeightChangeSnackBar(context, '왼쪽', val);
-
-                        // ✅ [추가] 1단계(작동 시작)일 때 펌프 ON 명령 전송
-                        if (val == 1) {
-                          bleService.adjustCell(3, 1);
-                        }
-
-                        bleService.adjustCell(3, val);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              // 🟢 [추가됨] 하단 안내 멘트
               const SizedBox(height: 24),
               Center(
                 child: Text(
-                  '베개를 연결하여 버튼을 눌러 높이를 조절해보세요.',
+                  isConnected 
+                      ? '베개를 연결하여 버튼을 눌러 높이를 조절해보세요.'
+                      : '⚠️ 베개를 연결해야 높이를 조절할 수 있습니다.',
                   style: AppTextStyles.secondaryBodyText.copyWith(
-                    color: textColor.withOpacity(0.5), // 은은한 색상
+                    color: isConnected 
+                        ? textColor.withOpacity(0.5) 
+                        : AppColors.errorRed,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),

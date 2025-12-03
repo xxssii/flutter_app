@@ -1,14 +1,22 @@
+// lib/screens/sleep_report_detail_screen.dart
+// ✅ 전체 파일을 이 내용으로 교체하세요!
+
 import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import '../widgets/heart_rate_chart.dart'; // ✅ 임포트 추가
+import '../widgets/heart_rate_chart.dart';    // ✅ 심박수 그래프
+import '../widgets/snoring_chart.dart';       // ✅ 코골이 그래프 임포트 추가!
 
-class SleepReportDetailScreen extends StatelessWidget {
-  // 실제로는 이 데이터를 생성자에서 받아와야 합니다.
-  // final SleepReport report;
-  // const SleepReportDetailScreen({Key? key, required this.report}) : super(key: key);
-
+class SleepReportDetailScreen extends StatefulWidget {  // ✅ StatefulWidget으로 변경
   const SleepReportDetailScreen({Key? key}) : super(key: key);
+
+  @override
+  State<SleepReportDetailScreen> createState() => _SleepReportDetailScreenState();
+}
+
+class _SleepReportDetailScreenState extends State<SleepReportDetailScreen> {
+  // ✅ 그래프 전환을 위한 상태 변수
+  String _selectedGraphType = 'heart_rate'; // 'heart_rate' 또는 'snoring'
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +45,7 @@ class SleepReportDetailScreen extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(24.0),
               decoration: BoxDecoration(
-                color: AppColors.secondaryWhite, // 배경색 (연한 회색)
+                color: AppColors.secondaryWhite,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
@@ -68,10 +76,11 @@ class SleepReportDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            // 3. ✨ 수면 주기 그래프 (HeartRateChartSection으로 교체) ✨
-            const HeartRateChartSection(), // ✅ 여기에 새 위젯 삽입
+            // ✅ 3. 그래프 섹션 (탭 전환 기능 추가!)
+            _buildGraphSection(context),
 
-            const SizedBox(height: 32), // ✅ 그래프와 피드백 목록 사이 간격
+            const SizedBox(height: 32),
+            
             // 4. 수면 분석 피드백 목록
             Text('수면 분석 피드백', style: AppTextStyles.heading3),
             const SizedBox(height: 16),
@@ -106,11 +115,9 @@ class SleepReportDetailScreen extends StatelessWidget {
                     'REM (렘수면):',
                     '1.6시간',
                   ),
-
                   const SizedBox(height: 24),
                   const Divider(thickness: 1),
                   const SizedBox(height: 24),
-
                   _buildFeedbackItem(Icons.compare_arrows, '뒤척임:', '12회'),
                   const Divider(),
                   _buildFeedbackItem(
@@ -123,6 +130,84 @@ class SleepReportDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
           ],
+        ),
+      ),
+    );
+  }
+
+  // ✅ 그래프 섹션 빌더 (탭 전환 기능 포함)
+  Widget _buildGraphSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 그래프 제목
+        Text(
+          _selectedGraphType == 'heart_rate' ? '오늘의 심박수 변화' : '오늘의 코골이 소리 크기',
+          style: AppTextStyles.heading2,
+        ),
+        const SizedBox(height: 15),
+        
+        // 탭 버튼
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildGraphTabButton(
+              context: context,
+              text: '심박수',
+              graphType: 'heart_rate',
+              isSelected: _selectedGraphType == 'heart_rate',
+            ),
+            const SizedBox(width: 10),
+            _buildGraphTabButton(
+              context: context,
+              text: '코골이',
+              graphType: 'snoring',
+              isSelected: _selectedGraphType == 'snoring',
+            ),
+          ],
+        ),
+        const SizedBox(height: 15),
+        
+        // 선택된 그래프 표시
+        _selectedGraphType == 'heart_rate'
+            ? const HeartRateChartSection()  // 심박수 그래프
+            : const SnoringChartSection(),   // 코골이 그래프
+      ],
+    );
+  }
+
+  // ✅ 그래프 탭 버튼 위젯
+  Widget _buildGraphTabButton({
+    required BuildContext context,
+    required String text,
+    required String graphType,
+    required bool isSelected,
+  }) {
+    return Expanded(
+      child: ElevatedButton(
+        onPressed: () {
+          setState(() {
+            _selectedGraphType = graphType;
+          });
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isSelected
+              ? AppColors.primaryNavy
+              : AppColors.secondaryWhite,
+          foregroundColor: isSelected ? AppColors.white : AppColors.primaryText,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isSelected ? AppColors.primaryNavy : AppColors.lightGrey,
+              width: 1,
+            ),
+          ),
+          elevation: 0,
+        ),
+        child: Text(
+          text,
+          style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.w600),
         ),
       ),
     );
