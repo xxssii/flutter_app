@@ -365,6 +365,7 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
         else: message = "수면 개선이 필요합니다 ⚠️"
         
         # 6️⃣ DB 저장
+        # Flutter 모델과 완전히 호환되도록 모든 필드 포함
         report_data = {
             "userId": user_id,
             "sessionId": session_id,
@@ -372,11 +373,25 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
             "total_score": int(total_score),
             "message": message,
             "summary": {
+                # 총 수면 시간
                 "total_duration_hours": round(total_duration_hours, 2),
+                
+                # 각 단계별 시간 (시간 단위)
+                "deep_sleep_hours": round(stage_durations["Deep"] / 3600, 2),
+                "rem_sleep_hours": round(stage_durations["REM"] / 3600, 2),
+                "light_sleep_hours": round(stage_durations["Light"] / 3600, 2),
+                "awake_hours": round(stage_durations["Awake"] / 3600, 2),
+                
+                # 각 단계별 비율 (%)
+                "deep_ratio": round(deep_ratio * 100, 1),
+                "rem_ratio": round(rem_ratio * 100, 1),
+                "awake_ratio": round(awake_ratio * 100, 1),
+                
+                # 무호흡 및 코골이 정보
                 "apnea_count": apnea_event_count,
                 "ahi_index": round(ahi_score, 1),
                 "apnea_diagnosis": apnea_diagnosis,
-                "snoring_duration": round(stage_durations["Snoring"]/60, 1)
+                "snoring_duration": round(stage_durations["Snoring"] / 60, 1)
             }
         }
         
@@ -415,7 +430,7 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
 @https_fn.on_call()
 def calculate_weekly_stats(req: https_fn.CallableRequest):
     """
-    사용자의 주간 수면 통s계 계산
+    사용자의 주간 수면 통계 계산
     
     요청 파라미터:
     - user_id: 사용자 ID (필수)

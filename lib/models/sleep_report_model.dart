@@ -107,12 +107,18 @@ class SleepSummary {
   });
 
   factory SleepSummary.fromMap(Map<String, dynamic> data) {
+    // 👇 1. 디버깅용 로그 - 수면 데이터 확인
+    print('🔍 수면 데이터 확인: $data');
+    
     return SleepSummary(
       totalDurationHours: (data['total_duration_hours'] ?? 0).toDouble(),
       deepSleepHours: (data['deep_sleep_hours'] ?? 0).toDouble(),
       remSleepHours: (data['rem_sleep_hours'] ?? 0).toDouble(),
       lightSleepHours: (data['light_sleep_hours'] ?? 0).toDouble(),
+      
+      // 👇 2. awake_hours 키 값 확인 필요
       awakeHours: (data['awake_hours'] ?? 0).toDouble(),
+      
       deepRatio: (data['deep_ratio'] ?? 0).toDouble(),
       remRatio: (data['rem_ratio'] ?? 0).toDouble(),
       awakeRatio: (data['awake_ratio'] ?? 0).toDouble(),
