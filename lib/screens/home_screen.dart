@@ -177,6 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final totalDuration = totalDeep + totalRem + totalLight + totalWake;
         final totalHours = totalDuration / 60.0;
+        
+        // ✅ 실제 수면 시간 (깬 시간 제외)
+        final actualSleepHours = (totalDeep + totalRem + totalLight) / 60.0;
+        final awakeHours = totalWake / 60.0;
+        
+        // ✅ 수면 효율 계산 (실제 수면 시간 / 전체 시간)
+        final sleepEfficiency = totalHours > 0 ? (actualSleepHours / totalHours) * 100 : 0.0;
 
         int score = 70 + _random.nextInt(25);
         if (totalHours < 5) score -= 20;
@@ -199,12 +206,13 @@ class _HomeScreenState extends State<HomeScreen> {
             'deep_sleep_hours': double.parse((totalDeep / 60).toStringAsFixed(1)),
             'rem_sleep_hours': double.parse((totalRem / 60).toStringAsFixed(1)),
             'light_sleep_hours': double.parse((totalLight / 60).toStringAsFixed(1)),
-            'awake_hours': double.parse((totalWake / 60).toStringAsFixed(1)),
+            'awake_hours': double.parse(awakeHours.toStringAsFixed(1)),  // ✅ 추가!
             'apnea_count': _random.nextInt(5),
             'snoring_duration': _random.nextInt(30),
             'deep_ratio': (totalDeep / totalDuration * 100).round(),
             'rem_ratio': (totalRem / totalDuration * 100).round(),
-            'awake_ratio': (totalWake / totalDuration * 100).round(),
+            'awake_ratio': (totalWake / totalDuration * 100).round(),  // ✅ 추가!
+            'sleep_efficiency': double.parse(sleepEfficiency.toStringAsFixed(1)),  // ✅ 추가!
           }
         });
         batchCount++;

@@ -398,10 +398,10 @@ class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const HomeScreen(key: Key('homeScreen')),
-    const data_screen.DataScreen(key: Key('dataScreen')),
-    const PillowScreen(key: Key('pillowScreen')),
-    const SettingsScreen(key: Key('settingsScreen')),
+    const HomeScreen(),  // ✅ key 제거!
+    const data_screen.DataScreen(),  // ✅ key 제거!
+    const PillowScreen(),  // ✅ key 제거!
+    const SettingsScreen(),  // ✅ key 제거!
   ];
 
   @override

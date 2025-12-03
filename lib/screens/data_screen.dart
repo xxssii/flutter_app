@@ -507,7 +507,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                         child: ListView.separated(
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: data.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final d = data[index];
                             final targetTotalWidth = (d['total'] / maxHours) * availableWidth;
@@ -699,11 +699,16 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
       );
     }
 
-    // 비율 계산
-    final deepRatio = metrics.deepSleepRatio / 100;
-    final lightRatio = (100 - metrics.deepSleepRatio - metrics.remRatio - (metrics.tossingAndTurning > 0 ? 5 : 0)) / 100;
-    final remRatio = metrics.remRatio / 100;
-    final awakeRatio = (metrics.tossingAndTurning > 0 ? 5 : 0) / 100;
+    // ✅ 실제 비율 계산 (전체 누운 시간 기준)
+    final deepSleepHours = (totalDuration * metrics.deepSleepRatio) / 100;
+    final remSleepHours = (totalDuration * metrics.remRatio) / 100;
+    final awakeDuration = metrics.timeInBed - totalDuration;
+    final lightSleepHours = totalDuration - deepSleepHours - remSleepHours;
+    
+    final deepRatio = deepSleepHours / metrics.timeInBed;
+    final lightRatio = lightSleepHours / metrics.timeInBed;
+    final remRatio = remSleepHours / metrics.timeInBed;
+    final awakeRatio = awakeDuration / metrics.timeInBed;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -788,15 +793,21 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
       return '(${ratio.toStringAsFixed(0)}%)';
     }
 
-    // 깊은 수면 시간 계산
+    // ✅ 실제 시간 계산
     final deepSleepHours = (metrics.totalSleepDuration * metrics.deepSleepRatio) / 100;
-    // REM 수면 시간 계산
     final remSleepHours = (metrics.totalSleepDuration * metrics.remRatio) / 100;
-    // 얕은 수면 시간 계산 (전체 - 깊은 수면 - REM - 깬 시간)
-    final awakeDuration = metrics.tossingAndTurning > 0 ? 0.25 : 0.0;
-    final lightSleepHours = metrics.totalSleepDuration - deepSleepHours - remSleepHours - awakeDuration;
-    final lightSleepRatio = (lightSleepHours / metrics.totalSleepDuration) * 100;
-    final awakeRatio = (awakeDuration / metrics.totalSleepDuration) * 100;
+    
+    // ✅ timeInBed에서 totalSleepDuration을 빼면 깬 시간!
+    final awakeDuration = metrics.timeInBed - metrics.totalSleepDuration;
+    
+    // ✅ 얕은 수면 = 전체 수면 - 깊은 수면 - REM
+    final lightSleepHours = metrics.totalSleepDuration - deepSleepHours - remSleepHours;
+    
+    // ✅ 비율 계산 (전체 누운 시간 기준)
+    final lightSleepRatio = (lightSleepHours / metrics.timeInBed) * 100;
+    final awakeRatio = (awakeDuration / metrics.timeInBed) * 100;
+    final deepRatioAdjusted = (deepSleepHours / metrics.timeInBed) * 100;
+    final remRatioAdjusted = (remSleepHours / metrics.timeInBed) * 100;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -811,7 +822,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
               color: _mainDeepColor,
               label: '깊은 수면',
               duration: formatDuration(deepSleepHours),
-              percentage: formatPercentage(metrics.deepSleepRatio),
+              percentage: formatPercentage(deepRatioAdjusted),
             ),
             const Divider(height: 32),
             _buildDetailRow(
@@ -825,7 +836,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
               color: _remSleepColor,
               label: 'REM 수면',
               duration: formatDuration(remSleepHours),
-              percentage: formatPercentage(metrics.remRatio),
+              percentage: formatPercentage(remRatioAdjusted),
             ),
             const Divider(height: 32),
             _buildDetailRow(

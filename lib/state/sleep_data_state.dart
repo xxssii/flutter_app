@@ -205,21 +205,35 @@ class SleepDataState extends ChangeNotifier {
           
           // ✅ 안전한 데이터 추출
           final totalDurationHours = (summary['total_duration_hours'] as num?)?.toDouble() ?? 0.0;
+          final deepSleepHours = (summary['deep_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+          final remSleepHours = (summary['rem_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+          final lightSleepHours = (summary['light_sleep_hours'] as num?)?.toDouble() ?? 0.0;
+          final awakeHours = (summary['awake_hours'] as num?)?.toDouble() ?? 0.0;
+          
           final deepRatio = (summary['deep_ratio'] as num?)?.toDouble() ?? 0.0;
           final remRatio = (summary['rem_ratio'] as num?)?.toDouble() ?? 0.0;
+          final awakeRatio = (summary['awake_ratio'] as num?)?.toDouble() ?? 0.0;
+          
           final totalScore = (data['total_score'] as num?)?.toDouble() ?? 0.0;
           final snoringDuration = (summary['snoring_duration'] as num?)?.toDouble() ?? 0.0;
           final apneaCount = (summary['apnea_count'] as num?)?.toInt() ?? 0;
+          
+          // ✅ timeInBed = 실제 수면 시간 + 깬 시간
+          final actualSleepTime = deepSleepHours + remSleepHours + lightSleepHours;
+          final timeInBed = actualSleepTime + awakeHours;
+          
+          // ✅ 수면 효율 = (실제 수면 시간 / 누운 시간) * 100
+          final sleepEfficiency = timeInBed > 0 ? (actualSleepTime / timeInBed) * 100 : 0.0;
           
           sleepHistory.add(
             SleepMetrics(
               reportDate: data['sessionId'] ?? 'unknown',
               totalSleepDuration: totalDurationHours,
-              timeInBed: totalDurationHours * 1.1, // ✅ 누운 시간은 수면 시간보다 약간 길게
-              sleepEfficiency: totalScore, 
+              timeInBed: timeInBed,
+              sleepEfficiency: sleepEfficiency,  // ✅ 계산된 효율
               remRatio: remRatio,
               deepSleepRatio: deepRatio,
-              tossingAndTurning: 0, 
+              tossingAndTurning: awakeHours > 0 ? 1 : 0,  // ✅ 깬 시간 있으면 1
               avgSnoringDuration: snoringDuration,
               avgHrv: 0.0,
               avgHeartRate: 0.0,
