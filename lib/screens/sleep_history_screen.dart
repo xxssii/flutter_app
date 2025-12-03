@@ -34,6 +34,23 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
     });
   }
 
+  // ✅ 날짜 포맷 변환 헬퍼 함수
+  String _formatDate(String sessionId) {
+    try {
+      // "session-2025-11-30" 형식에서 날짜 부분 추출
+      final parts = sessionId.split('-');
+      if (parts.length >= 4) {
+        final year = parts[1];
+        final month = parts[2];
+        final day = parts[3];
+        return '$year년 $month월 $day일';
+      }
+    } catch (e) {
+      print('날짜 변환 오류: $e');
+    }
+    return sessionId; // 변환 실패시 원본 반환
+  }
+
   @override
   Widget build(BuildContext context) {
     final sleepDataState = Provider.of<SleepDataState>(context);
@@ -60,7 +77,7 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
                   child: ListTile(
                     contentPadding: const EdgeInsets.all(16.0),
                     title: Text(
-                      metrics.reportDate,
+                      _formatDate(metrics.reportDate),
                       style: AppTextStyles.heading3,
                     ),
                     subtitle: Column(
