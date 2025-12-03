@@ -24,8 +24,8 @@ class SnoringChartSection extends StatelessWidget {
     }
 
     // 데시벨 데이터의 최대/최소 범위 계산 (Y축 범위 설정용)
-    double minDecibel = 30; // 최소 데시벨 하드코딩
-    double maxDecibel = 90; // 최대 데시벨 하드코딩
+    double minDecibel = 0; // 최소 데시벨 하드코딩
+    double maxDecibel = 260; // 최대 데시벨 하드코딩
 
     // FLChart 데이터 포인트 생성
     List<FlSpot> spots = sleepMetrics.snoringDecibelData.asMap().entries.map((
@@ -106,7 +106,7 @@ class SnoringChartSection extends StatelessWidget {
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: 40,
-                    interval: 10, // 10dB 간격으로 레이블
+                    interval: 50, // 10dB 간격으로 레이블
                     getTitlesWidget: (value, meta) {
                       return Text(
                         '${value.toInt()}',
@@ -168,10 +168,10 @@ class SnoringChartSection extends StatelessWidget {
               extraLinesData: ExtraLinesData(
                 horizontalLines: [
                   HorizontalLine(
-                    y: 50, // 50dB 이상부터 코골이로 간주하는 기준선
-                    color: AppColors.warningOrange.withOpacity(0.7),
-                    strokeWidth: 1,
-                    dashArray: [5, 5], // 점선
+                    y: 150, // 50dB 이상부터 코골이로 간주하는 기준선
+                    color: AppColors.warningOrange.withOpacity(0.5),
+                    strokeWidth: 2,
+                    dashArray: [10, 5], // 점선
                     label: HorizontalLineLabel(
                       show: true,
                       alignment: Alignment.topRight,
@@ -181,7 +181,7 @@ class SnoringChartSection extends StatelessWidget {
                       ),
                       // text 파라미터 대신 labelResolver를 사용합니다.
                       labelResolver: (line) {
-                        return '코골이 기준 (50dB)';
+                        return '⚠️ 심한 코골이';
                       },
                     ),
                   ),
