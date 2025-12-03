@@ -11,6 +11,7 @@ import 'profile_screen.dart';
 import 'info_screen.dart';
 import '../services/notification_service.dart';
 import 'alarm_screen.dart';
+import '../services/ble_service.dart'; // ✅ [필수] BleService import 추가
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -71,7 +72,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildCurrentProfileCard(BuildContext context, String name, int age) {
-    // ... (기존 코드와 동일)
     return Card(
       child: InkWell(
         onTap: () {
@@ -106,7 +106,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildThemeSettingsCard(BuildContext context) {
-    // ... (기존 코드와 동일)
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return Card(
@@ -148,7 +147,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAlarmSettingsCard(BuildContext context) {
-    // ... (기존 코드와 동일)
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
         return Card(
@@ -256,9 +254,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
+                      
+                      // ✅ [테스트 버튼 추가] 진동 및 알람 화면 테스트
                       Center(
                         child: ElevatedButton(
                           onPressed: () {
+                            // 1. BleService 가져오기
+                            final bleService = Provider.of<BleService>(context, listen: false);
+                            
+                            // 2. 설정된 세기에 따라 진동 울리기
+                            if (settingsState.vibrationStrength == 1) {
+                              bleService.sendVibrateStrong();
+                            } else {
+                              bleService.sendVibrateGently();
+                            }
+                            
+                            // 3. 알람 화면으로 이동
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -266,7 +277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             );
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF011F25),
+                            backgroundColor: const Color(0xFF011F25),
                             foregroundColor: Colors.white,
                           ),
                           child: const Text("알람 화면 테스트 (개발용)"),
@@ -282,7 +293,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ✅ 푸시 알림 설정 카드 수정
+  // ✅ 푸시 알림 설정 카드
   Widget _buildNotificationSettingsCard(BuildContext context) {
     return Consumer<SettingsState>(
       builder: (context, settingsState, child) {
@@ -292,9 +303,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ✅ 제목 변경
                 Text('푸시 알림 설정', style: AppTextStyles.heading3),
-                // ✅ 설명 추가
                 const SizedBox(height: 4),
                 Text(
                   '중요한 정보를 푸시 알림으로 받아볼 수 있습니다.',
@@ -319,14 +328,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   settingsState.isSnoringOn,
                   settingsState.toggleSnoring,
                 ),
-
                 _buildToggleRow(
                   '가이드 알림',
                   '수면 가이드를 위한 팁을 받습니다.',
                   settingsState.isGuideOn,
                   settingsState.toggleGuide,
                 ),
-
                 if (settingsState.isGuideOn)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0, left: 16.0),
@@ -356,7 +363,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildInfoCard(BuildContext context) {
-    // ... (기존 코드와 동일)
     return Card(
       color: const Color(0xFF011F25).withOpacity(0.05),
       child: InkWell(
@@ -414,7 +420,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     bool value,
     Function(bool) onChanged,
   ) {
-    // ... (기존 코드와 동일)
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
