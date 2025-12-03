@@ -1,22 +1,21 @@
 // lib/state/sleep_data_state.dart
+// ✅ 수정된 버전: 크래시 방지 + 에러 처리 강화
 
 import 'package:flutter/material.dart';
-import 'dart:math'; // Random을 위해 추가
-import 'package:cloud_firestore/cloud_firestore.dart'; // ✅ Firestore 임포트
-import '../utils/app_colors.dart'; // ✅ 에러 메시지 색상 사용을 위해 임포트
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/app_colors.dart';
 
 // ========================================================================
-// ✅ 데이터 모델 정의 (SnoringDataPoint, SleepMetrics, TstTibData)
+// ✅ 데이터 모델 정의
 // ========================================================================
 
-// 시간별 데시벨 데이터를 위한 모델
 class SnoringDataPoint {
   final DateTime time;
   final double decibel;
 
   SnoringDataPoint(this.time, this.decibel);
 
-  // Firestore 저장을 위한 Map 변환 메서드
   Map<String, dynamic> toMap() {
     return {'time': time.toIso8601String(), 'decibel': decibel};
   }
@@ -24,21 +23,17 @@ class SnoringDataPoint {
 
 class SleepMetrics {
   final String reportDate;
-  final double totalSleepDuration; // 총 수면 시간 (예: 7.5시간)
-  final double timeInBed; // 침대에 있었던 총 시간 (예: 8.0시간)
-  final double sleepEfficiency; // 수면 효율 (%)
-  final double remRatio; // REM 수면 비율 (%)
-  final double deepSleepRatio; // 깊은 수면 비율 (%)
-  final int tossingAndTurning; // 뒤척임 횟수
-  final double avgSnoringDuration; // 코골이 감지 총 시간 (분)
-  final double avgHrv; // 평균 HRV
-  final double avgHeartRate; // 평균 심박수
-  final int apneaCount; // 수면 무호흡 횟수
-
-  // 심박수 데이터 (시간별) - 그래프용
+  final double totalSleepDuration;
+  final double timeInBed;
+  final double sleepEfficiency;
+  final double remRatio;
+  final double deepSleepRatio;
+  final int tossingAndTurning;
+  final double avgSnoringDuration;
+  final double avgHrv;
+  final double avgHeartRate;
+  final int apneaCount;
   final List<double> heartRateData;
-
-  // 코골이 데시벨 데이터 (시간별) - 그래프용
   final List<SnoringDataPoint> snoringDecibelData;
 
   SleepMetrics({
@@ -58,11 +53,10 @@ class SleepMetrics {
   });
 }
 
-// 효율성 탭(막대그래프)을 위한 TIB/TST 데이터 구조
 class TstTibData {
   final String dayLabel;
-  final double tib; // 누운 시간
-  final double tst; // 실 수면 시간
+  final double tib;
+  final double tst;
 
   TstTibData({required this.dayLabel, required this.tib, required this.tst});
 }
@@ -72,7 +66,7 @@ class TstTibData {
 // ========================================================================
 
 class SleepDataState extends ChangeNotifier {
-  // --- 기존 Mock 데이터 관련 코드 시작 ---
+  // --- 상태 변수 ---
   String _selectedPeriod = '최근7일';
   String get selectedPeriod => _selectedPeriod;
 
@@ -81,126 +75,56 @@ class SleepDataState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Mock 데이터 생성을 위한 Random 인스턴스
   Random random = Random();
+  
+  // 오늘의 데이터
+  late SleepMetrics _todayMetrics;
+  
+  // 수면 기록 리스트 (최신순 정렬)
+  List<SleepMetrics> sleepHistory = [];
 
-  // 오늘의 Mock 데이터
-  late SleepMetrics _mockTodayMetrics;
-
-  SleepDataState() {
-    _mockTodayMetrics = _generateTodayMockMetrics();
-  }
-
-  // 오늘의 Mock 데이터 생성 함수
-  SleepMetrics _generateTodayMockMetrics() {
-    // 22시부터 6시까지 10분 간격 심박수 Mock 데이터 (49개 데이터)
-    final List<double> mockHeartRate = List.generate(49, (index) {
-      double baseHeartRate = 60 + random.nextDouble() * 10;
-      if (index > 10 && index < 30) {
-        baseHeartRate -= 5;
-      }
-      if (index % 15 == 0) {
-        baseHeartRate += random.nextDouble() * 15;
-      }
-      return baseHeartRate.clamp(40.0, 80.0);
-    });
-
-    // Mock 코골이 데시벨 데이터 생성 (49개 데이터)
-    final List<SnoringDataPoint> mockSnoringDecibelData = [];
-    DateTime currentTime = DateTime(2025, 10, 29, 22, 0);
-    for (int i = 0; i < 49; i++) {
-      double decibel;
-      if (random.nextDouble() < 0.25) {
-        decibel = 50 + random.nextDouble() * 30;
-      } else {
-        decibel = 30 + random.nextDouble() * 20;
-      }
-      mockSnoringDecibelData.add(
-        SnoringDataPoint(currentTime, decibel.clamp(30.0, 90.0)),
-      );
-      currentTime = currentTime.add(const Duration(minutes: 10));
-    }
-
-    return SleepMetrics(
-      reportDate: '2025년 10월 29일',
-      totalSleepDuration: 7.5,
-      timeInBed: 8.0,
-      sleepEfficiency: 93.75,
-      remRatio: 22.0,
-      deepSleepRatio: 18.0,
-      tossingAndTurning: 12,
-      avgSnoringDuration: 15.0,
-      avgHrv: 55.0,
-      avgHeartRate: 60.0,
-      apneaCount: 0,
-      heartRateData: mockHeartRate,
-      snoringDecibelData: mockSnoringDecibelData,
-    );
-  }
-
-  // ✅ 새로 추가된 함수: 선택된 데이터를 오늘의 데이터로 설정
-  void setTodayMetrics(SleepMetrics metrics) {
-    _mockTodayMetrics = metrics;
-    notifyListeners(); // 리스너들에게 변경 알림
-  }
-
-  SleepMetrics get todayMetrics => _mockTodayMetrics;
-
-  // TrendsTab (꺾은선그래프) Mock 데이터 (7일치)
-  final List<SleepMetrics> _mockTrendMetrics = [
-    SleepMetrics(
-      reportDate: '7월 13일',
-      totalSleepDuration: 7.0,
-      timeInBed: 8.0,
-      sleepEfficiency: 87.5,
-      remRatio: 20.0,
-      deepSleepRatio: 15.0,
-      tossingAndTurning: 10,
-      avgSnoringDuration: 10,
-      avgHrv: 50,
-      avgHeartRate: 60,
-      apneaCount: 2,
-      heartRateData: List.empty(),
-      snoringDecibelData: List.empty(),
-    ),
-    // ... (중간 데이터 생략 - 실제 사용 시 모든 데이터 포함 필요) ...
-    SleepMetrics(
-      reportDate: '7월 19일',
-      totalSleepDuration: 7.5,
-      timeInBed: 8.5,
-      sleepEfficiency: 88.2,
-      remRatio: 23.0,
-      deepSleepRatio: 16.0,
-      tossingAndTurning: 9,
-      avgSnoringDuration: 12,
-      avgHrv: 62,
-      avgHeartRate: 61,
-      apneaCount: 0,
-      heartRateData: List.empty(),
-      snoringDecibelData: List.empty(),
-    ),
-  ];
-
-  // EfficiencyTab (막대그래프) Mock 데이터 (7일치)
-  final List<TstTibData> _mockTIB_TST_Data = [
-    TstTibData(dayLabel: '7/13', tib: 8.0, tst: 7.0),
-    // ... (중간 데이터 생략 - 실제 사용 시 모든 데이터 포함 필요) ...
-    TstTibData(dayLabel: '7/19', tib: 8.5, tst: 7.5),
-  ];
-
-  List<SleepMetrics> get trendMetrics => _mockTrendMetrics;
-  List<TstTibData> get tibTstData => _mockTIB_TST_Data;
-  // --- 기존 Mock 데이터 관련 코드 끝 ---
-
-  // ========================================================================
-  // ✅ Firestore 연동 기능 (저장, 불러오기, 리스트 불러오기)
-  // ========================================================================
-
-  // 로딩 상태 관리를 위한 변수
+  // 로딩 상태
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  // 1. Firestore에 수면 데이터 저장하기
+  SleepDataState() {
+    // 앱 시작 시 Mock 데이터로 초기화
+    _todayMetrics = _generateTodayMockMetrics();
+  }
+
+  SleepMetrics get todayMetrics => _todayMetrics;
+
+  // Mock 데이터 생성기 (초기값용)
+  SleepMetrics _generateTodayMockMetrics() {
+    final List<double> mockHeartRate = List.generate(49, (index) => 60.0);
+    return SleepMetrics(
+      reportDate: '데이터 없음',
+      totalSleepDuration: 0.0,
+      timeInBed: 0.0,
+      sleepEfficiency: 0.0,
+      remRatio: 0.0,
+      deepSleepRatio: 0.0,
+      tossingAndTurning: 0,
+      avgSnoringDuration: 0.0,
+      avgHrv: 0.0,
+      avgHeartRate: 0.0,
+      apneaCount: 0,
+      heartRateData: mockHeartRate,
+      snoringDecibelData: [],
+    );
+  }
+
+  // ========================================================================
+  // ✅ [핵심 복구] 이 함수들이 있어야 빌드가 됩니다!
+  // ========================================================================
+
+  // 1. ✅ 오늘의 데이터 수동 설정 (SleepHistoryScreen 등에서 호출)
+  void setTodayMetrics(SleepMetrics metrics) {
+    _todayMetrics = metrics;
+    notifyListeners();
+  }
+
+  // 2. ✅ 수면 데이터 저장 (SleepReportScreen에서 호출)
   Future<void> saveSleepData(
     BuildContext context,
     String userId,
@@ -208,16 +132,15 @@ class SleepDataState extends ChangeNotifier {
   ) async {
     try {
       _isLoading = true;
-      notifyListeners(); // 로딩 시작 알림
+      notifyListeners();
 
-      // Firestore에 데이터 저장 시도
+      // Firestore에 데이터 저장
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
           .collection('sleep_reports')
-          .doc(metrics.reportDate) // 날짜를 문서 ID로 사용
+          .doc(metrics.reportDate)
           .set({
-            // SleepMetrics 객체를 Map으로 변환하여 저장
             'reportDate': metrics.reportDate,
             'totalSleepDuration': metrics.totalSleepDuration,
             'timeInBed': metrics.timeInBed,
@@ -229,169 +152,154 @@ class SleepDataState extends ChangeNotifier {
             'avgHrv': metrics.avgHrv,
             'avgHeartRate': metrics.avgHeartRate,
             'apneaCount': metrics.apneaCount,
-            // 그래프 데이터 저장 (리스트 형태)
             'heartRateData': metrics.heartRateData,
             'snoringDecibelData': metrics.snoringDecibelData
                 .map((e) => e.toMap())
                 .toList(),
+            'created_at': FieldValue.serverTimestamp(),
           });
 
       print('✅ 수면 데이터 저장 성공: ${metrics.reportDate}');
       _showSnackBar(context, '수면 데이터가 성공적으로 저장되었습니다.', isError: false);
-    } on FirebaseException catch (e) {
-      print('❌ Firebase 오류 발생 (저장): ${e.message}');
-      _showErrorDialog(
-        context,
-        '데이터 저장 실패',
-        '서버와 연결하는 도중 문제가 발생했습니다.\n다시 시도해 주세요.\n(에러 코드: ${e.code})',
-      );
+      
+      // 저장 후 리스트 갱신
+      await fetchAllSleepReports(userId);
+
     } catch (e) {
-      print('❌ 알 수 없는 오류 발생 (저장): $e');
-      _showErrorDialog(
-        context,
-        '오류 발생',
-        '알 수 없는 오류가 발생했습니다.\n잠시 후 다시 시도해 주세요.',
-      );
+      print('❌ 저장 실패: $e');
+      _showErrorDialog(context, '저장 실패', '데이터 저장 중 오류가 발생했습니다.');
     } finally {
       _isLoading = false;
-      notifyListeners(); // 로딩 종료 알림
-    }
-  }
-
-  // 2. Firestore에서 특정 날짜의 수면 데이터 불러오기
-  Future<void> fetchSleepData(
-    BuildContext context,
-    String userId,
-    String date,
-  ) async {
-    try {
-      _isLoading = true;
-      notifyListeners(); // 로딩 시작 알림
-
-      // Firestore에서 데이터 가져오기 시도
-      DocumentSnapshot snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('sleep_reports')
-          .doc(date)
-          .get();
-
-      if (snapshot.exists) {
-        // 데이터가 존재하면 Map을 SleepMetrics 객체로 변환
-        Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-
-        // (여기서 데이터를 변환하여 UI에 반영하는 로직이 필요합니다. 현재는 로그만 출력)
-        print('✅ 수면 데이터 불러오기 성공: $date');
-        print('총 수면 시간: ${data['totalSleepDuration']}시간');
-      } else {
-        print('ℹ️ 해당 날짜의 수면 데이터가 없습니다: $date');
-        _showSnackBar(context, '해당 날짜의 수면 데이터가 없습니다.', isError: false);
-      }
-    } on FirebaseException catch (e) {
-      print('❌ Firebase 오류 발생 (불러오기): ${e.message}');
-      _showErrorDialog(
-        context,
-        '데이터 불러오기 실패',
-        '서버에서 데이터를 가져오는 도중 문제가 발생했습니다.\n(에러 코드: ${e.code})',
-      );
-    } catch (e) {
-      print('❌ 알 수 없는 오류 발생 (불러오기): $e');
-      _showErrorDialog(context, '오류 발생', '데이터를 처리하는 도중 알 수 없는 오류가 발생했습니다.');
-    } finally {
-      _isLoading = false;
-      notifyListeners(); // 로딩 종료 알림
+      notifyListeners();
     }
   }
 
   // ========================================================================
-  // ✅ 수면 기록 리스트 불러오기 (새로 추가된 부분)
+  // ✅ Firestore 연동 기능 (불러오기) - BuildContext 제거!
   // ========================================================================
 
-  // ✅ 불러온 수면 기록 리스트를 저장할 변수 (외부 접근 가능)
-  List<SleepMetrics> sleepHistory = [];
-
-  // 3. Firestore에서 특정 사용자의 모든 수면 리포트 가져오기
-  Future<void> fetchAllSleepReports(BuildContext context, String userId) async {
+  Future<void> fetchAllSleepReports(String userId, {BuildContext? context}) async {
     try {
+      print('📥 [1/5] 데이터 가져오기 시작...');
       _isLoading = true;
-      notifyListeners(); // 로딩 시작
+      notifyListeners();
 
-      // 1. Firestore에서 해당 사용자의 'sleep_reports' 컬렉션의 모든 문서 가져오기
-      //    reportDate를 기준으로 내림차순 정렬 (최신순)
+      print('📥 [2/5] Firebase 쿼리 실행 중...');
+      // Home화면의 생성기가 만든 'sleep_reports' (루트) 조회
       QuerySnapshot snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId)
-          .collection('sleep_reports')
-          .orderBy('reportDate', descending: true)
+          .collection('sleep_reports') 
+          .where('userId', isEqualTo: userId) 
+          .orderBy('created_at', descending: true)
+          .limit(10) // ✅ 최대 10개만 가져오기
           .get();
 
-      sleepHistory = []; // 리스트 초기화
+      print('📥 [3/5] Firebase에서 ${snapshot.docs.length}개 문서 받음');
 
-      // 2. 가져온 문서들을 반복하며 SleepMetrics 객체로 변환하여 리스트에 추가
+      sleepHistory = [];
+
       for (var doc in snapshot.docs) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-
-        // 심박수 데이터 변환
-        List<double> heartRateData =
-            (data['heartRateData'] as List<dynamic>?)
-                ?.map((e) => (e as num).toDouble())
-                .toList() ??
-            [];
-
-        // 코골이 데이터 변환
-        List<SnoringDataPoint> snoringDecibelData =
-            (data['snoringDecibelData'] as List<dynamic>?)
-                ?.map(
-                  (e) => SnoringDataPoint(
-                    DateTime.parse(e['time']),
-                    (e['decibel'] as num).toDouble(),
-                  ),
-                )
-                .toList() ??
-            [];
-
-        // SleepMetrics 객체 생성 및 리스트에 추가
-        sleepHistory.add(
-          SleepMetrics(
-            reportDate: data['reportDate'],
-            totalSleepDuration: (data['totalSleepDuration'] as num).toDouble(),
-            timeInBed: (data['timeInBed'] as num).toDouble(),
-            sleepEfficiency: (data['sleepEfficiency'] as num).toDouble(),
-            remRatio: (data['remRatio'] as num).toDouble(),
-            deepSleepRatio: (data['deepSleepRatio'] as num).toDouble(),
-            tossingAndTurning: data['tossingAndTurning'] as int,
-            avgSnoringDuration: (data['avgSnoringDuration'] as num).toDouble(),
-            avgHrv: (data['avgHrv'] as num).toDouble(),
-            avgHeartRate: (data['avgHeartRate'] as num).toDouble(),
-            apneaCount: data['apneaCount'] as int,
-            heartRateData: heartRateData,
-            snoringDecibelData: snoringDecibelData,
-          ),
-        );
+        try {
+          Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+          
+          final summary = data['summary'] ?? {};
+          
+          // ✅ 안전한 데이터 추출
+          final totalDurationHours = (summary['total_duration_hours'] as num?)?.toDouble() ?? 0.0;
+          final deepRatio = (summary['deep_ratio'] as num?)?.toDouble() ?? 0.0;
+          final remRatio = (summary['rem_ratio'] as num?)?.toDouble() ?? 0.0;
+          final totalScore = (data['total_score'] as num?)?.toDouble() ?? 0.0;
+          final snoringDuration = (summary['snoring_duration'] as num?)?.toDouble() ?? 0.0;
+          final apneaCount = (summary['apnea_count'] as num?)?.toInt() ?? 0;
+          
+          sleepHistory.add(
+            SleepMetrics(
+              reportDate: data['sessionId'] ?? 'unknown',
+              totalSleepDuration: totalDurationHours,
+              timeInBed: totalDurationHours * 1.1, // ✅ 누운 시간은 수면 시간보다 약간 길게
+              sleepEfficiency: totalScore, 
+              remRatio: remRatio,
+              deepSleepRatio: deepRatio,
+              tossingAndTurning: 0, 
+              avgSnoringDuration: snoringDuration,
+              avgHrv: 0.0,
+              avgHeartRate: 0.0,
+              apneaCount: apneaCount,
+              heartRateData: [], 
+              snoringDecibelData: [],
+            ),
+          );
+          
+          print('✅ 데이터 파싱 성공: ${data['sessionId']}');
+        } catch (e) {
+          print('⚠️ 문서 파싱 에러 (건너뛰기): $e');
+          continue; // 에러 나도 계속 진행
+        }
       }
 
-      print('✅ 수면 기록 리스트 불러오기 성공 (${sleepHistory.length}개)');
-    } on FirebaseException catch (e) {
-      print('❌ Firebase 오류 발생 (리스트 불러오기): ${e.message}');
-      _showErrorDialog(
-        context,
-        '기록 불러오기 실패',
-        '서버에서 목록을 가져오는 도중 문제가 발생했습니다.\n(에러 코드: ${e.code})',
-      );
-    } catch (e) {
-      print('❌ 알 수 없는 오류 발생 (리스트 불러오기): $e');
-      _showErrorDialog(context, '오류 발생', '알 수 없는 오류가 발생했습니다.');
+      print('📥 [4/5] 총 ${sleepHistory.length}개 데이터 파싱 완료');
+
+      // 최신 데이터를 "오늘의 데이터"로 설정
+      if (sleepHistory.isNotEmpty) {
+        _todayMetrics = sleepHistory.first; 
+        print("✅ [5/5] 최신 데이터 업데이트 완료!");
+        print("📊 첫 번째 데이터: ${_todayMetrics.totalSleepDuration}시간");
+      } else {
+        print("⚠️ [5/5] 데이터가 없습니다. 기본값 유지");
+        _todayMetrics = _generateTodayMockMetrics();
+      }
+
+    } catch (e, stackTrace) {
+      print('❌ 데이터 불러오기 실패!');
+      print('❌ 에러: $e');
+      print('❌ 스택 트레이스: $stackTrace');
+      
+      // ✅ 에러가 나도 앱은 계속 실행되도록!
+      sleepHistory = [];
+      _todayMetrics = _generateTodayMockMetrics();
+      
     } finally {
       _isLoading = false;
-      notifyListeners(); // 로딩 종료 및 UI 업데이트
+      notifyListeners();
+      print('✅ fetchAllSleepReports 완료!\n');
     }
   }
 
-  // ========================================================================
-  // ✅ 공통 UI 함수 (다이얼로그, 스낵바)
-  // ========================================================================
+  // UI 연동용 Getter들
+  String get averageSleepDurationStr {
+    if (sleepHistory.isEmpty) return "-";
+    final recent = sleepHistory.take(7);
+    double total = recent.fold(0.0, (sum, item) => sum + item.totalSleepDuration);
+    double avg = total / recent.length;
+    int hours = avg.floor();
+    int minutes = ((avg - hours) * 60).round();
+    return "${hours}시간 ${minutes}분";
+  }
 
-  // 사용자에게 에러 메시지를 보여주는 다이얼로그 함수
+  String get averageSnoringStr {
+    if (sleepHistory.isEmpty) return "-";
+    final recent = sleepHistory.take(7);
+    double total = recent.fold(0.0, (sum, item) => sum + item.avgSnoringDuration);
+    double avg = total / recent.length;
+    return "${avg.toStringAsFixed(0)}분";
+  }
+
+  String get averageEfficiencyStr {
+    if (sleepHistory.isEmpty) return "-";
+    final recent = sleepHistory.take(7);
+    double total = recent.fold(0.0, (sum, item) => sum + item.sleepEfficiency); 
+    double avg = total / recent.length;
+    return "${avg.toStringAsFixed(0)}%";
+  }
+
+  String get averageRemRatioStr {
+    if (sleepHistory.isEmpty) return "-";
+    final recent = sleepHistory.take(7);
+    double total = recent.fold(0.0, (sum, item) => sum + item.remRatio);
+    double avg = total / recent.length;
+    return "${avg.toStringAsFixed(0)}%";
+  }
+
+  // Helper Methods
   void _showErrorDialog(BuildContext context, String title, String content) {
     showDialog(
       context: context,
@@ -401,25 +309,14 @@ class SleepDataState extends ChangeNotifier {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              '확인',
-              style: TextStyle(
-                color: AppColors.primaryNavy,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            child: const Text('확인'),
           ),
         ],
       ),
     );
   }
 
-  // 간단한 메시지를 보여주는 스낵바 함수
-  void _showSnackBar(
-    BuildContext context,
-    String message, {
-    bool isError = true,
-  }) {
+  void _showSnackBar(BuildContext context, String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
