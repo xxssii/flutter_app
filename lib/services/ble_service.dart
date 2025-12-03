@@ -446,6 +446,11 @@ class BleService extends ChangeNotifier {
     }
   }
 
+  Future<void> sendVibrateStrong() async {
+    if (kIsWeb || _commandChar == null || !_isPillowConnected) return;
+    try { await _commandChar!.write([0x37], withoutResponse: true); } catch (e) {}
+  }
+
   Future<void> sendVibrateGently() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) return;
     try { 
