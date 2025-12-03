@@ -43,11 +43,11 @@ class _SleepReportScreenState extends State<SleepReportScreen> {
       // 주간 통계 로드
       weeklyData = await reportService.getWeeklyStats(userId);
     } catch (e) {
-      print('데이터 로드 오류: $e');
+     // print('데이터 로드 오류: $e');
       // 에러 처리 (예: 스낵바 표시)
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('주간 통계 데이터를 불러오는데 실패했습니다.')));
+     // ScaffoldMessenger.of(
+      //  context,
+      //).showSnackBar(const SnackBar(content: Text('주간 통계 데이터를 불러오는데 실패했습니다.')));
     } finally {
       setState(() => isLoading = false);
     }
