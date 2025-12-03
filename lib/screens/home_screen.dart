@@ -135,6 +135,10 @@ class _HomeScreenState extends State<HomeScreen> {
         double totalLight = 0;
         double totalWake = 0;
 
+        // ✅ 새로 추가: 심박수/코골이 데이터 저장용 리스트
+        List<double> heartRateDataList = [];
+        List<Map<String, dynamic>> snoringDataList = [];
+
         while (currentTime.isBefore(sleepEnd)) {
           String stage = _simulateSleepStage(sleepStart, sleepEnd, currentTime);
 
@@ -158,6 +162,19 @@ class _HomeScreenState extends State<HomeScreen> {
             'changed_at': Timestamp.fromDate(currentTime),
             'source_ts': Timestamp.fromDate(currentTime),
           });
+
+          // ✅ 추가: 심박수 데이터 수집 (3분마다 = 그래프용으로 다운샘플링)
+          if (heartRateDataList.length < 100) {  // 최대 100개 포인트
+            heartRateDataList.add(sensorData['hr'].toDouble());
+          }
+          
+          // ✅ 추가: 코골이 데이터 수집 (3분마다)
+          if (snoringDataList.length < 100) {  // 최대 100개 포인트
+            snoringDataList.add({
+              'time': currentTime.toIso8601String(),
+              'decibel': sensorData['mic_avg'].toDouble(),
+            });
+          }
 
           if (stage == 'Deep') totalDeep += 3;
           else if (stage == 'REM') totalRem += 3;
@@ -213,7 +230,10 @@ class _HomeScreenState extends State<HomeScreen> {
             'rem_ratio': (totalRem / totalDuration * 100).round(),
             'awake_ratio': (totalWake / totalDuration * 100).round(),  // ✅ 추가!
             'sleep_efficiency': double.parse(sleepEfficiency.toStringAsFixed(1)),  // ✅ 추가!
-          }
+          },
+          // ✅ 핵심! 심박수/코골이 배열 추가
+          'heartRateData': heartRateDataList,
+          'snoringDecibelData': snoringDataList,
         });
         batchCount++;
       }

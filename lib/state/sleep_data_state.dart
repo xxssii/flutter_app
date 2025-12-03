@@ -180,6 +180,67 @@ class SleepDataState extends ChangeNotifier {
             if (sleepEfficiency > 100.0) sleepEfficiency = 100.0;
           }
           
+          // ========================================
+          // ✅ 심박수 데이터 가져오기
+          // ========================================
+          List<double> heartRateList = [];
+          if (data.containsKey('heartRateData')) {
+            try {
+              final rawData = data['heartRateData'];
+              if (rawData is List) {
+                heartRateList = rawData
+                    .map((e) => (e as num).toDouble())
+                    .toList();
+              }
+              print('✅ 심박수 데이터 ${heartRateList.length}개 로드됨');
+            } catch (e) {
+              print('⚠️ 심박수 데이터 파싱 실패: $e');
+            }
+          }
+          
+          // ✅ 데이터가 없으면 테스트 데이터 생성
+          if (heartRateList.isEmpty) {
+            print('⚠️ 심박수 데이터 없음 - 테스트 데이터 생성');
+            heartRateList = List.generate(49, (index) {
+              return 60.0 + random.nextDouble() * 20.0;
+            });
+          }
+          
+          // ========================================
+          // ✅ 코골이 데이터 가져오기
+          // ========================================
+          List<SnoringDataPoint> snoringList = [];
+          if (data.containsKey('snoringDecibelData')) {
+            try {
+              final rawData = data['snoringDecibelData'];
+              if (rawData is List) {
+                snoringList = rawData.map((item) {
+                  if (item is Map<String, dynamic>) {
+                    DateTime time = DateTime.parse(
+                      item['time'] ?? DateTime.now().toIso8601String()
+                    );
+                    double decibel = (item['decibel'] as num?)?.toDouble() ?? 0.0;
+                    return SnoringDataPoint(time, decibel);
+                  }
+                  return SnoringDataPoint(DateTime.now(), 0.0);
+                }).toList();
+              }
+              print('✅ 코골이 데이터 ${snoringList.length}개 로드됨');
+            } catch (e) {
+              print('⚠️ 코골이 데이터 파싱 실패: $e');
+            }
+          }
+          
+          // ✅ 데이터가 없으면 테스트 데이터 생성
+          if (snoringList.isEmpty) {
+            print('⚠️ 코골이 데이터 없음 - 테스트 데이터 생성');
+            snoringList = List.generate(49, (index) {
+              DateTime time = DateTime.now().add(Duration(seconds: index * 5));
+              double decibel = 30.0 + random.nextDouble() * 50.0;
+              return SnoringDataPoint(time, decibel);
+            });
+          }
+          
           sleepHistory.add(
             SleepMetrics(
               reportDate: data['sessionId'] ?? 'unknown',
@@ -193,8 +254,8 @@ class SleepDataState extends ChangeNotifier {
               avgHrv: 0.0,
               avgHeartRate: 0.0,
               apneaCount: apneaCount,
-              heartRateData: [], 
-              snoringDecibelData: [],
+              heartRateData: heartRateList,  // ✅ 여기!
+              snoringDecibelData: snoringList,  // ✅ 여기!
             ),
           );
         } catch (e) {
