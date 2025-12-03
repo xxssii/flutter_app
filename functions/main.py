@@ -384,7 +384,23 @@ def calculate_sleep_score(req: https_fn.CallableRequest):
             **report_data, "created_at": gcf.SERVER_TIMESTAMP
         })
         
+        # ====================================================
+        # 🔔 [수정됨] 알림 3종 세트 발송 로직 추가
+        # ====================================================
+        
+        # 1. 수면 리포트 알림 (기존)
         send_sleep_report_notification(db=db, user_id=user_id, score=int(total_score), message=message)
+        
+        # 2. 수면 효율 알림 (누락된 부분 추가)
+        # awake_ratio가 계산되어 있으므로 이를 이용해 효율(%) 계산
+        sleep_efficiency_percent = (1.0 - awake_ratio) * 100
+        send_sleep_efficiency_notification(db=db, user_id=user_id, efficiency=sleep_efficiency_percent)
+
+        # 3. 코골이 알림 (누락된 부분 추가)
+        # stage_durations["Snoring"]은 초 단위이므로 분 단위로 변환
+        snoring_min = stage_durations["Snoring"] / 60
+        send_snoring_notification(db=db, user_id=user_id, duration_min=snoring_min)
+
         return report_data
         
     except Exception as e:

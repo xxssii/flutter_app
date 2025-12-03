@@ -1,11 +1,12 @@
 // lib/screens/sleep_mode_screen.dart
 
+import 'dart:async'; // 타이머 사용을 위해 추가
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
+import '../services/ble_service.dart'; // BleService import 필수
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-// import 'dart:math' as math; // math.sin 사용 (이제 필요 없음)
 
 class SleepModeScreen extends StatefulWidget {
   const SleepModeScreen({Key? key}) : super(key: key);
@@ -69,14 +70,136 @@ class _SleepModeScreenState extends State<SleepModeScreen>
     );
   }
 
-  // SPO2 관련 애니메이션은 글로우로 대체되었으므로, 별도의 update 함수는 필요 없음
-  // AppState의 currentSpo2 값이 변경되어도 UI는 Text 위젯이 자동으로 업데이트 됨
-
   @override
   void dispose() {
     _heartAnimationController.dispose();
     _spo2GlowAnimationController.dispose();
     super.dispose();
+  }
+
+  // ====================================================
+  // 🧪 [시뮬레이션 로직] 특정 시간 동안 동작 후 자동 정지
+  // ====================================================
+  void _triggerSimulation(BuildContext context, BleService ble, String command, String label, int durationSec) {
+    // 1. 동작 시작 명령 전송
+    ble.sendRawCommand(command);
+    
+    // 2. 알림 표시
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("🚨 $label 감지됨! → 베개 동작 시작 ($durationSec초)"),
+        backgroundColor: Colors.orangeAccent,
+        duration: Duration(seconds: durationSec),
+      ),
+    );
+
+    // 3. 설정된 시간 후 정지 명령 전송
+    Timer(Duration(seconds: durationSec), () {
+      if(mounted) {
+        // 공기 관련 명령이었으면 'a'(공기만 멈춤), 진동이었으면 '9'(진동 끄기)
+        if (command == '7' || command == '8') {
+           ble.sendRawCommand('9'); // 진동 끄기
+        } else {
+           ble.sendRawCommand('a'); // 공기 멈춤
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("✅ 상황 해제 → 동작 정지"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    });
+  }
+
+  // 🧪 시뮬레이션 패널 (Bottom Sheet)
+  void _showSimulationPanel(BuildContext context) {
+    final ble = Provider.of<BleService>(context, listen: false);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("🧪 이벤트 시뮬레이터", 
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.indigo)),
+              const SizedBox(height: 8),
+              const Text("상황 발생 시 베개가 어떻게 반응하는지 테스트합니다.", 
+                style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 24),
+
+              // 1. 코골이 시뮬레이션
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.orange,
+                  child: Icon(Icons.mic, color: Colors.white),
+                ),
+                title: const Text("코골이 발생 (Snoring)"),
+                subtitle: const Text("반응: 목 부분 높이기 (3초)"),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  onPressed: () {
+                    Navigator.pop(context); // 창 닫기
+                    // '1'번 명령: Cell 1(목) 주입
+                    _triggerSimulation(context, ble, '1', "코골이", 3);
+                  },
+                  child: const Text("발생"),
+                ),
+              ),
+              const Divider(),
+
+              // 2. 무호흡 시뮬레이션
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.red,
+                  child: Icon(Icons.warning_amber_rounded, color: Colors.white),
+                ),
+                title: const Text("무호흡 감지 (Apnea)"),
+                subtitle: const Text("반응: 강한 진동 알림 (2초)"),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // '7'번 명령: 진동 강하게
+                    _triggerSimulation(context, ble, '7', "무호흡(저산소)", 2);
+                  },
+                  child: const Text("발생"),
+                ),
+              ),
+              const Divider(),
+
+              // 3. 뒤척임 시뮬레이션
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blueGrey,
+                  child: Icon(Icons.rotate_right, color: Colors.white),
+                ),
+                title: const Text("심한 뒤척임 (Tossing)"),
+                subtitle: const Text("반응: 머리 부분 높이기 (4초)"),
+                trailing: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    // '2'번 명령: Cell 2(머리) 주입
+                    _triggerSimulation(context, ble, '2', "뒤척임", 4);
+                  },
+                  child: const Text("발생"),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -101,6 +224,15 @@ class _SleepModeScreenState extends State<SleepModeScreen>
                 appState.toggleMeasurement(context);
               },
             ),
+            // ✅ [추가됨] 우측 상단 시뮬레이션 버튼
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.science, color: Colors.white), // 실험실 아이콘
+                tooltip: "시뮬레이션 패널 열기",
+                onPressed: () => _showSimulationPanel(context),
+              ),
+              const SizedBox(width: 10),
+            ],
           ),
           body: Center(
             child: Column(
@@ -135,11 +267,23 @@ class _SleepModeScreenState extends State<SleepModeScreen>
                     color: AppColors.cardBackground,
                   ),
                 ),
+                
+                // 시뮬레이션 안내 텍스트 (작게 추가)
+                const SizedBox(height: 8),
+                const Text(
+                  "상단 🧪 아이콘을 눌러 동작을 테스트하세요",
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+
                 const SizedBox(height: 16),
 
                 // 4. 측정 종료 버튼 (달 아이콘)
                 ElevatedButton(
                   onPressed: () {
+                    // 데이터 수집 중지 (BleService)
+                    final ble = Provider.of<BleService>(context, listen: false);
+                    ble.stopDataCollection();
+                    
                     appState.toggleMeasurement(context);
                   },
                   style: ElevatedButton.styleFrom(

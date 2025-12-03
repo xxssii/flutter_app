@@ -51,9 +51,13 @@ class HomeScreen extends StatelessWidget {
   // ========================================
   // ✨ 7일치 테스트 데이터 생성
   // ========================================
+  // ========================================
+  // ✨ [핵심 수정] 7일치 데이터 완벽 생성기
+  // ========================================
   Future<void> _generateWeeklyTestData(BuildContext context) async {
     if (!context.mounted) return;
 
+    // 로딩 다이얼로그 표시
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -62,88 +66,225 @@ class HomeScreen extends StatelessWidget {
           children: [
             CircularProgressIndicator(),
             SizedBox(width: 20),
-            Text('7일치 데이터 생성 중...'),
+            Text('데이터 초기화 및\n주간 리포트 생성 중...\n(약 10~20초 소요)'),
           ],
         ),
       ),
     );
 
     try {
+      final userId = 'demoUser';
+      final firestore = FirebaseFirestore.instance;
+
+      // 🧹 1. 기존 데이터 "진짜" 삭제
+      print("🧹 데이터 청소 시작...");
+      await _clearCollection(userId, 'raw_data');
+      await _clearCollection(userId, 'processed_data');
+      await _clearCollection(userId, 'sleep_reports');
+      await _clearCollection(userId, 'session_state');
+      await _clearCollection(userId, 'sleep_insights'); // 인사이트도 삭제
+      print("🧹 데이터 청소 완료!");
+
+      // 🏭 2. 데이터 생성 시작 (7일전 ~ 어제)
       final now = DateTime.now();
-      int totalDataPoints = 0;
+      int totalRawDocs = 0;
 
-      for (int dayOffset = 6; dayOffset >= 0; dayOffset--) {
-        final date = now.subtract(Duration(days: dayOffset));
+      WriteBatch batch = firestore.batch();
+      int batchCount = 0;
+
+      // 7일치 루프
+      for (int i = 7; i >= 1; i--) {
+        final targetDate = now.subtract(Duration(days: i));
+
+        // 날짜 기반 세션 ID 생성
         final dateString =
-            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+            '${targetDate.year}-${targetDate.month.toString().padLeft(2, '0')}-${targetDate.day.toString().padLeft(2, '0')}';
         final sessionId = 'session-$dateString';
-        final userId = 'demo_user';
 
-        print('📅 날짜: $dateString 데이터 생성 시작...');
+        // 수면 시간 설정 (랜덤)
+        final int startHour = 22 + _random.nextInt(2); // 22시 ~ 23시
+        final int startMin = _random.nextInt(60);
+        final int sleepDurationHours = 6 + _random.nextInt(3); // 6 ~ 8시간
 
-        DateTime currentTime = DateTime(date.year, date.month, date.day, 22, 0);
-        final sleepCycle = _generateRealisticSleepCycle();
+        DateTime sleepStart = DateTime(
+            targetDate.year, targetDate.month, targetDate.day, startHour, startMin);
+        DateTime sleepEnd = sleepStart.add(Duration(
+            hours: sleepDurationHours, minutes: _random.nextInt(60)));
 
-        for (int minute = 0; minute < 480; minute++) {
-          final stage = sleepCycle[minute];
-          final data = _generateDataForStage(
-            stage: stage,
-            userId: userId,
-            sessionId: sessionId,
-            timestamp: currentTime,
-          );
+        print(
+            '📅 생성 중: $dateString ($sessionId) - ${sleepDurationHours}시간 수면');
 
-          await FirebaseFirestore.instance.collection('raw_data').add(data);
-          currentTime = currentTime.add(const Duration(minutes: 1));
-          totalDataPoints++;
+        DateTime currentTime = sleepStart;
 
-          if (totalDataPoints % 100 == 0) {
-            print('✅ $totalDataPoints개 데이터 저장됨...');
+        // 통계용 변수
+        double totalDeep = 0;
+        double totalRem = 0;
+        double totalLight = 0;
+        double totalWake = 0;
+        int count = 0;
+
+        // --- [루프] 분 단위 데이터 생성 ---
+        while (currentTime.isBefore(sleepEnd)) {
+          // 1. 단계 시뮬레이션
+          String stage = _simulateSleepStage(sleepStart, sleepEnd, currentTime);
+
+          // 2. 센서 데이터 생성
+          final sensorData = _generateDataForStage(
+              stage: stage,
+              userId: userId,
+              sessionId: sessionId,
+              timestamp: currentTime);
+
+          // 3. raw_data 저장 (Jupyter 학습용)
+          final rawRef = firestore.collection('raw_data').doc();
+          batch.set(rawRef, sensorData);
+
+          // 4. processed_data 저장 (앱 그래프용) - 트리거 기다리지 않고 직접 저장!
+          final processedRef = firestore.collection('processed_data').doc();
+          batch.set(processedRef, {
+            'userId': userId,
+            'sessionId': sessionId,
+            'stage': stage, // 이미 분류된 것으로 간주
+            'raw_stage': stage,
+            'confidence': 1.0,
+            'ts': Timestamp.fromDate(currentTime),
+            'changed_at': Timestamp.fromDate(currentTime), // 그래프 X축
+            'source_ts': Timestamp.fromDate(currentTime),
+          });
+
+          // 통계 누적
+          if (stage == 'Deep')
+            totalDeep += 3;
+          // 3분 간격
+          else if (stage == 'REM')
+            totalRem += 3;
+          else if (stage == 'Light')
+            totalLight += 3;
+          else
+            totalWake += 3;
+          count++;
+
+          // 배치 관리
+          batchCount += 2; // raw + processed
+          totalRawDocs++;
+          if (batchCount >= 450) {
+            await batch.commit();
+            batch = firestore.batch();
+            batchCount = 0;
           }
+
+          currentTime = currentTime.add(const Duration(minutes: 3)); // 3분 간격
         }
 
-        print('✅ $dateString 완료! (480개 데이터)');
+        // 5. Sleep Report 직접 생성 (앱 요약 카드용) - 트리거 기다리지 않음!
+        final totalDuration = totalDeep + totalRem + totalLight + totalWake; // 분 단위
+        final totalHours = totalDuration / 60.0;
+
+        // 점수 계산 (간이 로직)
+        int score = 70 + _random.nextInt(25); // 70~95점
+        if (totalHours < 5) score -= 20;
+        if (totalDeep / totalDuration < 0.1) score -= 10;
+        score = score.clamp(0, 100);
+
+        String message = score > 80 ? "훌륭한 수면입니다!" : "수면 관리가 필요해요.";
+        String grade = score > 90 ? "S" : (score > 80 ? "A" : "B");
+
+        final reportRef = firestore.collection('sleep_reports').doc(sessionId);
+        batch.set(reportRef, {
+          'userId': userId,
+          'sessionId': sessionId,
+          'total_score': score,
+          'grade': grade,
+          'message': message,
+          'created_at': Timestamp.fromDate(sleepEnd), // 수면 끝난 시간 기준
+          'summary': {
+            'total_duration_hours':
+                double.parse(totalHours.toStringAsFixed(1)),
+            'deep_sleep_hours': double.parse((totalDeep / 60).toStringAsFixed(1)),
+            'rem_sleep_hours': double.parse((totalRem / 60).toStringAsFixed(1)),
+            'light_sleep_hours':
+                double.parse((totalLight / 60).toStringAsFixed(1)),
+            'awake_hours': double.parse((totalWake / 60).toStringAsFixed(1)),
+            'apnea_count': _random.nextInt(5), // 랜덤 무호흡
+            'snoring_duration': _random.nextInt(30),
+            'deep_ratio': (totalDeep / totalDuration * 100).round(),
+            'rem_ratio': (totalRem / totalDuration * 100).round(),
+            'awake_ratio': (totalWake / totalDuration * 100).round(),
+          }
+        });
+        batchCount++;
       }
 
-      if (context.mounted) {
-        Navigator.of(context).pop();
+      // 남은 배치 처리
+      if (batchCount > 0) await batch.commit();
 
+      if (context.mounted) {
+        Navigator.of(context).pop(); // 다이얼로그 닫기
+
+        // ✅ [중요] 상태 강제 업데이트 알림
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ 7일치 데이터 생성 완료! (총 $totalDataPoints개)'),
+            content: Text(
+                '✅ 7일치 데이터 ($totalRawDocs개) 생성 완료!\n앱을 재시작하거나 화면을 갱신하세요.'),
             backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
-
-      print('🎉 전체 완료! 총 $totalDataPoints개 데이터 생성됨');
     } catch (e) {
       if (context.mounted) {
         Navigator.of(context).pop();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 데이터 생성 실패: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('❌ 생성 실패: $e'), backgroundColor: Colors.red));
       }
-      print('❌ 오류 발생: $e');
+      print(e);
     }
   }
 
-  List<String> _generateRealisticSleepCycle() {
-    final List<String> cycle = [];
-    cycle.addAll(List.filled(60, 'Light'));
-    cycle.addAll(List.filled(120, 'Deep'));
-    cycle.addAll(List.filled(90, 'Light'));
-    cycle.addAll(List.filled(30, 'REM'));
-    cycle.addAll(List.filled(90, 'Deep'));
-    cycle.addAll(List.filled(30, 'Light'));
-    cycle.addAll(List.filled(30, 'REM'));
-    cycle.addAll(List.filled(30, 'Light'));
-    return cycle;
+  // 🧹 컬렉션 삭제 헬퍼 (기존과 동일하지만 userId 필터링 확실히)
+  Future<void> _clearCollection(String userId, String collection) async {
+    final instance = FirebaseFirestore.instance;
+    final batchSize = 400;
+
+    // 무한 루프로 모든 데이터 삭제 보장
+    while (true) {
+      var snapshot = await instance
+          .collection(collection)
+          .where('userId', isEqualTo: userId)
+          .limit(batchSize)
+          .get();
+
+      if (snapshot.docs.isEmpty) break;
+
+      var batch = instance.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      print("Deleted ${snapshot.docs.length} docs from $collection");
+      await Future.delayed(const Duration(milliseconds: 50)); // 속도 조절
+    }
+  }
+
+  String _simulateSleepStage(DateTime start, DateTime end, DateTime current) {
+    final totalMinutes = end.difference(start).inMinutes;
+    final elapsedMinutes = current.difference(start).inMinutes;
+    final progress = elapsedMinutes / totalMinutes;
+
+    if (progress < 0.3) {
+      return _random.nextDouble() < 0.6 ? 'Deep' : 'Light';
+    } else if (progress < 0.7) {
+      double r = _random.nextDouble();
+      if (r < 0.1) return 'Snoring';
+      if (r < 0.4) return 'Deep';
+      if (r < 0.6) return 'REM';
+      return 'Light';
+    } else {
+      double r = _random.nextDouble();
+      if (r < 0.05) return 'Awake';
+      if (r < 0.4) return 'REM';
+      return 'Light';
+    }
   }
 
   Map<String, dynamic> _generateDataForStage({
@@ -162,55 +303,111 @@ class HomeScreen extends StatelessWidget {
         pressureMax;
 
     switch (stage) {
-      case 'Light':
-        hrMin = 60;
-        hrMax = 70;
-        spo2Min = 96;
-        spo2Max = 98;
-        micMin = 10;
-        micMax = 40;
-        pressureMin = 500;
-        pressureMax = 1500;
-        break;
-      case 'Deep':
+      case 'Deep': // 깊은 잠: 심박수 최저, 움직임 거의 없음
         hrMin = 50;
-        hrMax = 60;
-        spo2Min = 96;
-        spo2Max = 98;
+        hrMax = 60; // 안정적인 낮은 심박수
+        spo2Min = 97;
+        spo2Max = 99; // 정상 산소포화도
         micMin = 5;
-        micMax = 20;
-        pressureMin = 100;
-        pressureMax = 500;
+        micMax = 20; // 거의 침묵 (백색소음 수준)
+        pressureMin = 800;
+        pressureMax = 1200; // 머리 무게 안정적 지지
         break;
-      case 'REM':
-        hrMin = 65;
+
+      case 'Light': // 얕은 잠: 심박수 약간 상승, 일반적인 수면 상태
+        hrMin = 60;
         hrMax = 75;
         spo2Min = 96;
-        spo2Max = 98;
-        micMin = 5;
-        micMax = 20;
-        pressureMin = 100;
-        pressureMax = 500;
+        spo2Max = 99;
+        micMin = 20;
+        micMax = 40; // 얕은 숨소리나 약한 생활 소음
+        pressureMin = 800;
+        pressureMax = 1300;
         break;
+
+      case 'REM': // 렘수면: 뇌 활발, 심박수 불규칙하게 상승 (꿈)
+        hrMin = 65;
+        hrMax = 85; // 꿈꿀 때 심박수 오름
+        spo2Min = 96;
+        spo2Max = 99;
+        micMin = 10;
+        micMax = 30; // 근육 마비로 소리는 조용함
+        pressureMin = 800;
+        pressureMax = 1200;
+        break;
+
+      case 'Awake': // 깸: 심박수 급증, 머리를 뗌 (압력 0 근처)
+        hrMin = 80;
+        hrMax = 110; // 깨어나서 활동 시작
+        spo2Min = 97;
+        spo2Max = 100;
+        micMin = 40;
+        micMax = 100; // 말하거나 움직이는 소리
+        pressureMin = 0;
+        pressureMax = 100; // 💡 핵심: 머리를 들어서 압력이 사라짐
+        break;
+
+      case 'Tossing': // 뒤척임: 베개를 짓누르거나 강한 움직임
+        hrMin = 70;
+        hrMax = 90;
+        spo2Min = 96;
+        spo2Max = 99;
+        micMin = 30;
+        micMax = 80; // 이불 부스럭거리는 소리
+        pressureMin = 3000;
+        pressureMax = 4095; // 💡 핵심: 베개를 꾹 누르는 최대 압력
+        break;
+
+      case 'Snoring': // 코골이: 소리 센서 폭발
+        hrMin = 60;
+        hrMax = 75;
+        spo2Min = 93;
+        spo2Max = 96; // 호흡 곤란으로 약간 떨어질 수 있음
+        micMin = 150;
+        micMax = 255; // 💡 핵심: 마이크 값 최대치 (코고는 소리)
+        pressureMin = 800;
+        pressureMax = 1300; // 자세는 그대로
+        break;
+
+      case 'Apnea': // 수면 무호흡: 소리 없음 + 산소포화도 위험 수준
+        hrMin = 75;
+        hrMax = 95; // 숨 멈춰서 느려졌다가, 헐떡이며 빨라짐 (변동성)
+        spo2Min = 80;
+        spo2Max = 88; // 💡 핵심: 위험 수준으로 떨어짐 (저산소증)
+        micMin = 0;
+        micMax = 5; // 💡 핵심: 숨을 안 쉬어서 소리가 '0'에 가까움
+        pressureMin = 500;
+        pressureMax = 900; // 몸부림 치기 직전 정지 상태
+        break;
+
       default:
         hrMin = 60;
-        hrMax = 70;
+        hrMax = 75;
         spo2Min = 96;
-        spo2Max = 98;
+        spo2Max = 99;
         micMin = 10;
         micMax = 30;
-        pressureMin = 500;
-        pressureMax = 1000;
+        pressureMin = 800;
+        pressureMax = 1200;
+        break;
     }
-
     return {
       'hr': _randRange(hrMin, hrMax).toInt(),
-      'spo2': _randRange(spo2Min, spo2Max),
-      'mic_level': _randRange(micMin, micMax).toInt(),
-      'pressure_level': _randRange(pressureMin, pressureMax).toInt(),
+      'spo2': _randRange(spo2Min, spo2Max).toInt(),
+      'mic_avg': _randRange(micMin, micMax).toInt(),
+      'pressure_avg': _randRange(pressureMin, pressureMax).toInt(),
+
+      // 더미 데이터
+      'mic_1_avg_10s': 0, 'mic_2_avg_10s': 0,
+      'pressure_1_avg_10s': 0, 'pressure_2_avg_10s': 0, 'pressure_3_avg_10s': 0,
+      'pillow_battery': 100, 'watch_battery': 100,
+      'auto_control_active': false,
+      'is_snoring': false,
+
       'userId': userId,
       'sessionId': sessionId,
       'ts': Timestamp.fromDate(timestamp),
+      'label': stage,
     };
   }
 
@@ -309,114 +506,6 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  // ========================================
-  // 🔧 Cloud Functions 트리거 테스트
-  // ========================================
-  Future<void> _testOnNewDataTrigger(BuildContext context) async {
-    print('🔧 트리거 테스트 시작...');
-
-    if (!context.mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Row(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Text('트리거 테스트 중...'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final now = DateTime.now();
-      final testSessionId = 'test-trigger-${now.millisecondsSinceEpoch}';
-
-      print('📝 raw_data에 테스트 데이터 추가 중...');
-
-      final docRef =
-          await FirebaseFirestore.instance.collection('raw_data').add({
-        'hr': 65,
-        'spo2': 97.5,
-        'mic_level': 20,
-        'pressure_level': 300,
-        'userId': 'test_user',
-        'sessionId': testSessionId,
-        'ts': Timestamp.now(),
-      });
-
-      print('✅ raw_data 추가 완료! docId: ${docRef.id}');
-
-      print('⏳ 5초 대기 중 (트리거 실행 시간)...');
-      await Future.delayed(const Duration(seconds: 5));
-
-      print('🔍 processed_data 확인 중...');
-
-      final processedQuery = await FirebaseFirestore.instance
-          .collection('processed_data')
-          .where('sessionId', isEqualTo: testSessionId)
-          .get();
-
-      if (!context.mounted) return;
-      Navigator.of(context).pop();
-
-      if (processedQuery.docs.isEmpty) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('❌ 트리거 작동 안 함'),
-            content: const Text('5초를 기다렸지만 processed_data에 데이터가 생성되지 않았습니다.\n\n'
-                'Cloud Functions의 on_new_data 트리거가 작동하지 않고 있습니다.\n\n'
-                '원인:\n'
-                '1. Functions 배포 안 됨\n'
-                '2. 트리거 설정 오류\n'
-                '3. 코드 오류'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
-        );
-        print('❌ 트리거 작동 안 함!');
-      } else {
-        final processedDoc = processedQuery.docs.first;
-        final stage = processedDoc['stage'];
-
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('✅ 트리거 작동함!'),
-            content: Text('Cloud Functions가 정상 작동합니다!\n\n'
-                '분류된 단계: $stage\n\n'
-                'processed_data에 데이터가 생성되었습니다.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('확인'),
-              ),
-            ],
-          ),
-        );
-        print('✅ 트리거 작동함! stage: $stage');
-      }
-    } catch (e) {
-      if (context.mounted) {
-        Navigator.of(context).pop();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ 오류 발생: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      print('❌ 테스트 실패: $e');
-    }
-  }
 
   // ========================================
   // 훈련 데이터 생성
@@ -574,35 +663,7 @@ class HomeScreen extends StatelessWidget {
                         ),
                       ),
 
-                      // ========================================
-                      // ✨ 새로 추가: 트리거 테스트 버튼
-                      // ========================================
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () => _testOnNewDataTrigger(context),
-                        icon: const Icon(Icons.bug_report),
-                        label: const Text('🔧 Cloud Functions 트리거 테스트'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'raw_data에 1개 테스트 데이터 추가 (트리거 확인용)',
-                        style: AppTextStyles.smallText.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "-----------------------------------------",
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
+                      
                     ],
                   ),
                 ),
@@ -984,38 +1045,40 @@ class HomeScreen extends StatelessWidget {
 
   // ✅ 수정됨: 도넛 그래프를 사용하여 정보를 표시하는 함수
   Widget _buildPlaceholderInfoCards() {
-    return Column(
-      children: [
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: _buildAnimatedDonutContent(
-              title: '목표: 8시간',
-              centerValue: '6시간 48분',
-              footerLabel: '오늘의 수면 달성률',
-              progress: 0.85,
-              // 팔레트 색상: #6292BE
-              color: const Color(0xFF6292BE),
+    return Consumer<SleepDataState>(
+      builder: (context, sleepDataState, child) {
+        // ✅ 실제 데이터 가져오기
+        final metrics = sleepDataState.todayMetrics;
+        final totalHours = metrics.totalSleepDuration;
+        final hours = totalHours.floor();
+        final minutes = ((totalHours - hours) * 60).round();
+        final centerValue = '$hours시간 $minutes분';
+        
+        // ✅ 목표 대비 달성률 계산 (목표: 8시간)
+        final targetHours = 8.0;
+        final progress = (totalHours / targetHours).clamp(0.0, 1.0);
+        
+        return Column(
+          children: [
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: _buildAnimatedDonutContent(
+                  title: '목표: ${targetHours.toInt()}시간',
+                  centerValue: centerValue,
+                  footerLabel: '오늘의 수면 달성률',
+                  progress: progress,
+                  // 팔레트 색상: #6292BE
+                  color: const Color(0xFF6292BE),
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: _buildAnimatedDonutContent(
-              title: '권장: 10~12cm',
-              centerValue: '12cm',
-              footerLabel: '현재 높이 상태',
-              progress: 0.6,
-              // 팔레트 색상: #B5C1D4
-              color: const Color(0xFFB5C1D4),
-            ),
-          ),
-        ),
-      ],
+            const SizedBox(height: 16),
+            
+          ],
+        );
+      },
     );
   }
 

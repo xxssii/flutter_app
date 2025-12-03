@@ -1,5 +1,5 @@
 // lib/services/ble_service.dart
-// ✅ [긴급 수정] 10초 쿨타임 적용 (과금 방지) + ID 통일 완료
+// ✅ [긴급 수정] 10초 쿨타임 적용 (과금 방지) + ID 통일 완료 + 스마트 높이 조절 로직 통합
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/material.dart';
@@ -368,9 +368,6 @@ class BleService extends ChangeNotifier {
   }
 
   // ==========================================
-  // 하드웨어 명령 (친구의 adjustCell 포함)
-  // ==========================================
- // ==========================================
   // 8. 하드웨어 명령 (✅ 통합 및 정리 완료)
   // ==========================================
 

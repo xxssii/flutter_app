@@ -461,11 +461,14 @@ class _PillowScreenState extends State<PillowScreen> {
                               activeColor: _colHead,
                               textColor: textColor,
                               onChanged: (val) {
+                                // 1. 현재 레벨 저장 (BleService가 증분 계산용으로 사용)
                                 final prevLevel = _cell1Height;
+                                
+                                // 2. UI 업데이트
                                 _updateAircellHeight(1, val);
                                 _showHeightChangeSnackBar(context, '오른쪽', val);
                                 
-                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
+                                // 3. BLE 서비스 호출 (currentLevel 전달)
                                 bleService.adjustCell(1, val, currentLevel: prevLevel);
                               },
                             ),
@@ -483,7 +486,6 @@ class _PillowScreenState extends State<PillowScreen> {
                                 _updateAircellHeight(2, val);
                                 _showHeightChangeSnackBar(context, '가운데', val);
 
-                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
                                 bleService.adjustCell(2, val, currentLevel: prevLevel);
                               },
                             ),
@@ -501,7 +503,6 @@ class _PillowScreenState extends State<PillowScreen> {
                                 _updateAircellHeight(3, val);
                                 _showHeightChangeSnackBar(context, '왼쪽', val);
 
-                                // ✅ 실제 하드웨어 제어 (이전 레벨에서 목표 레벨로 증분 시간 계산)
                                 bleService.adjustCell(3, val, currentLevel: prevLevel);
                               },
                             ),
