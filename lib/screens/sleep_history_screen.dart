@@ -19,16 +19,18 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    // 화면이 열릴 때 데이터를 불러옵니다.
+    // ✅ 화면이 열릴 때 데이터가 없을 때만 불러옵니다.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // ✅ AppState에서 현재 사용자 ID 가져오기
-      final userId = Provider.of<AppState>(context, listen: false).currentUserId;
+      final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
       
-      // ✅ context 제거! userId만 전달
-      Provider.of<SleepDataState>(
-        context,
-        listen: false,
-      ).fetchAllSleepReports(userId);  // ✅ 이 부분이 수정됨!
+      // ✅ 이미 데이터가 있으면 다시 로딩하지 않음!
+      if (sleepDataState.sleepHistory.isEmpty && !sleepDataState.isLoading) {
+        final userId = Provider.of<AppState>(context, listen: false).currentUserId;
+        print('📋 SleepHistoryScreen: 데이터가 없어서 로딩 시작');
+        sleepDataState.fetchAllSleepReports(userId);
+      } else {
+        print('✅ SleepHistoryScreen: 이미 데이터가 있음 (${sleepDataState.sleepHistory.length}개)');
+      }
     });
   }
 
