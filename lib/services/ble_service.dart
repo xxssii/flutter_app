@@ -374,6 +374,77 @@ class BleService extends ChangeNotifier {
   // ❌ [삭제됨] 옛날 adjustHeight 함수는 이제 안 씁니다. (헷갈림 방지)
   
   // ✅ [수정] 현재 레벨 추적을 위한 변수 추가
+  final Map<int, int> _currentCellLevels = {}; // cellIndex -> currentLevel
+
+  // ✅ [수정] 하드웨어 테스트 화면과 동일한 원시 명령어("1", "a" 등) 사용
+  // 앱에서 시간을 재고 멈춤 명령("a")을 보내는 방식
+  Future<void> adjustCell(int cellIndex, int targetLevel, {int? currentLevel}) async {
+    // 1. 연결 체크
+    if (kIsWeb || _commandChar == null || !_isPillowConnected) {
+        print("⚠️ 명령 실패: 베개 미연결");
+        return;
+    }
+
+    // 2. 현재 레벨 확인
+    int prevLevel = currentLevel ?? _currentCellLevels[cellIndex] ?? 0;
+    _currentCellLevels[cellIndex] = targetLevel;
+
+    // 3. 레벨별 누적 시간 정의 (초 단위) - 사용자 스펙 반영
+    // 1단계: 1번(25s), 2번(35s), 3번(20s)
+    // 2단계: 1번(50s), 2번(75s), 3번(40s)
+    int getCumulativeTime(int cellIdx, int level) {
+      if (level == 0) return 0;
+      switch (cellIdx) {
+        case 1: return level == 1 ? 25 : 50;
+        case 2: return level == 1 ? 35 : 75;
+        case 3: return level == 1 ? 20 : 40;
+        default: return level == 1 ? 25 : 50;
+      }
+    }
+
+    // 4. 증분 시간 계산
+    int prevTime = getCumulativeTime(cellIndex, prevLevel);
+    int targetTime = getCumulativeTime(cellIndex, targetLevel);
+    int durationSec = targetTime - prevTime; // 양수면 주입, 음수면 배출
+
+    if (durationSec == 0) return;
+
+    String startCmd = "";
+    String stopCmd = "a"; // 공기 제어 멈춤
+
+    // 5. 커맨드 매핑 (HardwareTestScreen 참조)
+    // Cell 1: 주입 '1', 배출 '4'
+    // Cell 2: 주입 '2', 배출 '5'
+    // Cell 3: 주입 '3', 배출 '6'
+    if (durationSec > 0) {
+      // 주입
+      if (cellIndex == 1) startCmd = "1";
+      else if (cellIndex == 2) startCmd = "2";
+      else if (cellIndex == 3) startCmd = "3";
+    } else {
+      // 배출 (시간은 양수로 변환)
+      durationSec = -durationSec;
+      if (cellIndex == 1) startCmd = "4";
+      else if (cellIndex == 2) startCmd = "5";
+      else if (cellIndex == 3) startCmd = "6";
+    }
+
+    try {
+      // 6. 시작 명령 전송
+      print("🚀 [BleService] $cellIndex번 셀 동작 시작: $startCmd ($durationSec초)");
+      await sendRawCommand(startCmd);
+
+      // 7. 시간만큼 대기 (앱에서 타이머 동작)
+      await Future.delayed(Duration(seconds: durationSec));
+
+      // 8. 정지 명령 전송
+      print("🛑 [BleService] $cellIndex번 셀 동작 정지: $stopCmd");
+      await sendRawCommand(stopCmd);
+
+    } catch (e) {
+      print("⚠️ 명령 전송 실패: $e");
+    }
+  }
 
   Future<void> sendVibrateGently() async {
     if (kIsWeb || _commandChar == null || !_isPillowConnected) return;
