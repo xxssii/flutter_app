@@ -117,35 +117,43 @@ def min_duration_sec_for(prev_stable_stage: str | None) -> int:
 # 🎮 3. 명령 정책 (Command Policy)
 # =========================================================
 def command_policy(stage: str) -> dict | None:
-    # 1. 무호흡 (가장 위험) -> 기도 최대 확보 (Level 3)
+    # 1. 무호흡 (가장 위험) -> 기도 최대 확보 (Level2)
     if stage == "Apnea":
         return {
             "type": "SET_HEIGHT", 
-            "payload": { "cellIndex": 1, "targetLevel": 3 }, 
+            "payload": { "cellIndex": 1, "targetLevel": 2 }, 
             "ttlSec": 20 
         }
 
-    # 2. 코골이 -> 기도 확보 (Level 2)
+    # 2. 코골이 -> 기도 확보 (Level 1)
     if stage == "Snoring":
         return {
             "type": "SET_HEIGHT", 
-            "payload": { "cellIndex": 1, "targetLevel": 2 }, 
+            "payload": { "cellIndex": 1, "targetLevel": 1 }, 
             "ttlSec": 60 
         }
 
-    # 3. 깊은 수면 -> 목 편안하게 (Level 2)
+    # 3. 깊은 수면 -> 목 편안하게 (Level 1)
     if stage == "Deep":
         return {
             "type": "SET_HEIGHT", 
-            "payload": { "cellIndex": 2, "targetLevel": 2 }, 
+            "payload": { "cellIndex": 2, "targetLevel": 1 }, 
             "ttlSec": 60
         }
 
-    # 4. 얕은 수면/깨어있음 -> 기본 상태 (Level 1)
+    # 4. 뒤척임 -> 머리 부분 높이기 (안정감 제공)
+    if stage == "Tossing":
+        return {
+            "type": "SET_HEIGHT", 
+            "payload": { "cellIndex": 2, "targetLevel": 1 }, 
+            "ttlSec": 120
+        }
+
+    # 5. 얕은 수면/깨어있음 -> 기본 상태 (Level 0)
     if stage == "Light" or stage == "Awake":
         return {
             "type": "SET_HEIGHT", 
-            "payload": { "cellIndex": 1, "targetLevel": 1 }, 
+            "payload": { "cellIndex": 1, "targetLevel": 0 }, 
             "ttlSec": 60
         }
 
