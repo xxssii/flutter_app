@@ -46,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
       print('🔄 HomeScreen: Firebase에서 데이터 가져오기 시작!');
       
       final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
-      await sleepDataState.fetchAllSleepReports(context, 'demoUser');
+      await sleepDataState.fetchAllSleepReports('demoUser');  // ✅ context 제거!
       
       print('✅ HomeScreen: 데이터 가져오기 완료!');
       print('📊 가져온 데이터 개수: ${sleepDataState.sleepHistory.length}개');

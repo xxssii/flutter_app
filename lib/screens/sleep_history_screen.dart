@@ -2,11 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../state/app_state.dart'; // ✅ AppState 임포트 추가
+import '../state/app_state.dart';
 import '../state/sleep_data_state.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
-import 'sleep_report_screen.dart'; // ✅ 이 줄을 추가하여 SleepReportScreen을 임포트합니다.
+import 'sleep_report_screen.dart';
 
 class SleepHistoryScreen extends StatefulWidget {
   const SleepHistoryScreen({Key? key}) : super(key: key);
@@ -24,10 +24,11 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
       // ✅ AppState에서 현재 사용자 ID 가져오기
       final userId = Provider.of<AppState>(context, listen: false).currentUserId;
       
+      // ✅ context 제거! userId만 전달
       Provider.of<SleepDataState>(
         context,
         listen: false,
-      ).fetchAllSleepReports(context, userId);
+      ).fetchAllSleepReports(userId);  // ✅ 이 부분이 수정됨!
     });
   }
 
@@ -38,11 +39,9 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('지난 수면 기록', style: AppTextStyles.heading2),
-        // backgroundColor 제거: Theme 사용
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.primaryText),
       ),
-      // backgroundColor 제거: Theme의 배경색 사용
       body: sleepDataState.isLoading
           ? const Center(child: CircularProgressIndicator())
           : sleepDataState.sleepHistory.isEmpty
@@ -89,7 +88,6 @@ class _SleepHistoryScreenState extends State<SleepHistoryScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          // ✅ 이제 SleepReportScreen을 사용할 수 있습니다.
                           builder: (context) => const SleepReportScreen(),
                         ),
                       );

@@ -1,4 +1,5 @@
 // lib/screens/data_screen.dart
+// ✅ 수정된 버전: Firebase 실제 데이터 사용
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +10,8 @@ import '../utils/app_colors.dart';
 import '../utils/app_text_styles.dart';
 import '../providers/sleep_provider.dart';
 import '../models/sleep_report_model.dart';
-import '../state/app_state.dart'; // ✅ AppState 임포트
+import '../state/app_state.dart';
+import '../state/sleep_data_state.dart'; // ✅ SleepDataState 추가!
 import 'sleep_history_screen.dart';
 
 class DataScreen extends StatefulWidget {
@@ -29,82 +31,23 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
   late Animation<double> _chartAnimation;
 
   int? _touchedTrendIndex;
-  // ✅ [추가] 막대 그래프에서 터치된 인덱스
   int? _touchedBarIndex;
 
-  // ✅ [수정됨] 요청하신 이미지의 색상 조합으로 변경
-  // 깊은 수면 / 긍정적 지표 (#011F25)
+  // 색상 정의
   final Color _mainDeepColor = const Color(0xFF011F25);
-  // 얕은 수면 (#1B4561)
   final Color _lightSleepColor = const Color(0xFF1B4561);
-  // REM 수면 (#6292BE)
   final Color _remSleepColor = const Color(0xFF6292BE);
-  // 깬 상태 / 부정적 지표 (#BD9A8E)
   final Color _awakeColor = const Color(0xFFBD9A8E);
-  // 배경 (막대 그래프 배경 등, #B5C1D4)
   final Color _themeLightGray = const Color(0xFFB5C1D4);
-  // (참고: #F2E6E6 색상은 사용하지 않았습니다.)
-
-  // 가짜(Mock) 수면 리포트 데이터
-  SleepReport _getMockSleepReport() {
-    final now = DateTime.now();
-    final sleepStart = DateTime(now.year, now.month, now.day - 1, 23, 30);
-    final sleepEnd = DateTime(now.year, now.month, now.day, 7, 15);
-    final totalDuration = sleepEnd.difference(sleepStart);
-    final totalDurationHours = totalDuration.inMinutes / 60.0;
-
-    const deepSleepHours = 1.8;
-    const lightSleepHours = 4.2;
-    const remSleepHours = 1.5;
-    const awakeHours = 0.25;
-
-    final deepRatio = deepSleepHours / totalDurationHours;
-    final remRatio = remSleepHours / totalDurationHours;
-    final awakeRatio = awakeHours / totalDurationHours;
-
-    final mockSummary = SleepSummary(
-      totalDurationHours: totalDurationHours,
-      deepSleepHours: deepSleepHours,
-      remSleepHours: remSleepHours,
-      lightSleepHours: lightSleepHours,
-      awakeHours: awakeHours,
-      deepRatio: deepRatio,
-      remRatio: remRatio,
-      awakeRatio: awakeRatio,
-      apneaCount: 2,
-      snoringDuration: 45.0,
-    );
-
-    final mockBreakdown = Breakdown(
-      durationScore: 90,
-      deepScore: 85,
-      remScore: 88,
-      efficiencyScore: 92,
-    );
-
-    return SleepReport(
-      sessionId: 'mock_session_id',
-      userId: 'mock_user_id',
-      createdAt: sleepEnd,
-      totalScore: 88,
-      grade: 'B+',
-      message: '전반적으로 좋은 수면이었습니다.',
-      summary: mockSummary,
-      breakdown: mockBreakdown,
-    );
-  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
 
-    // ✅ 화면 진입 시 최신 데이터 로드
+    // ✅ 화면 진입 시 Firebase에서 실제 데이터 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userId =
-          Provider.of<AppState>(context, listen: false).currentUserId;
-      Provider.of<SleepProvider>(context, listen: false)
-          .fetchMostRecentSleepReport(userId);
+      _loadDataFromFirebase();
     });
 
     _barChartAnimationController = AnimationController(
@@ -139,7 +82,6 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
           _touchedTrendIndex = null;
         });
       }
-      // ✅ [추가] 탭 변경 시 막대 그래프 터치 초기화
       if (_tabController.index != 0) {
         setState(() {
           _touchedBarIndex = null;
@@ -156,6 +98,21 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     });
   }
 
+  // ✅ Firebase에서 데이터 가져오는 함수
+  Future<void> _loadDataFromFirebase() async {
+    try {
+      print('🔄 DataScreen: Firebase에서 데이터 가져오기 시작!');
+      
+      final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
+      await sleepDataState.fetchAllSleepReports('demoUser');  // ✅ context 제거!
+      
+      print('✅ DataScreen: 데이터 가져오기 완료!');
+      print('📊 가져온 데이터 개수: ${sleepDataState.sleepHistory.length}개');
+    } catch (e) {
+      print('❌ DataScreen 데이터 가져오기 실패: $e');
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -166,115 +123,147 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final sleepProvider = Provider.of<SleepProvider>(context);
+    return Consumer<SleepDataState>(
+      builder: (context, sleepDataState, child) {
+        // ✅ 로딩 중 처리
+        if (sleepDataState.isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-    // ✅ 로딩 중 처리
-    if (sleepProvider.isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    final report = sleepProvider.latestSleepReport ?? _getMockSleepReport();
-
-    return Scaffold(
-      body: Column(
-        children: [
-          // ✅ PillowScreen 스타일의 헤더 (SafeArea + Padding)
-          SafeArea(
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 35.0, horizontal: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        // ✅ 데이터가 없으면 안내 메시지
+        if (sleepDataState.sleepHistory.isEmpty) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('수면 데이터 분석', style: AppTextStyles.heading1),
-                      const SizedBox(height: 4),
-                      Text(
-                        '상세한 수면 패턴과 효율성을 확인해보세요',
-                        style: AppTextStyles.secondaryBodyText,
-                      ),
-                    ],
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('현재 최근 7일간의 데이터를 보여주고 있습니다.'),
-                          duration: const Duration(seconds: 2),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      '최근 7일',
-                      style: AppTextStyles.bodyText.copyWith(
-                        color: AppColors.primaryNavy,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                  const Icon(Icons.nights_stay_outlined, size: 64, color: AppColors.secondaryText),
+                  const SizedBox(height: 16),
+                  Text('수면 데이터가 없습니다.', style: AppTextStyles.heading3),
+                  const SizedBox(height: 8),
+                  Text('홈 화면에서 구름 버튼(☁️)을 눌러\n7일치 데이터를 생성해주세요!',
+                    style: AppTextStyles.secondaryBodyText,
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
-          ),
-          _buildTopSummaryCards(report),
-          const SizedBox(height: 16),
-          TabBar(
-            controller: _tabController,
-            labelColor: AppColors.primaryNavy,
-            unselectedLabelColor: AppColors.secondaryText,
-            indicatorColor: AppColors.primaryNavy,
-            indicatorWeight: 3.0,
-            indicatorSize: TabBarIndicatorSize.tab,
-            labelStyle: AppTextStyles.bodyText.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-            unselectedLabelStyle: AppTextStyles.bodyText.copyWith(
-              fontWeight: FontWeight.normal,
-            ),
-            tabs: const [
-              Tab(text: '효율성'),
-              Tab(text: '수면 단계'),
-              Tab(text: '트렌드'),
-              Tab(text: '지난 기록'),
-            ],
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return TabBarView(
+          );
+        }
+
+        return Scaffold(
+          body: Column(
+            children: [
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 35.0, horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('수면 데이터 분석', style: AppTextStyles.heading1),
+                          const SizedBox(height: 4),
+                          Text(
+                            '상세한 수면 패턴과 효율성을 확인해보세요',
+                            style: AppTextStyles.secondaryBodyText,
+                          ),
+                        ],
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('현재 최근 7일간의 데이터를 보여주고 있습니다.'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          '최근 7일',
+                          style: AppTextStyles.bodyText.copyWith(
+                            color: AppColors.primaryNavy,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              _buildTopSummaryCards(sleepDataState),
+              const SizedBox(height: 16),
+              TabBar(
+                controller: _tabController,
+                labelColor: AppColors.primaryNavy,
+                unselectedLabelColor: AppColors.secondaryText,
+                indicatorColor: AppColors.primaryNavy,
+                indicatorWeight: 3.0,
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelStyle: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelStyle: AppTextStyles.bodyText.copyWith(
+                  fontWeight: FontWeight.normal,
+                ),
+                tabs: const [
+                  Tab(text: '효율성'),
+                  Tab(text: '수면 단계'),
+                  Tab(text: '트렌드'),
+                  Tab(text: '지난 기록'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _buildEfficiencyTab(report),
-                    _buildSleepStagesTab(report),
-                    _buildTrendTab(),
+                    _buildEfficiencyTab(sleepDataState),
+                    _buildSleepStagesTab(sleepDataState),
+                    _buildTrendTab(sleepDataState),
                     const SleepHistoryScreen(),
                   ],
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildTopSummaryCards(SleepReport report) {
-    final summary = report.summary;
-    final efficiency = (summary.deepSleepHours +
-            summary.remSleepHours +
-            summary.lightSleepHours) /
-        summary.totalDurationHours;
-    final remRatio = summary.remRatio;
-    final avgSleep = summary.totalDurationHours.toStringAsFixed(1);
+  // ✅ 상단 요약 카드 - Firebase 데이터 사용!
+  Widget _buildTopSummaryCards(SleepDataState sleepDataState) {
+    final history = sleepDataState.sleepHistory;
+    
+    if (history.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // 최근 7일 데이터로 평균 계산
+    final recent7Days = history.take(7).toList();
+    
+    double totalSleepHours = 0;
+    double totalTimeInBed = 0;
+    double totalRemRatio = 0;
+    
+    for (var data in recent7Days) {
+      totalSleepHours += data.totalSleepDuration;
+      totalTimeInBed += data.timeInBed;
+      totalRemRatio += data.remRatio;
+    }
+    
+    final count = recent7Days.length;
+    final avgSleepHours = totalSleepHours / count;
+    final avgEfficiency = (totalSleepHours / totalTimeInBed) * 100;
+    final avgRemRatio = totalRemRatio / count;
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -284,8 +273,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             child: _buildSummaryCard(
               icon: Icons.opacity,
               title: '수면 효율',
-              valueText: '${(efficiency * 100).toStringAsFixed(0)}%',
-              // ✅ 테마 적용
+              valueText: '${avgEfficiency.toStringAsFixed(0)}%',
               iconColor: _mainDeepColor,
             ),
           ),
@@ -294,8 +282,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             child: _buildSummaryCard(
               icon: Icons.psychology,
               title: 'REM 비율',
-              valueText: '${(remRatio * 100).toStringAsFixed(0)}%',
-              // ✅ 테마 적용
+              valueText: '${avgRemRatio.toStringAsFixed(0)}%',
               iconColor: _remSleepColor,
             ),
           ),
@@ -304,8 +291,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             child: _buildSummaryCard(
               icon: Icons.access_time,
               title: '평균 수면',
-              valueText: '${avgSleep}시간',
-              // ✅ 테마 적용
+              valueText: '${avgSleepHours.toStringAsFixed(1)}시간',
               iconColor: _lightSleepColor,
             ),
           ),
@@ -333,7 +319,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: iconColor.withOpacity(0.1), // 연한 배경
+                    color: iconColor.withOpacity(0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: iconColor, size: 18),
@@ -348,7 +334,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
               style: AppTextStyles.heading2.copyWith(
                 fontWeight: FontWeight.bold,
                 fontSize: 20,
-                color: AppColors.primaryNavy, // 값은 기본 네이비색
+                color: AppColors.primaryNavy,
               ),
             ),
           ],
@@ -357,24 +343,48 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildEfficiencyTab(SleepReport? report) {
-    if (report == null) return _buildNoDataPlaceholder();
+  // ✅ 효율성 탭 - Firebase 데이터 사용!
+  Widget _buildEfficiencyTab(SleepDataState sleepDataState) {
+    if (sleepDataState.sleepHistory.isEmpty) {
+      return _buildNoDataPlaceholder();
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildEfficiencyAnalysisCard(report),
+          _buildEfficiencyAnalysisCard(sleepDataState),
           const SizedBox(height: 24),
-          _buildSleepComparisonChart(report),
+          _buildSleepComparisonChart(sleepDataState),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildEfficiencyAnalysisCard(SleepReport report) {
+  // ✅ 수면 효율 분석 카드 - Firebase 데이터 사용!
+  Widget _buildEfficiencyAnalysisCard(SleepDataState sleepDataState) {
+    final recent7Days = sleepDataState.sleepHistory.take(7).toList();
+    
+    // 평균 계산
+    double totalSleepHours = 0;
+    double totalTimeInBed = 0;
+    double totalRemRatio = 0;
+    double totalDeepRatio = 0;
+    
+    for (var data in recent7Days) {
+      totalSleepHours += data.totalSleepDuration;
+      totalTimeInBed += data.timeInBed;
+      totalRemRatio += data.remRatio;
+      totalDeepRatio += data.deepSleepRatio;
+    }
+    
+    final count = recent7Days.length;
+    final avgEfficiency = (totalSleepHours / totalTimeInBed) * 100;
+    final avgRemRatio = totalRemRatio / count;
+    final avgDeepRatio = totalDeepRatio / count;
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -386,24 +396,24 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             const SizedBox(height: 16),
             _buildAnalysisItem(
               title: '평균 수면 효율',
-              value: '92%',
+              value: '${avgEfficiency.toStringAsFixed(0)}%',
               description: '85% 이상이 이상적입니다.',
-              isPositive: true,
+              isPositive: avgEfficiency >= 85,
             ),
             const Divider(color: AppColors.divider, height: 24),
             _buildAnalysisItem(
               title: 'REM 수면 비율',
-              value: '20%',
+              value: '${avgRemRatio.toStringAsFixed(0)}%',
               description: '20~25%가 이상적입니다.',
-              isPositive: true,
+              isPositive: avgRemRatio >= 20 && avgRemRatio <= 25,
             ),
             const Divider(color: AppColors.divider, height: 24),
             _buildAnalysisItem(
               title: '깊은 수면 비율',
-              value: '15%',
+              value: '${avgDeepRatio.toStringAsFixed(0)}%',
               description: '15~20%가 이상적입니다.',
-              isPositive: false,
-              alertMessage: '깊은 수면이 약간 부족합니다.',
+              isPositive: avgDeepRatio >= 15 && avgDeepRatio <= 20,
+              alertMessage: avgDeepRatio < 15 ? '깊은 수면이 약간 부족합니다.' : null,
             ),
           ],
         ),
@@ -411,16 +421,47 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSleepComparisonChart(SleepReport report) {
-    final List<Map<String, dynamic>> data = [
-      {'date': '7/13', 'total': 8.5, 'actual': 7.2},
-      {'date': '7/14', 'total': 8.0, 'actual': 6.8},
-      {'date': '7/15', 'total': 9.0, 'actual': 7.5},
-      {'date': '7/16', 'total': 7.5, 'actual': 6.0},
-      {'date': '7/17', 'total': 8.2, 'actual': 7.0},
-      {'date': '7/18', 'total': 8.8, 'actual': 7.8},
-      {'date': '7/19', 'total': 8.0, 'actual': 7.0},
-    ];
+  // ✅ 누운 시간 vs 실 수면 시간 차트 - Firebase 데이터 사용!
+  Widget _buildSleepComparisonChart(SleepDataState sleepDataState) {
+    final recent7Days = sleepDataState.sleepHistory.take(7).toList().reversed.toList();
+    
+    // Firebase 데이터를 차트 형식으로 변환
+    final List<Map<String, dynamic>> data = recent7Days.map((sleepData) {
+      // sessionId에서 날짜 추출 (예: "session-2024-12-03" -> "12/03")
+      String dateLabel = '-';
+      try {
+        final sessionId = sleepData.reportDate;
+        if (sessionId.contains('-')) {
+          final parts = sessionId.split('-');
+          if (parts.length >= 3) {
+            final month = parts[parts.length - 2];
+            final day = parts[parts.length - 1];
+            dateLabel = '$month/$day';
+          }
+        }
+      } catch (e) {
+        print('날짜 파싱 에러: $e');
+      }
+      
+      return {
+        'date': dateLabel,
+        'total': sleepData.timeInBed,  // 누운 시간
+        'actual': sleepData.totalSleepDuration,  // 실제 수면 시간
+      };
+    }).toList();
+
+    if (data.isEmpty) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Center(
+            child: Text('데이터가 없습니다', style: AppTextStyles.secondaryBodyText),
+          ),
+        ),
+      );
+    }
+
     double maxHours = 0.0;
     for (var d in data) {
       maxHours = math.max(maxHours, d['total']);
@@ -436,9 +477,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
           children: [
             Text('누운 시간 vs 실 수면 시간', style: AppTextStyles.heading3),
             const SizedBox(height: 24),
-            // ✅ [추가] 터치 시 상세 정보 박스 표시
-            if (_touchedBarIndex != null &&
-                _touchedBarIndex! < data.length) // data.length 범위 확인 추가
+            if (_touchedBarIndex != null && _touchedBarIndex! < data.length)
               Padding(
                 padding: const EdgeInsets.only(bottom: 20.0),
                 child: _buildBarChartTooltip(data[_touchedBarIndex!]),
@@ -468,35 +507,28 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                         child: ListView.separated(
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: data.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
                           itemBuilder: (context, index) {
                             final d = data[index];
-                            final targetTotalWidth =
-                                (d['total'] / maxHours) * availableWidth;
-                            final targetActualWidth =
-                                (d['actual'] / maxHours) * availableWidth;
+                            final targetTotalWidth = (d['total'] / maxHours) * availableWidth;
+                            final targetActualWidth = (d['actual'] / maxHours) * availableWidth;
 
-                            // ✅ [추가] 터치 감지를 위한 GestureDetector
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
                                   if (_touchedBarIndex == index) {
-                                    _touchedBarIndex = null; // 같은 것 터치 시 해제
+                                    _touchedBarIndex = null;
                                   } else {
-                                    _touchedBarIndex = index; // 터치 시 인덱스 저장
+                                    _touchedBarIndex = index;
                                   }
                                 });
                               },
                               child: AnimatedBuilder(
                                 animation: _barChartAnimation,
                                 builder: (context, child) {
-                                  final animationValue =
-                                      _barChartAnimation.value;
-                                  final currentTotalWidth =
-                                      targetTotalWidth * animationValue;
-                                  final currentActualWidth =
-                                      targetActualWidth * animationValue;
+                                  final animationValue = _barChartAnimation.value;
+                                  final currentTotalWidth = targetTotalWidth * animationValue;
+                                  final currentActualWidth = targetActualWidth * animationValue;
 
                                   return Row(
                                     children: [
@@ -504,13 +536,10 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                                         width: 40,
                                         child: Text(
                                           d['date'],
-                                          style:
-                                              AppTextStyles.smallText.copyWith(
-                                            // 터치된 항목 강조
-                                            fontWeight:
-                                                _touchedBarIndex == index
-                                                    ? FontWeight.bold
-                                                    : FontWeight.normal,
+                                          style: AppTextStyles.smallText.copyWith(
+                                            fontWeight: _touchedBarIndex == index
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
                                             color: _touchedBarIndex == index
                                                 ? AppColors.primaryNavy
                                                 : AppColors.secondaryText,
@@ -521,24 +550,20 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                                         child: Stack(
                                           alignment: Alignment.centerLeft,
                                           children: [
-                                            // ✅ 테마 적용: 배경
                                             Container(
                                               height: 20,
                                               width: currentTotalWidth,
                                               decoration: BoxDecoration(
                                                 color: _themeLightGray,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
+                                                borderRadius: BorderRadius.circular(8),
                                               ),
                                             ),
-                                            // ✅ 테마 적용: 전경
                                             Container(
                                               height: 20,
                                               width: currentActualWidth,
                                               decoration: BoxDecoration(
                                                 color: _mainDeepColor,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
+                                                borderRadius: BorderRadius.circular(8),
                                               ),
                                             ),
                                           ],
@@ -561,17 +586,9 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem(
-                  // ✅ 테마 적용
-                  _themeLightGray,
-                  '누운 시간',
-                ),
+                _buildLegendItem(_themeLightGray, '누운 시간'),
                 const SizedBox(width: 24),
-                _buildLegendItem(
-                  // ✅ 테마 적용
-                  _mainDeepColor,
-                  '실 수면 시간',
-                ),
+                _buildLegendItem(_mainDeepColor, '실 수면 시간'),
               ],
             ),
             const SizedBox(height: 16),
@@ -586,18 +603,14 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  // ✅ [추가] 막대 차트 툴팁 박스 빌더
   Widget _buildBarChartTooltip(Map<String, dynamic> data) {
     final total = data['total'].toStringAsFixed(1);
     final actual = data['actual'].toStringAsFixed(1);
-    final efficiency = ((data['actual'] / data['total']) * 100).toStringAsFixed(
-      0,
-    );
+    final efficiency = ((data['actual'] / data['total']) * 100).toStringAsFixed(0);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        // 투명한 배경 박스
         color: AppColors.primaryNavy.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.primaryNavy.withOpacity(0.1)),
@@ -610,16 +623,12 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             children: [
               Text(
                 '${data['date']} 상세 정보',
-                style: AppTextStyles.bodyText.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
               Text(
                 '수면 효율: $efficiency%',
-                style: AppTextStyles.smallText.copyWith(
-                  color: AppColors.primaryNavy,
-                ),
+                style: AppTextStyles.smallText.copyWith(color: AppColors.primaryNavy),
               ),
             ],
           ),
@@ -631,9 +640,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                   const SizedBox(height: 4),
                   Text(
                     '${total}h',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -644,9 +651,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                   const SizedBox(height: 4),
                   Text(
                     '${actual}h',
-                    style: AppTextStyles.bodyText.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -657,40 +662,48 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSleepStagesTab(SleepReport? report) {
-    if (report == null) return _buildNoDataPlaceholder();
+  // 나머지 함수들은 동일하게 유지...
+  Widget _buildSleepStagesTab(SleepDataState sleepDataState) {
+    if (sleepDataState.sleepHistory.isEmpty) {
+      return _buildNoDataPlaceholder();
+    }
+
+    // 최신 데이터 사용
+    final latestData = sleepDataState.todayMetrics;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          _buildAnimatedDonutChart(report),
+          _buildAnimatedDonutChart(latestData),
           const SizedBox(height: 24),
-          _buildSleepStageDetails(report),
+          _buildSleepStageDetails(latestData),
           const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildAnimatedDonutChart(SleepReport report) {
-    final summary = report.summary;
-
-    if (summary.totalDurationHours < 0.1 ||
-        !_chartAnimationController.isAnimating) {
+  Widget _buildAnimatedDonutChart(SleepMetrics metrics) {
+    final totalDuration = metrics.totalSleepDuration;
+    
+    if (totalDuration < 0.1) {
       return Card(
         margin: EdgeInsets.zero,
         child: SizedBox(
           height: 250,
           child: Center(
-            child: Text(
-              '데이터를 불러오는 중...',
-              style: AppTextStyles.secondaryBodyText,
-            ),
+            child: Text('데이터를 불러오는 중...', style: AppTextStyles.secondaryBodyText),
           ),
         ),
       );
     }
+
+    // 비율 계산
+    final deepRatio = metrics.deepSleepRatio / 100;
+    final lightRatio = (100 - metrics.deepSleepRatio - metrics.remRatio - (metrics.tossingAndTurning > 0 ? 5 : 0)) / 100;
+    final remRatio = metrics.remRatio / 100;
+    final awakeRatio = (metrics.tossingAndTurning > 0 ? 5 : 0) / 100;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -712,13 +725,10 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     duration: const Duration(milliseconds: 1500),
                     curve: Curves.easeOutCubic,
                     builder: (context, value, _) {
-                      final deepEnd = summary.deepRatio * value;
-                      final lightEnd = deepEnd +
-                          (summary.lightSleepHours /
-                                  summary.totalDurationHours) *
-                              value;
-                      final remEnd = lightEnd + summary.remRatio * value;
-                      final awakeEnd = remEnd + summary.awakeRatio * value;
+                      final deepEnd = deepRatio * value;
+                      final lightEnd = deepEnd + lightRatio * value;
+                      final remEnd = lightEnd + remRatio * value;
+                      final awakeEnd = remEnd + awakeRatio * value;
 
                       return Stack(
                         fit: StackFit.expand,
@@ -730,39 +740,27 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                             ),
                             strokeWidth: 25,
                           ),
-                          // ✅ 테마 적용 (Awake)
                           CircularProgressIndicator(
                             value: awakeEnd,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _awakeColor,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(_awakeColor),
                             strokeWidth: 25,
                             strokeCap: StrokeCap.butt,
                           ),
-                          // ✅ 테마 적용 (REM)
                           CircularProgressIndicator(
                             value: remEnd,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _remSleepColor,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(_remSleepColor),
                             strokeWidth: 25,
                             strokeCap: StrokeCap.butt,
                           ),
-                          // ✅ 테마 적용 (Light)
                           CircularProgressIndicator(
                             value: lightEnd,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _lightSleepColor,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(_lightSleepColor),
                             strokeWidth: 25,
                             strokeCap: StrokeCap.butt,
                           ),
-                          // ✅ 테마 적용 (Deep)
                           CircularProgressIndicator(
                             value: deepEnd,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              _mainDeepColor,
-                            ),
+                            valueColor: AlwaysStoppedAnimation<Color>(_mainDeepColor),
                             strokeWidth: 25,
                             strokeCap: StrokeCap.butt,
                           ),
@@ -779,9 +777,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildSleepStageDetails(SleepReport report) {
-    final summary = report.summary;
-
+  Widget _buildSleepStageDetails(SleepMetrics metrics) {
     String formatDuration(double hours) {
       int h = hours.floor();
       int m = ((hours - h) * 60).round();
@@ -789,8 +785,18 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     }
 
     String formatPercentage(double ratio) {
-      return '(${(ratio * 100).toStringAsFixed(0)}%)';
+      return '(${ratio.toStringAsFixed(0)}%)';
     }
+
+    // 깊은 수면 시간 계산
+    final deepSleepHours = (metrics.totalSleepDuration * metrics.deepSleepRatio) / 100;
+    // REM 수면 시간 계산
+    final remSleepHours = (metrics.totalSleepDuration * metrics.remRatio) / 100;
+    // 얕은 수면 시간 계산 (전체 - 깊은 수면 - REM - 깬 시간)
+    final awakeDuration = metrics.tossingAndTurning > 0 ? 0.25 : 0.0;
+    final lightSleepHours = metrics.totalSleepDuration - deepSleepHours - remSleepHours - awakeDuration;
+    final lightSleepRatio = (lightSleepHours / metrics.totalSleepDuration) * 100;
+    final awakeRatio = (awakeDuration / metrics.totalSleepDuration) * 100;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -802,37 +808,31 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             Text('수면 단계별 상세 정보', style: AppTextStyles.heading3),
             const SizedBox(height: 24),
             _buildDetailRow(
-              // ✅ 테마 적용 (Deep)
               color: _mainDeepColor,
               label: '깊은 수면',
-              duration: formatDuration(summary.deepSleepHours),
-              percentage: formatPercentage(summary.deepRatio),
+              duration: formatDuration(deepSleepHours),
+              percentage: formatPercentage(metrics.deepSleepRatio),
             ),
             const Divider(height: 32),
             _buildDetailRow(
-              // ✅ 테마 적용 (Light)
               color: _lightSleepColor,
               label: '얕은 수면',
-              duration: formatDuration(summary.lightSleepHours),
-              percentage: formatPercentage(
-                summary.lightSleepHours / summary.totalDurationHours,
-              ),
+              duration: formatDuration(lightSleepHours),
+              percentage: formatPercentage(lightSleepRatio),
             ),
             const Divider(height: 32),
             _buildDetailRow(
-              // ✅ 테마 적용 (REM)
               color: _remSleepColor,
               label: 'REM 수면',
-              duration: formatDuration(summary.remSleepHours),
-              percentage: formatPercentage(summary.remRatio),
+              duration: formatDuration(remSleepHours),
+              percentage: formatPercentage(metrics.remRatio),
             ),
             const Divider(height: 32),
             _buildDetailRow(
-              // ✅ 테마 적용 (Awake)
               color: _awakeColor,
               label: '깬 상태',
-              duration: formatDuration(summary.awakeHours),
-              percentage: formatPercentage(summary.awakeRatio),
+              duration: formatDuration(awakeDuration),
+              percentage: formatPercentage(awakeRatio),
             ),
           ],
         ),
@@ -866,16 +866,38 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTrendTab() {
-    final List<Map<String, dynamic>> trendData = [
-      {'date': '13일', 'efficiency': 88.0, 'remRatio': 18.0},
-      {'date': '14일', 'efficiency': 91.0, 'remRatio': 22.0},
-      {'date': '15일', 'efficiency': 85.0, 'remRatio': 15.0},
-      {'date': '16일', 'efficiency': 93.0, 'remRatio': 23.0},
-      {'date': '17일', 'efficiency': 89.0, 'remRatio': 19.0},
-      {'date': '18일', 'efficiency': 90.0, 'remRatio': 21.0},
-      {'date': '19일', 'efficiency': 92.0, 'remRatio': 20.0},
-    ];
+  Widget _buildTrendTab(SleepDataState sleepDataState) {
+    // Firebase 데이터를 트렌드 형식으로 변환
+    final recent7Days = sleepDataState.sleepHistory.take(7).toList().reversed.toList();
+    
+    final List<Map<String, dynamic>> trendData = recent7Days.map((data) {
+      // 날짜 추출
+      String dateLabel = '-';
+      try {
+        final sessionId = data.reportDate;
+        if (sessionId.contains('-')) {
+          final parts = sessionId.split('-');
+          if (parts.length >= 3) {
+            final day = parts[parts.length - 1];
+            dateLabel = '${day}일';
+          }
+        }
+      } catch (e) {
+        print('날짜 파싱 에러: $e');
+      }
+
+      final efficiency = (data.totalSleepDuration / data.timeInBed) * 100;
+      
+      return {
+        'date': dateLabel,
+        'efficiency': efficiency,
+        'remRatio': data.remRatio,
+      };
+    }).toList();
+
+    if (trendData.isEmpty) {
+      return _buildNoDataPlaceholder();
+    }
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -884,7 +906,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
         children: [
           _buildTrendChartCard(trendData),
           const SizedBox(height: 16),
-          if (_touchedTrendIndex != null)
+          if (_touchedTrendIndex != null && _touchedTrendIndex! < trendData.length)
             _buildTrendDetailsBox(trendData[_touchedTrendIndex!]),
           const SizedBox(height: 50),
         ],
@@ -922,8 +944,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                 LineChartData(
                   lineTouchData: LineTouchData(
                     enabled: true,
-                    touchCallback:
-                        (FlTouchEvent event, LineTouchResponse? touchResponse) {
+                    touchCallback: (FlTouchEvent event, LineTouchResponse? touchResponse) {
                       if (event is FlTapUpEvent ||
                           event is FlPanEndEvent ||
                           touchResponse == null ||
@@ -934,14 +955,12 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                         });
                       } else {
                         setState(() {
-                          _touchedTrendIndex =
-                              touchResponse.lineBarSpots![0].spotIndex;
+                          _touchedTrendIndex = touchResponse.lineBarSpots![0].spotIndex;
                         });
                       }
                     },
                     handleBuiltInTouches: true,
-                    getTouchedSpotIndicator:
-                        (LineChartBarData barData, List<int> spotIndexes) {
+                    getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
                       return spotIndexes.map((index) {
                         return TouchedSpotIndicatorData(
                           FlLine(
@@ -953,12 +972,9 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                       }).toList();
                     },
                     touchTooltipData: LineTouchTooltipData(
-                      getTooltipColor: (LineBarSpot touchedSpot) =>
-                          Colors.transparent,
+                      getTooltipColor: (LineBarSpot touchedSpot) => Colors.transparent,
                       getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-                        return touchedBarSpots.map((barSpot) {
-                          return null;
-                        }).toList();
+                        return touchedBarSpots.map((barSpot) => null).toList();
                       },
                     ),
                   ),
@@ -971,12 +987,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                   ),
                   titlesData: FlTitlesData(
                     show: true,
-                    rightTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
+                    rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -987,19 +999,14 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                           if (index >= 0 && index < data.length) {
                             return Padding(
                               padding: const EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                data[index]['date'],
-                                style: AppTextStyles.smallText,
-                              ),
+                              child: Text(data[index]['date'], style: AppTextStyles.smallText),
                             );
                           }
                           return const SizedBox.shrink();
                         },
                       ),
                     ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   borderData: FlBorderData(show: false),
                   minX: 0,
@@ -1007,7 +1014,6 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                   minY: 0,
                   maxY: 100,
                   lineBarsData: [
-                    // ✅ 테마 적용: 수면 효율 선
                     LineChartBarData(
                       spots: efficiencySpots,
                       isCurved: true,
@@ -1016,8 +1022,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                       isStrokeCapRound: true,
                       dotData: FlDotData(
                         show: true,
-                        checkToShowDot: (spot, barData) =>
-                            spot.x == _touchedTrendIndex?.toDouble(),
+                        checkToShowDot: (spot, barData) => spot.x == _touchedTrendIndex?.toDouble(),
                         getDotPainter: (spot, percent, barData, index) {
                           return FlDotCirclePainter(
                             radius: 6,
@@ -1029,7 +1034,6 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                       ),
                       belowBarData: BarAreaData(show: false),
                     ),
-                    // ✅ 테마 적용: REM 비율 선
                     LineChartBarData(
                       spots: remSpots,
                       isCurved: true,
@@ -1038,8 +1042,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                       isStrokeCapRound: true,
                       dotData: FlDotData(
                         show: true,
-                        checkToShowDot: (spot, barData) =>
-                            spot.x == _touchedTrendIndex?.toDouble(),
+                        checkToShowDot: (spot, barData) => spot.x == _touchedTrendIndex?.toDouble(),
                         getDotPainter: (spot, percent, barData, index) {
                           return FlDotCirclePainter(
                             radius: 6,
@@ -1070,10 +1073,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
         child: Column(
           children: [
             Text(
-              '7월 ${data['date']} 상세 정보',
-              style: AppTextStyles.bodyText.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              '${data['date']} 상세 정보',
+              style: AppTextStyles.bodyText.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
@@ -1086,11 +1087,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                         Container(
                           width: 12,
                           height: 12,
-                          decoration: BoxDecoration(
-                            // ✅ 테마 적용
-                            color: _mainDeepColor,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: BoxDecoration(color: _mainDeepColor, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Text('수면 효율', style: AppTextStyles.smallText),
@@ -1098,11 +1095,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${data['efficiency']}%',
-                      style: AppTextStyles.heading3.copyWith(
-                        // ✅ 테마 적용
-                        color: _mainDeepColor,
-                      ),
+                      '${data['efficiency'].toStringAsFixed(0)}%',
+                      style: AppTextStyles.heading3.copyWith(color: _mainDeepColor),
                     ),
                   ],
                 ),
@@ -1113,11 +1107,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                         Container(
                           width: 12,
                           height: 12,
-                          decoration: BoxDecoration(
-                            // ✅ 테마 적용
-                            color: _remSleepColor,
-                            shape: BoxShape.circle,
-                          ),
+                          decoration: BoxDecoration(color: _remSleepColor, shape: BoxShape.circle),
                         ),
                         const SizedBox(width: 8),
                         Text('REM 비율', style: AppTextStyles.smallText),
@@ -1125,11 +1115,8 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${data['remRatio']}%',
-                      style: AppTextStyles.heading3.copyWith(
-                        // ✅ 테마 적용
-                        color: _remSleepColor,
-                      ),
+                      '${data['remRatio'].toStringAsFixed(0)}%',
+                      style: AppTextStyles.heading3.copyWith(color: _remSleepColor),
                     ),
                   ],
                 ),
@@ -1158,7 +1145,6 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
             Text(
               value,
               style: AppTextStyles.heading3.copyWith(
-                // ✅ 테마 적용 (긍정, 부정 색상 적용)
                 color: isPositive ? _mainDeepColor : _awakeColor,
               ),
             ),
@@ -1170,19 +1156,11 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
           const SizedBox(height: 8),
           Row(
             children: [
-              Icon(
-                Icons.info_outline,
-                // ✅ 테마 적용 (부정 색상)
-                color: _awakeColor,
-                size: 16,
-              ),
+              Icon(Icons.info_outline, color: _awakeColor, size: 16),
               const SizedBox(width: 4),
               Text(
                 alertMessage,
-                style: AppTextStyles.smallText.copyWith(
-                  // ✅ 테마 적용 (부정 색상)
-                  color: _awakeColor,
-                ),
+                style: AppTextStyles.smallText.copyWith(color: _awakeColor),
               ),
             ],
           ),
@@ -1213,11 +1191,7 @@ class _DataScreenState extends State<DataScreen> with TickerProviderStateMixin {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.nights_stay_outlined,
-            size: 48,
-            color: AppColors.secondaryText,
-          ),
+          Icon(Icons.nights_stay_outlined, size: 48, color: AppColors.secondaryText),
           SizedBox(height: 16),
           Text('수면 데이터가 없습니다.', style: AppTextStyles.secondaryBodyText),
         ],
