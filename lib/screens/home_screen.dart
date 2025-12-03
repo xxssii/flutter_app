@@ -1,4 +1,5 @@
 // lib/screens/home_screen.dart
+// ✅ 수정된 버전: 앱 시작 시 자동으로 Firebase 데이터 가져오기
 
 import 'dart:async';
 import 'dart:math';
@@ -15,15 +16,53 @@ import '../state/sleep_data_state.dart';
 import '../utils/sleep_score_analyzer.dart';
 import 'sleep_mode_screen.dart';
 import '../services/ble_service.dart';
-import 'hardware_test_screen.dart'; // ✅ 하드웨어 테스트 화면 import
+import 'hardware_test_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+// ✅ StatefulWidget으로 변경!
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  static final _random = Random();
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _random = Random();  // ✅ static 제거!
+  
+  // ✨ 화면이 처음 나타날 때 자동으로 실행되는 함수!
+  @override
+  void initState() {
+    super.initState();
+    
+    // 화면이 완전히 그려진 후에 데이터 가져오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDataFromFirebase();
+    });
+  }
+  
+  // ✨ Firebase에서 데이터 가져오는 함수
+  Future<void> _loadDataFromFirebase() async {
+    try {
+      print('🔄 HomeScreen: Firebase에서 데이터 가져오기 시작!');
+      
+      final sleepDataState = Provider.of<SleepDataState>(context, listen: false);
+      await sleepDataState.fetchAllSleepReports(context, 'demoUser');
+      
+      print('✅ HomeScreen: 데이터 가져오기 완료!');
+      print('📊 가져온 데이터 개수: ${sleepDataState.sleepHistory.length}개');
+      
+      if (sleepDataState.sleepHistory.isNotEmpty) {
+        print('📈 첫 번째 데이터: ${sleepDataState.sleepHistory.first.totalSleepDuration}시간');
+      } else {
+        print('⚠️ 데이터가 없습니다. 구름 버튼(☁️)을 눌러 데이터를 생성해주세요!');
+      }
+    } catch (e) {
+      print('❌ 데이터 가져오기 실패: $e');
+    }
+  }
   
   // 🔧 [백엔드 기능] 가우시안 랜덤 함수
-  static double _randRange(double min, double max) {
+  double _randRange(double min, double max) {  // ✅ static 제거!
     double u = 0, v = 0;
     while (u == 0) u = _random.nextDouble();
     while (v == 0) v = _random.nextDouble();
@@ -175,10 +214,14 @@ class HomeScreen extends StatelessWidget {
 
       if (context.mounted) {
         Navigator.of(context).pop();
+        
+        // ✨ 데이터 생성 후 자동으로 새로고침!
+        await _loadDataFromFirebase();
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '✅ 7일치 데이터 ($totalRawDocs개) 생성 완료!\n앱을 재시작하거나 화면을 갱신하세요.'),
+                '✅ 7일치 데이터 ($totalRawDocs개) 생성 완료!\n화면이 자동으로 갱신되었습니다.'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 4),
           ),
@@ -299,7 +342,7 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ✅ 헤더 섹션 (아이콘들을 우측 상단으로 통합)
+                // ✅ 헤더 섹션
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20.0),
@@ -324,7 +367,6 @@ class HomeScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                        // ✅ 우측 상단 아이콘 모음 (구름, 별, 달)
                         Consumer<SettingsState>(
                           builder: (context, settingsState, _) {
                             final iconColor = settingsState.isDarkMode
@@ -333,14 +375,12 @@ class HomeScreen extends StatelessWidget {
                             return Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // ☁️ 7일치 데이터 생성 버튼
                                 IconButton(
                                   icon: const Icon(Icons.cloud_upload_outlined),
                                   color: iconColor,
                                   tooltip: '7일치 데이터 생성',
                                   onPressed: () => _generateWeeklyTestData(context),
                                 ),
-                                // ⭐ 하드웨어 테스트 화면 이동 버튼
                                 IconButton(
                                   icon: const Icon(Icons.star_border_rounded),
                                   color: iconColor,
@@ -354,7 +394,6 @@ class HomeScreen extends StatelessWidget {
                                     );
                                   },
                                 ),
-                                // 🌙 다크모드 토글 버튼 (기존)
                                 IconButton(
                                   icon: Icon(
                                     settingsState.isDarkMode
@@ -377,17 +416,14 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
                 
-                // ✅ 수면 측정 버튼 (중앙)
                 Center(child: _buildMeasurementButton(context, appState)),
-                
-                // 불필요한 테스트 버튼 UI들 제거됨 (수면점수, 1단계, 2단계, 하드웨어 큰 버튼 등)
 
                 const SizedBox(height: 24),
-                _buildPlaceholderInfoCards(), // ✅ 도넛 그래프 카드
+                _buildPlaceholderInfoCards(),
                 const SizedBox(height: 24),
-                _buildDeviceCards(context), // ✅ 기기 상태 카드
+                _buildDeviceCards(context),
                 const SizedBox(height: 24),
-                _buildSummaryCard(context), // ✅ 요약 카드
+                _buildSummaryCard(context),
               ],
             ),
           ),
@@ -395,9 +431,6 @@ class HomeScreen extends StatelessWidget {
       },
     );
   }
-
-  // ... (이하 _buildRealTimeMetricsCard, _buildMeasurementButton 등의 UI 위젯은 기존과 동일) ...
-  // ... (소스 코드 길이가 길어 생략된 부분은 기존 코드 그대로 유지하시면 됩니다) ...
 
   Widget _buildRealTimeMetricsCard(BuildContext context, AppState appState) {
     if (!appState.isMeasuring) {
@@ -580,7 +613,6 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            
           ],
         );
       },
@@ -840,6 +872,10 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+// ========================================
+// 🎨 SleepStartJellyIcon (변경 없음)
+// ========================================
+
 class SleepStartJellyIcon extends StatelessWidget {
   const SleepStartJellyIcon({super.key});
 
@@ -943,7 +979,7 @@ class SleepStartJellyIcon extends StatelessWidget {
     );
   }
 
-  Widget _buildWave(Color color, double angle) {
+  static Widget _buildWave(Color color, double angle) {
     return Transform.rotate(
       angle: angle,
       child: Container(
@@ -963,7 +999,7 @@ class SleepStartJellyIcon extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildSparkles() {
+  static List<Widget> _buildSparkles() {
     final random = math.Random(42);
     final sparkles = <Widget>[];
     final positions = [
