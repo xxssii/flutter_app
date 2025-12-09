@@ -60,7 +60,7 @@ def predict_stage_ai(hr: float, spo2: float, mic_avg: float, pressure_avg: float
                     return "Light"
                 else:
                     return "Snoring"
-            else: # pressure > 1504
+            else: 
                 if pressure_avg <= 3010.5:
                     return "Awake" # 뒤척임 구간
                 else:
@@ -278,6 +278,40 @@ def on_new_data(event: firestore_fn.Event[firestore_fn.DocumentSnapshot | None])
             print(f"[알림] 상태 변경됨({stable_stage}) 그러나 자동 제어 OFF")
 
     print(f"[Ok] {session_id} -> {stable_stage} (Changed: {stage_changed})")
+    
+    # ========================================
+    # 🎪 압력 감지 로직 (✅ 중복 방지 추가!)
+    # ========================================
+    print(f"🔍 [압력 센서] pressure_avg = {pressure_avg}")
+    
+    # ✅ 압력이 높으면
+    if pressure_avg > 3000:
+        print(f"🚨 [압력 높음 감지!] {pressure_avg}")
+        
+        # ✅ 최근 30초 이내에 알림이 있었는지 확인 (중복 방지!)
+        thirty_seconds_ago = now - timedelta(seconds=30)
+        
+        recent_alerts = list(db.collection("pressure_alerts")\
+            .where("userId", "==", user_id)\
+            .where("sessionId", "==", session_id)\
+            .where("ts", ">=", thirty_seconds_ago)\
+            .limit(1)\
+            .stream())
+        
+        # 최근 알림이 있으면 무시
+        if len(recent_alerts) > 0:
+            print("⏭️ [스킵] 최근 30초 이내에 알림이 이미 있음")
+            return
+        
+        # ✅ 알림 생성 (30초 이내에 없을 때만!)
+        db.collection("pressure_alerts").add({
+            "userId": user_id,
+            "sessionId": session_id,
+            "pressure_avg": pressure_avg,
+            "ts": gcf.SERVER_TIMESTAMP,
+            "handled": False
+        })
+        print("✅ [알림 생성] 압력 높음 알림 생성!")
 
 # ========================================
 # 📊 수면 점수 및 AHI 진단 통합 버전
@@ -541,7 +575,7 @@ def calculate_weekly_stats(req: https_fn.CallableRequest):
         print(f"[주간 통계 오류] {e}")
         raise https_fn.HttpsError("internal", f"Stats calculation failed: {str(e)}")
     
-    # ========================================
+# ========================================
 # ✨ Phase 3: 인사이트 생성
 # ========================================
 

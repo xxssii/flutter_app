@@ -1,6 +1,7 @@
 // lib/services/ble_service.dart
-// ✅ [긴급 수정] 10초 쿨타임 적용 (과금 방지) + ID 통일 완료 + 스마트 높이 조절 로직 통합
+// ✅ [긴급 수정] 10초 쿨타임 + 압력 알림 중복 방지 적용 완료
 
+import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -42,6 +43,9 @@ class BleService extends ChangeNotifier {
   
   // ✅ [추가됨] 마지막 업로드 시간 (쿨타임용)
   DateTime? _lastUploadTime;
+  
+  // ✅ [추가됨] 마지막 압력 제어 시간 (중복 방지용)
+  DateTime? _lastPressureControlTime;
 
   bool _autoHeightControl = false;
   DateTime? _lastAdjustmentTime;
@@ -73,6 +77,9 @@ class BleService extends ChangeNotifier {
   // ✅ [수정됨] ID를 AppState와 통일 (demoUser)
   String userId = "demoUser"; 
   String sessionId = "";
+  
+  // ✅ [새로 추가] 압력 알림 리스너
+  StreamSubscription? _pressureAlertListener;
 
   // Getters
   String get pillowConnectionStatus => _pillowStatus;
@@ -82,7 +89,7 @@ class BleService extends ChangeNotifier {
   bool get isCollectingData => _isCollectingData;
   bool get isScanning => _isScanning;
   bool get autoHeightControl => _autoHeightControl;
-  double get micLevel => micAvg; // ✅ 마이크 데시벨 레벨 getter 추가
+  double get micLevel => micAvg;
 
   void toggleAutoHeightControl(bool value) {
     _autoHeightControl = value;
@@ -319,13 +326,25 @@ class BleService extends ChangeNotifier {
     // 세션 ID 생성 시점 중요
     sessionId = "session_${DateTime.now().millisecondsSinceEpoch}";
     // 쿨타임 초기화
-    _lastUploadTime = null; 
+    _lastUploadTime = null;
+    
+    // ✅ 압력 제어 시간 초기화
+    _lastPressureControlTime = null;
+    
+    // ✅ 압력 알림 듣기 시작!
+    startListeningForPressureAlerts();
+    
     notifyListeners();
   }
 
   void stopDataCollection() {
     print("🛑 데이터 수집 종료");
     _isCollectingData = false;
+    
+    // ✅ 압력 알림 듣기 종료
+    _pressureAlertListener?.cancel();
+    _pressureAlertListener = null;
+    
     notifyListeners();
   }
 
@@ -370,8 +389,6 @@ class BleService extends ChangeNotifier {
   // ==========================================
   // 8. 하드웨어 명령 (✅ 통합 및 정리 완료)
   // ==========================================
-
-  // ❌ [삭제됨] 옛날 adjustHeight 함수는 이제 안 씁니다. (헷갈림 방지)
   
   // ✅ [수정] 현재 레벨 추적을 위한 변수 추가
   final Map<int, int> _currentCellLevels = {}; // cellIndex -> currentLevel
@@ -476,6 +493,50 @@ class BleService extends ChangeNotifier {
   // ==========================================
   // 자동 제어 로직
   // ==========================================
+  // ✅ 새 함수: 압력 알림 듣기 시작
+  void startListeningForPressureAlerts() {
+    print("👂 압력 알림 듣기 시작");
+    
+    _pressureAlertListener = _db
+        .collection('pressure_alerts')
+        .where('userId', isEqualTo: userId)
+        .where('sessionId', isEqualTo: sessionId)
+        .where('handled', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          var data = change.doc.data()!;
+          double pressure = data['pressure_avg'] ?? 0.0;
+          
+          print("🚨 [압력 알림 받음] $pressure");
+          
+          // ✅ 중복 방지: 30초 이내에 이미 제어했으면 무시
+          if (_lastPressureControlTime != null &&
+              DateTime.now().difference(_lastPressureControlTime!).inSeconds < 30) {
+            print("⏭️ [스킵] 최근 30초 이내에 이미 제어함");
+            // 그래도 handled는 true로 표시
+            change.doc.reference.update({'handled': true});
+            return;
+          }
+          
+          // ✅ BLE로 직접 명령 전송!
+          if (pressure > 3000) {
+            print("🚀 [즉시 제어] Cell 2 높이 올리기");
+            adjustCell(2, 1);  // Cell 2를 1단계로
+            
+            // ✅ 마지막 제어 시간 기록
+            _lastPressureControlTime = DateTime.now();
+            
+            // 처리 완료 표시
+            change.doc.reference.update({'handled': true});
+          }
+        }
+      }
+    });
+  }
+  
   void _checkAndAdjustCell() {
     if (!_isCollectingData || !_autoHeightControl || !_isPillowConnected) return;
 
